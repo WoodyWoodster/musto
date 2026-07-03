@@ -19,7 +19,7 @@ Rails.application.routes.draw do
     post :deny, on: :member
   end
 
-  resources :payroll_runs, only: [] do
+  resources :payroll_runs, only: [ :show ] do
     post :finalize, on: :member
   end
 

@@ -28,7 +28,16 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
   end
 
   test "renders the expanded operations pages" do
-    [ root_path, workforce_path, payroll_path, benefits_path, compliance_path, integrations_path, employee_path(@employee) ].each do |path|
+    [
+      root_path,
+      workforce_path,
+      payroll_path,
+      payroll_run_path(@payroll_run),
+      benefits_path,
+      compliance_path,
+      integrations_path,
+      employee_path(@employee)
+    ].each do |path|
       get path
       assert_response :success
     end
@@ -69,6 +78,23 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_select "h2", "PTO and compliance"
   end
 
+  test "payroll run workspace exposes preflight and employee pay line DTOs" do
+    detail = Payroll::RunDetailQuery.new.call(@payroll_run.id)
+
+    assert_instance_of Payroll::RunDetailDto, detail
+    assert_instance_of Payroll::RunPreflightCheckDto, detail.preflight_checks.first
+    assert_instance_of Payroll::RunEmployeeLineDto, detail.line_items.first
+    assert_equal @employee.full_name, detail.line_items.first.employee_name
+
+    get payroll_run_path(@payroll_run)
+
+    assert_response :success
+    assert_select "h1", "#{@payroll_run.pay_date.strftime("%B %-d, %Y")} payroll"
+    assert_select "h2", "Preflight checklist"
+    assert_select "h2", "Employee pay lines"
+    assert_select "h2", "Export payload"
+  end
+
   test "completes an onboarding task through the command action" do
     post complete_onboarding_task_path(@task)
 
@@ -80,7 +106,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
   test "finalizes a payroll run through the command action" do
     post finalize_payroll_run_path(@payroll_run)
 
-    assert_redirected_to payroll_path
+    assert_redirected_to payroll_run_path(@payroll_run)
     assert_equal "finalized", @payroll_run.reload.status
   end
 

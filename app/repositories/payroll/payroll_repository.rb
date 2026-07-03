@@ -34,6 +34,16 @@ module Payroll
       PayrollRun.find(id)
     end
 
+    def find_detail(id)
+      PayrollRun
+        .includes(
+          employer: [ :organization ],
+          payroll_deductions: [ :payroll_run, :employee, { enrollment: [ :benefit_plan ] } ],
+          payroll_adjustments: [ :payroll_run, :employee ]
+        )
+        .find(id)
+    end
+
     def finalize(run)
       run.update!(status: "finalized")
       run
