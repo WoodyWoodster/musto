@@ -27,6 +27,8 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       compensation_cents: 115_000_00,
       onboarding_status: "in_progress"
     )
+    @employer_bank_account = @employer.employer_bank_accounts.create!(name: "Payroll checking", institution_name: "Mercury Bank", routing_number_last4: "1101", account_last4: "4821", status: "verified", primary_account: true, verified_at: 1.day.ago)
+    @employee_bank_account = @employee.employee_bank_accounts.create!(nickname: "Primary checking", institution_name: "Ally", routing_number_last4: "1040", account_last4: "9088", status: "pending_verification")
     @plan = @employer.benefit_plans.create!(name: "Primary Care", category: "direct_primary_care", monthly_premium_cents: 9_900)
     @enrollment = @employee.enrollments.create!(benefit_plan: @plan, status: "accepted", effective_on: Date.current)
     @pending_plan = @employer.benefit_plans.create!(name: "Dental", category: "dental", monthly_premium_cents: 4_500)
@@ -169,6 +171,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       contractors_path,
       compensation_path,
       taxes_path,
+      payroll_funding_path,
       reports_path,
       payroll_path,
       payroll_run_path(@payroll_run),
@@ -198,6 +201,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     time_off = TimeOff::CommandCenterQuery.new.call
     timesheets = TimeTracking::CenterQuery.new.call
     expenses = Expenses::CenterQuery.new.call
+    funding = PayrollFunding::CenterQuery.new.call
     contractors = Contractors::CenterQuery.new.call
     compensation = Compensation::CenterQuery.new.call
     taxes = Taxes::CenterQuery.new.call
@@ -237,6 +241,12 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_instance_of Expenses::MetricDto, expenses.metrics.first
     assert_instance_of Expenses::ExpenseDto, expenses.expenses.first
     assert_instance_of Expenses::PolicyItemDto, expenses.policy_items.first
+    assert_instance_of PayrollFunding::CenterDto, funding
+    assert_instance_of PayrollFunding::MetricDto, funding.metrics.first
+    assert_instance_of PayrollFunding::EmployerAccountDto, funding.employer_accounts.first
+    assert_instance_of PayrollFunding::EmployeeAccountDto, funding.employee_accounts.first
+    assert_instance_of PayrollFunding::RunFundingDto, funding.payroll_run
+    assert_instance_of PayrollFunding::FundingIssueDto, funding.funding_issues.first
     assert_instance_of Contractors::CenterDto, contractors
     assert_instance_of Contractors::MetricDto, contractors.metrics.first
     assert_instance_of Contractors::ContractorDto, contractors.contractors.first
@@ -611,6 +621,67 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_instance_of Expenses::BatchDto, detail.latest_batch
     assert_instance_of Expenses::BatchLineDto, detail.batch_lines.first
     assert_instance_of Expenses::BatchHoldbackDto, detail.batch_holdbacks.first
+  end
+
+  test "payroll funding center exposes direct deposit DTOs" do
+    detail = PayrollFunding::CenterQuery.new.call
+
+    assert_instance_of PayrollFunding::CenterDto, detail
+    assert_instance_of PayrollFunding::MetricDto, detail.metrics.first
+    assert_instance_of PayrollFunding::EmployerAccountDto, detail.employer_accounts.first
+    assert_instance_of PayrollFunding::EmployeeAccountDto, detail.employee_accounts.first
+    assert_instance_of PayrollFunding::RunFundingDto, detail.payroll_run
+    assert_instance_of PayrollFunding::FundingIssueDto, detail.funding_issues.first
+    assert detail.pending_accounts.any? { |account| account.id == @employee_bank_account.id }
+
+    get payroll_funding_path
+
+    assert_response :success
+    assert_select "h1", "Payroll funding and direct deposit"
+    assert_select "h2", "Bank readiness"
+    assert_select "h2", "Payroll funding issues"
+    assert_select "h2", "Direct deposit review"
+    assert_select "h2", "ACH batch ledger"
+  end
+
+  test "verifies an employee bank account through command action" do
+    post verify_employee_bank_account_path(@employee_bank_account), params: { reviewed_by: "ops_console" }
+
+    assert_redirected_to payroll_funding_path
+    @employee_bank_account.reload
+    assert_equal "verified", @employee_bank_account.status
+    assert_equal "ops_console", @employee_bank_account.metadata.fetch("verified_by")
+    assert_not_nil @employee_bank_account.verified_at
+  end
+
+  test "generates payroll funding ACH batches with holdbacks and credits" do
+    post generate_payroll_funding_batch_path
+
+    assert_redirected_to payroll_funding_path
+    holdback_batch = @employer.reload.settings.fetch("payroll_funding_batch")
+    assert_match(/\Apayroll_ach_#{@employer.id}_#{@payroll_run.id}_/, holdback_batch.fetch("batch_id"))
+    assert_equal "ops_console", holdback_batch.fetch("requested_by")
+    assert_equal 0, holdback_batch.fetch("totals").fetch("credit_count")
+    assert_equal 1, holdback_batch.fetch("totals").fetch("holdback_count")
+    assert_equal "Employee direct deposit account is not verified", holdback_batch.fetch("holdbacks").first.fetch("reason")
+
+    detail = PayrollFunding::CenterQuery.new.call
+    assert_instance_of PayrollFunding::BatchDto, detail.latest_batch
+    assert_instance_of PayrollFunding::BatchHoldbackDto, detail.batch_holdbacks.first
+
+    @employee_bank_account.verify!(reviewed_by: "ops_console")
+
+    post generate_payroll_funding_batch_path
+
+    credit_batch = @employer.reload.settings.fetch("payroll_funding_batch")
+    assert_equal 1, credit_batch.fetch("totals").fetch("credit_count")
+    assert_equal 1, credit_batch.fetch("totals").fetch("employee_count")
+    assert_equal 0, credit_batch.fetch("totals").fetch("holdback_count")
+    assert credit_batch.fetch("totals").fetch("total_cents").positive?
+    assert_equal @employee.full_name, credit_batch.fetch("credits").first.fetch("employee_name")
+
+    detail = PayrollFunding::CenterQuery.new.call
+    assert_instance_of PayrollFunding::BatchCreditDto, detail.batch_credits.first
   end
 
   test "contractor payments center exposes contractor payment DTOs" do

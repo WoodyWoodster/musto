@@ -7,12 +7,14 @@ class Employer < ApplicationRecord
   has_many :work_locations, dependent: :destroy
   has_many :benefit_plans, dependent: :destroy
   has_many :payroll_runs, dependent: :destroy
+  has_many :employer_bank_accounts, dependent: :destroy
   has_many :enrollments, through: :employees
   has_many :time_off_policies, dependent: :destroy
   has_many :time_off_requests, through: :employees
   has_many :onboarding_tasks, through: :employees
   has_many :employee_documents, through: :employees
   has_many :employee_expenses, through: :employees
+  has_many :employee_bank_accounts, through: :employees
   has_many :compliance_cases, dependent: :destroy
 
   validates :name, :status, presence: true

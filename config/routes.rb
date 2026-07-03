@@ -40,6 +40,9 @@ Rails.application.routes.draw do
   get "taxes", to: "taxes#show"
   post "taxes/packet", to: "taxes#generate_packet", as: :generate_tax_filing_packet
   get "payroll", to: "operations#payroll"
+  get "payroll/funding", to: "payroll_funding#show", as: :payroll_funding
+  post "payroll/funding/employee_bank_accounts/:id/verify", to: "payroll_funding#verify_employee_account", as: :verify_employee_bank_account
+  post "payroll/funding/batch", to: "payroll_funding#generate_batch", as: :generate_payroll_funding_batch
   get "benefits", to: "operations#benefits"
   get "benefits/eligibility", to: "benefits_eligibility#show", as: :benefits_eligibility
   post "benefits/eligibility/batch", to: "benefits_eligibility#generate_batch", as: :generate_benefits_eligibility_batch

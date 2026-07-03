@@ -30,6 +30,34 @@ employer.assign_attributes(
 )
 employer.save!
 
+primary_funding_account = employer.employer_bank_accounts.find_or_initialize_by(name: "Operating payroll account")
+primary_funding_account.assign_attributes(
+  institution_name: "Mercury Bank",
+  account_type: "checking",
+  routing_number_last4: "1101",
+  account_last4: "4821",
+  status: "verified",
+  verification_method: "microdeposit",
+  primary_account: true,
+  verified_at: 3.days.ago,
+  metadata: { source: "seed", funding_limit_cents: 950_000_00 }
+)
+primary_funding_account.save!
+
+reserve_funding_account = employer.employer_bank_accounts.find_or_initialize_by(name: "Reserve funding account")
+reserve_funding_account.assign_attributes(
+  institution_name: "First Keystone",
+  account_type: "savings",
+  routing_number_last4: "2204",
+  account_last4: "7710",
+  status: "pending_verification",
+  verification_method: "microdeposit",
+  primary_account: false,
+  verified_at: nil,
+  metadata: { source: "seed", funding_limit_cents: 300_000_00 }
+)
+reserve_funding_account.save!
+
 organization.employers.find_or_initialize_by(name: "Lumen Field Services").tap do |record|
   record.assign_attributes(
     legal_name: "Lumen Field Services Inc.",
@@ -95,6 +123,32 @@ departments["OPS"].update!(manager: employees.first)
 departments["RET"].update!(manager: employees.second)
 departments["PPL"].update!(manager: employees.third)
 departments["FIN"].update!(manager: employees.fourth)
+
+[
+  [ employees.first, "Primary checking", "Chase", "checking", "0210", "1842", "remainder", 100, "verified", "manual", true, 2.days.ago, nil ],
+  [ employees.second, "Retail payroll", "Wells Fargo", "checking", "0821", "6640", "remainder", 100, "prenote_sent", "prenote", true, nil, 1.day.ago ],
+  [ employees.third, "Remote checking", "Ally", "checking", "1040", "9088", "remainder", 100, "pending_verification", "microdeposit", true, nil, nil ],
+  [ employees.fourth, "Finance savings", "Capital One", "savings", "3309", "4501", "percent", 100, "verified", "prenote", true, 4.days.ago, 5.days.ago ],
+  [ employees[4], "Denver payroll", "US Bank", "checking", "5502", "2209", "remainder", 100, "blocked", "manual", true, nil, nil ],
+  [ employees.last, "Pay card", "Branch", "pay_card", "7601", "5090", "remainder", 100, "verified", "manual", true, 1.day.ago, nil ]
+].each do |employee, nickname, institution_name, account_type, routing_number_last4, account_last4, allocation_type, allocation_value, status, verification_method, primary_account, verified_at, prenote_sent_at|
+  account = employee.employee_bank_accounts.find_or_initialize_by(nickname:)
+  account.assign_attributes(
+    institution_name:,
+    account_type:,
+    routing_number_last4:,
+    account_last4:,
+    allocation_type:,
+    allocation_value:,
+    status:,
+    verification_method:,
+    primary_account:,
+    verified_at:,
+    prenote_sent_at:,
+    metadata: { source: "seeded_direct_deposit" }
+  )
+  account.save!
+end
 
 plans = [
   [ "Vitable Direct Primary Care", "direct_primary_care", "Vitable", 9_900 ],

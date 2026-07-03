@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_03_160000) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_03_170001) do
   create_table "api_request_logs", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.integer "duration_ms"
@@ -139,6 +139,29 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_03_160000) do
     t.index ["employee_id"], name: "index_dependents_on_employee_id"
   end
 
+  create_table "employee_bank_accounts", force: :cascade do |t|
+    t.string "account_last4", null: false
+    t.string "account_type", default: "checking", null: false
+    t.string "allocation_type", default: "remainder", null: false
+    t.integer "allocation_value", default: 100, null: false
+    t.datetime "created_at", null: false
+    t.integer "employee_id", null: false
+    t.string "institution_name", null: false
+    t.json "metadata", default: {}, null: false
+    t.string "nickname", null: false
+    t.datetime "prenote_sent_at"
+    t.boolean "primary_account", default: true, null: false
+    t.string "routing_number_last4", null: false
+    t.string "status", default: "pending_verification", null: false
+    t.datetime "updated_at", null: false
+    t.string "verification_method", default: "prenote", null: false
+    t.datetime "verified_at"
+    t.index ["employee_id", "primary_account"], name: "idx_on_employee_id_primary_account_3aa60fffea"
+    t.index ["employee_id", "status"], name: "index_employee_bank_accounts_on_employee_id_and_status"
+    t.index ["employee_id"], name: "index_employee_bank_accounts_on_employee_id"
+    t.index ["status"], name: "index_employee_bank_accounts_on_status"
+  end
+
   create_table "employee_documents", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.string "document_type", null: false
@@ -222,6 +245,26 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_03_160000) do
     t.index ["onboarding_status"], name: "index_employees_on_onboarding_status"
     t.index ["work_location_id", "employment_status"], name: "index_employees_on_work_location_id_and_employment_status"
     t.index ["work_location_id"], name: "index_employees_on_work_location_id"
+  end
+
+  create_table "employer_bank_accounts", force: :cascade do |t|
+    t.string "account_last4", null: false
+    t.string "account_type", default: "checking", null: false
+    t.datetime "created_at", null: false
+    t.integer "employer_id", null: false
+    t.string "institution_name", null: false
+    t.json "metadata", default: {}, null: false
+    t.string "name", null: false
+    t.boolean "primary_account", default: false, null: false
+    t.string "routing_number_last4", null: false
+    t.string "status", default: "pending_verification", null: false
+    t.datetime "updated_at", null: false
+    t.string "verification_method", default: "microdeposit", null: false
+    t.datetime "verified_at"
+    t.index ["employer_id", "primary_account"], name: "idx_on_employer_id_primary_account_1cd9642011"
+    t.index ["employer_id", "status"], name: "index_employer_bank_accounts_on_employer_id_and_status"
+    t.index ["employer_id"], name: "index_employer_bank_accounts_on_employer_id"
+    t.index ["status"], name: "index_employer_bank_accounts_on_status"
   end
 
   create_table "employers", force: :cascade do |t|
@@ -469,12 +512,14 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_03_160000) do
   add_foreign_key "departments", "employees", column: "manager_id"
   add_foreign_key "departments", "employers"
   add_foreign_key "dependents", "employees"
+  add_foreign_key "employee_bank_accounts", "employees"
   add_foreign_key "employee_documents", "employees"
   add_foreign_key "employee_expenses", "employees"
   add_foreign_key "employee_lifecycle_events", "employees"
   add_foreign_key "employees", "departments"
   add_foreign_key "employees", "employers"
   add_foreign_key "employees", "work_locations"
+  add_foreign_key "employer_bank_accounts", "employers"
   add_foreign_key "employers", "organizations"
   add_foreign_key "enrollments", "benefit_plans"
   add_foreign_key "enrollments", "employees"
