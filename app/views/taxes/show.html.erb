@@ -16,6 +16,7 @@
         <div class="mt-6 flex flex-wrap gap-3">
           <%= link_to "Company setup", company_setup_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
           <%= link_to "Payroll", payroll_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
+          <%= link_to "Agency registrations", tax_agency_registrations_path, class: "rounded-md border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm font-semibold text-cyan-800 shadow-sm hover:border-cyan-300" %>
           <%= link_to "Compliance", compliance_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
           <%= button_to "Generate filing packet", generate_tax_filing_packet_path, method: :post, params: { requested_by: "ops_console" }, class: "rounded-md bg-slate-950 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-slate-800" %>
         </div>

@@ -95,6 +95,99 @@ locations = {
   [ name, location ]
 end
 
+[
+  [
+    nil,
+    "Internal Revenue Service",
+    "Federal",
+    "federal_withholding",
+    "12-3456789",
+    "semiweekly",
+    "registered",
+    "low",
+    Date.current - 90.days,
+    60.days.ago,
+    58.days.ago,
+    "IRS-EFTPS-ATLAS",
+    Date.current.next_month.change(day: 15),
+    "Finance",
+    "EFTPS profile is active for federal income tax, Social Security, and Medicare deposits."
+  ],
+  [
+    locations.fetch("Philadelphia HQ"),
+    "Pennsylvania Department of Revenue",
+    "PA",
+    "state_withholding",
+    "PA-WH-908177",
+    "semiweekly",
+    "submitted",
+    "medium",
+    Date.current + 10.days,
+    1.day.ago,
+    nil,
+    "PA-SUB-202607",
+    Date.current.end_of_quarter + 30.days,
+    "Payroll",
+    "Withholding account submitted; unemployment rate assignment is pending agency confirmation."
+  ],
+  [
+    locations.fetch("Denver Roastery"),
+    "Colorado Department of Labor and Employment",
+    "CO",
+    "unemployment_insurance",
+    nil,
+    "registration_pending",
+    "needs_review",
+    "high",
+    Date.current + 7.days,
+    nil,
+    nil,
+    nil,
+    nil,
+    "Finance",
+    "Colorado unemployment account needs wage-base review before the Denver team can be cleared."
+  ],
+  [
+    locations.fetch("Remote US"),
+    "Remote worker nexus review",
+    "Multi-state",
+    "remote_worker_nexus",
+    nil,
+    "manual_review",
+    "blocked",
+    "high",
+    Date.current + 5.days,
+    nil,
+    nil,
+    nil,
+    nil,
+    "Payroll",
+    "Remote worker state registrations are blocked until employee work-state attestations are confirmed."
+  ]
+].each do |location, agency_name, jurisdiction, registration_type, account_number, deposit_schedule, status, risk_level, due_on, submitted_at, confirmed_at, confirmation_number, next_deposit_due_on, owner, notes|
+  registration = employer.tax_agency_registrations.find_or_initialize_by(
+    agency_name:,
+    jurisdiction:,
+    registration_type:
+  )
+  registration.assign_attributes(
+    work_location: location,
+    account_number:,
+    deposit_schedule:,
+    status:,
+    risk_level:,
+    due_on:,
+    submitted_at:,
+    confirmed_at:,
+    confirmation_number:,
+    next_deposit_due_on:,
+    owner:,
+    notes:,
+    metadata: { source: "seeded_tax_agency_registration" }
+  )
+  registration.save!
+end
+
 employees = [
   [ "Avery", "Kim", "avery.kim@example.com", "1990-04-11", "5551231001", "empl_atlas_avery", "Head of Operations", "OPS", "Philadelphia HQ", 132_000_00, "complete" ],
   [ "Jordan", "Lee", "jordan.lee@example.com", "1987-09-23", "5551231002", "empl_atlas_jordan", "Retail Lead", "RET", "Philadelphia HQ", 86_000_00, "in_progress" ],

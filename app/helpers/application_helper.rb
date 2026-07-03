@@ -2,7 +2,7 @@ module ApplicationHelper
   def nav_item(label, path, accent: "bg-cyan-500")
     active = current_page?(path)
     classes = [
-      "group flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition",
+      "group flex shrink-0 items-center gap-3 whitespace-nowrap rounded-md px-3 py-2 text-sm font-medium transition lg:shrink",
       active ? "bg-slate-950 text-white shadow-sm" : "text-slate-600 hover:bg-white hover:text-slate-950 hover:shadow-sm"
     ].join(" ")
 
@@ -15,11 +15,11 @@ module ApplicationHelper
   def status_pill(status)
     normalized = status.to_s
     palette = case normalized
-    when "active", "available", "accepted", "approved", "complete", "completed", "processed", "succeeded", "finalized", "ready", "connected", "verified", "paid", "eligible", "enrolled", "synced", "funded", "delivered", "viewed", "matched", "hired", "on_track", "closed", "certificate_ready", "forecast_ready", "published"
+    when "active", "available", "accepted", "approved", "complete", "completed", "processed", "succeeded", "finalized", "ready", "connected", "verified", "paid", "eligible", "enrolled", "synced", "funded", "delivered", "viewed", "matched", "hired", "on_track", "closed", "certificate_ready", "forecast_ready", "published", "low"
       "bg-emerald-50 text-emerald-700 ring-emerald-200"
     when "pending", "requested", "received", "onboarding", "estimated", "open", "running", "in_progress", "scheduled", "remote_pending", "sync_queued", "queued", "prenote_sent", "sent", "opened", "reminded", "applied", "screening", "interview", "offer", "self_review", "manager_review", "calibration", "assigned", "withheld"
       "bg-cyan-50 text-cyan-700 ring-cyan-200"
-    when "needs_credentials", "waiting_on_enrollment", "needs_review", "draft", "not_synced", "waived", "unmatched_organization", "missing", "pending_verification", "variance", "missing_deduction", "not_sent", "due_soon", "paused", "skipped", "empty", "submitted", "not_configured", "not_recorded"
+    when "needs_credentials", "waiting_on_enrollment", "needs_review", "draft", "not_synced", "waived", "unmatched_organization", "missing", "pending_verification", "variance", "missing_deduction", "not_sent", "due_soon", "paused", "skipped", "empty", "submitted", "not_configured", "not_recorded", "medium"
       "bg-amber-50 text-amber-800 ring-amber-200"
     when "failed", "expired", "denied", "critical", "high", "blocked", "overdue", "rejected", "withdrawn", "at_risk", "missed", "coverage_gap", "missing_signature", "signature_invalid"
       "bg-rose-50 text-rose-700 ring-rose-200"

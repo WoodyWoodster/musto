@@ -17,6 +17,33 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     )
     @department = @employer.departments.create!(name: "People", code: "PPL", budget_cents: 250_000_00)
     @location = @employer.work_locations.create!(name: "Remote US", country: "US", remote: true)
+    @tax_registration = @employer.tax_agency_registrations.create!(
+      work_location: @location,
+      agency_name: "Remote worker nexus review",
+      jurisdiction: "Multi-state",
+      registration_type: "remote_worker_nexus",
+      deposit_schedule: "manual_review",
+      status: "needs_review",
+      risk_level: "high",
+      due_on: Date.current + 5.days,
+      owner: "Payroll",
+      notes: "Remote work-state attestation is needed before agency setup can be completed."
+    )
+    @submitted_tax_registration = @employer.tax_agency_registrations.create!(
+      agency_name: "Internal Revenue Service",
+      jurisdiction: "Federal",
+      registration_type: "federal_withholding",
+      account_number: "12-3456789",
+      deposit_schedule: "semiweekly",
+      status: "submitted",
+      risk_level: "low",
+      due_on: Date.current + 30.days,
+      submitted_at: 1.day.ago,
+      confirmation_number: "IRS-EFTPS-OPS",
+      next_deposit_due_on: Date.current.next_month.change(day: 15),
+      owner: "Finance",
+      notes: "EFTPS profile submitted for federal payroll deposits."
+    )
     @employee = @employer.employees.create!(
       first_name: "Casey",
       last_name: "Ng",
@@ -268,6 +295,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       compensation_path,
       compensation_changes_path,
       taxes_path,
+      tax_agency_registrations_path,
       payroll_deductions_center_path,
       payroll_calendar_path,
       payroll_funding_path,
@@ -326,6 +354,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     compensation = Compensation::CenterQuery.new.call
     compensation_changes = Compensation::ChangesQuery.new.call
     taxes = Taxes::CenterQuery.new.call
+    tax_registrations = Taxes::AgencyRegistrationsQuery.new.call
     reports = Reports::CenterQuery.new.call
     benefits = Operations::BenefitsQuery.new.call
     plan_admin = Benefits::PlanAdministrationQuery.new.call
@@ -458,6 +487,10 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_instance_of Taxes::PayrollLiabilityDto, taxes.liabilities.first
     assert_instance_of Taxes::FilingCalendarItemDto, taxes.filing_calendar.first
     assert_instance_of Taxes::JurisdictionExposureDto, taxes.jurisdictions.first
+    assert_instance_of Taxes::AgencyRegistrationCenterDto, tax_registrations
+    assert_instance_of Taxes::AgencyRegistrationMetricDto, tax_registrations.metrics.first
+    assert_instance_of Taxes::AgencyRegistrationDto, tax_registrations.registrations.first
+    assert_instance_of Taxes::AgencyRegistrationIssueDto, tax_registrations.issues.first
     assert_instance_of Reports::CenterDto, reports
     assert_instance_of Reports::MetricDto, reports.metrics.first
     assert_instance_of Reports::ReportCardDto, reports.report_cards.first
@@ -674,6 +707,55 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert packet.fetch("totals").fetch("total_liability_cents").positive?
     assert_instance_of Array, packet.fetch("agency_accounts")
     assert_instance_of Array, packet.fetch("recommendations")
+  end
+
+  test "tax agency registrations center exposes registration DTOs" do
+    detail = Taxes::AgencyRegistrationsQuery.new.call
+
+    assert_instance_of Taxes::AgencyRegistrationCenterDto, detail
+    assert_instance_of Taxes::AgencyRegistrationMetricDto, detail.metrics.first
+    assert_instance_of Taxes::AgencyRegistrationDto, detail.registrations.first
+    assert_instance_of Taxes::AgencyRegistrationIssueDto, detail.issues.first
+    assert detail.registrations.any? { |registration| registration.id == @tax_registration.id }
+
+    get tax_agency_registrations_path
+
+    assert_response :success
+    assert_select "h1", "Tax agency registrations"
+    assert_select "h2", "Registration queue"
+    assert_select "h2", "Registration blockers"
+    assert_select "h2", "Jurisdiction registration matrix"
+    assert_select "h2", "Packet registration lines"
+    assert_select "h2", "Packet holdbacks"
+  end
+
+  test "submits a tax agency registration through command action" do
+    post submit_tax_agency_registration_path(@tax_registration), params: { submitted_by: "tax_ops", confirmation_number: "REMOTE-SUB-42" }
+
+    assert_redirected_to tax_agency_registrations_path
+    @tax_registration.reload
+    assert_equal "submitted", @tax_registration.status
+    assert_equal "REMOTE-SUB-42", @tax_registration.confirmation_number
+    assert_equal "tax_ops", @tax_registration.metadata.fetch("submitted_by")
+    assert_not_nil @tax_registration.submitted_at
+  end
+
+  test "generates a tax agency registration packet through command action" do
+    post generate_tax_agency_registration_packet_path, params: { requested_by: "tax_ops" }
+
+    assert_redirected_to tax_agency_registrations_path
+    packet = @employer.reload.settings.fetch("tax_agency_registration_packet")
+    assert_match(/\Atax_registration_#{@employer.id}_/, packet.fetch("packet_id"))
+    assert_equal "tax_ops", packet.fetch("requested_by")
+    assert_equal 2, packet.fetch("totals").fetch("registration_count")
+    assert_equal 1, packet.fetch("totals").fetch("submitted_count")
+    assert_equal 1, packet.fetch("totals").fetch("ready_count")
+    assert packet.fetch("totals").fetch("holdback_count").positive?
+
+    detail = Taxes::AgencyRegistrationsQuery.new.call
+    assert_instance_of Taxes::AgencyRegistrationPacketDto, detail.packet
+    assert_instance_of Taxes::AgencyRegistrationPacketLineDto, detail.packet_lines.first
+    assert_instance_of Taxes::AgencyRegistrationIssueDto, detail.packet_holdbacks.first
   end
 
   test "generates a reports snapshot through command action" do

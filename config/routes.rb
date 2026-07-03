@@ -73,6 +73,9 @@ Rails.application.routes.draw do
   post "compensation/changes/:id/apply", to: "compensation_changes#apply", as: :apply_compensation_change
   get "taxes", to: "taxes#show"
   post "taxes/packet", to: "taxes#generate_packet", as: :generate_tax_filing_packet
+  get "taxes/registrations", to: "tax_agency_registrations#show", as: :tax_agency_registrations
+  post "taxes/registrations/packet", to: "tax_agency_registrations#generate_packet", as: :generate_tax_agency_registration_packet
+  post "taxes/registrations/:id/submit", to: "tax_agency_registrations#submit", as: :submit_tax_agency_registration
   get "payroll", to: "operations#payroll"
   get "payroll/deductions", to: "payroll_deductions#show", as: :payroll_deductions_center
   post "payroll/deductions/:id/approve", to: "payroll_deductions#approve", as: :approve_employee_deduction

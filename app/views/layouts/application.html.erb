@@ -39,7 +39,7 @@
           </div>
         </div>
 
-        <nav class="mt-5 grid grid-cols-2 gap-2 lg:grid-cols-1">
+        <nav class="mt-5 flex gap-2 overflow-x-auto pb-1 lg:grid lg:grid-cols-1 lg:overflow-visible lg:pb-0">
           <%= nav_item("Command", root_path, accent: "bg-sky-500") %>
           <%= nav_item("Company", company_setup_path, accent: "bg-slate-500") %>
           <%= nav_item("Workforce", workforce_path, accent: "bg-emerald-500") %>
@@ -65,6 +65,7 @@
           <%= nav_item("Funding", payroll_funding_path, accent: "bg-green-500") %>
           <%= nav_item("Pay Stubs", pay_statements_path, accent: "bg-purple-500") %>
           <%= nav_item("Taxes", taxes_path, accent: "bg-teal-500") %>
+          <%= nav_item("Tax Setup", tax_agency_registrations_path, accent: "bg-cyan-500") %>
           <%= nav_item("Benefits", benefits_path, accent: "bg-cyan-500") %>
           <%= nav_item("Plan Admin", benefits_plan_admin_path, accent: "bg-indigo-500") %>
           <%= nav_item("Open Enrollment", benefits_open_enrollment_path, accent: "bg-blue-500") %>

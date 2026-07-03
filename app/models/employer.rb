@@ -19,6 +19,7 @@ class Employer < ApplicationRecord
   has_many :employee_deductions, dependent: :destroy
   has_many :compensation_changes, dependent: :destroy
   has_many :employer_bank_accounts, dependent: :destroy
+  has_many :tax_agency_registrations, dependent: :destroy
   has_many :enrollments, through: :employees
   has_many :dependents, through: :employees
   has_many :dependent_verifications, through: :dependents

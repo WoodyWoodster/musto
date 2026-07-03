@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_04_000500) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_04_002000) do
   create_table "api_request_logs", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.integer "duration_ms"
@@ -817,6 +817,34 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_04_000500) do
     t.index ["status"], name: "index_sync_runs_on_status"
   end
 
+  create_table "tax_agency_registrations", force: :cascade do |t|
+    t.string "account_number"
+    t.string "agency_name", null: false
+    t.string "confirmation_number"
+    t.datetime "confirmed_at"
+    t.datetime "created_at", null: false
+    t.string "deposit_schedule", default: "registration_pending", null: false
+    t.date "due_on", null: false
+    t.integer "employer_id", null: false
+    t.string "jurisdiction", null: false
+    t.json "metadata", default: {}, null: false
+    t.date "next_deposit_due_on"
+    t.text "notes"
+    t.string "owner", default: "Payroll", null: false
+    t.string "registration_type", null: false
+    t.string "risk_level", default: "medium", null: false
+    t.string "status", default: "draft", null: false
+    t.datetime "submitted_at"
+    t.datetime "updated_at", null: false
+    t.integer "work_location_id"
+    t.index ["agency_name", "registration_type"], name: "idx_on_agency_name_registration_type_02af077f64"
+    t.index ["employer_id", "jurisdiction"], name: "index_tax_agency_registrations_on_employer_id_and_jurisdiction"
+    t.index ["employer_id", "status"], name: "index_tax_agency_registrations_on_employer_id_and_status"
+    t.index ["employer_id"], name: "index_tax_agency_registrations_on_employer_id"
+    t.index ["status", "due_on"], name: "index_tax_agency_registrations_on_status_and_due_on"
+    t.index ["work_location_id"], name: "index_tax_agency_registrations_on_work_location_id"
+  end
+
   create_table "time_entries", force: :cascade do |t|
     t.datetime "approved_at"
     t.integer "break_minutes", default: 0, null: false
@@ -1064,6 +1092,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_04_000500) do
   add_foreign_key "shift_swap_requests", "employees", column: "target_employee_id"
   add_foreign_key "shift_swap_requests", "work_shifts"
   add_foreign_key "sync_runs", "integration_connections"
+  add_foreign_key "tax_agency_registrations", "employers"
+  add_foreign_key "tax_agency_registrations", "work_locations"
   add_foreign_key "time_entries", "employees"
   add_foreign_key "time_off_accruals", "employees"
   add_foreign_key "time_off_accruals", "payroll_runs"
