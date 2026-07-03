@@ -12,6 +12,10 @@ module Vitable
       WebhookEvent.order(created_at: :desc).limit(limit)
     end
 
+    def find_webhook_event(id)
+      WebhookEvent.includes(integration_connection: [ :organization ]).find(id)
+    end
+
     def sync_runs(limit: 20)
       SyncRun.recent_first.limit(limit)
     end
@@ -43,7 +47,13 @@ module Vitable
     end
 
     def persist_event(dto, connection)
-      find_event(dto.event_id) || WebhookEvent.create!(event_id: dto.event_id) do |event|
+      existing_event = find_event(dto.event_id)
+      if existing_event
+        existing_event.update!(integration_connection: connection) if existing_event.integration_connection.blank? && connection.present?
+        return existing_event
+      end
+
+      WebhookEvent.create!(event_id: dto.event_id) do |event|
         event.assign_attributes(dto.to_event_attributes)
         event.integration_connection = connection
         event.status = "received"
@@ -70,6 +80,39 @@ module Vitable
 
     def mark_failed(event, errors)
       event.update!(status: "failed", error_message: Array(errors).join(", "))
+    end
+
+    def replay_payload(event)
+      (event.payload || {}).merge(
+        event_id: event.event_id,
+        organization_id: event.organization_external_id,
+        event_name: event.event_name,
+        resource_type: event.resource_type,
+        resource_id: event.resource_id,
+        created_at: event.occurred_at.iso8601
+      )
+    end
+
+    def reset_event_for_replay(event)
+      event.update!(status: "received", processed_at: nil, error_message: nil)
+    end
+
+    def related_sync_runs(event, limit: 12)
+      return [] unless event.integration_connection
+
+      event.integration_connection.sync_runs.recent_first.select do |sync|
+        stats = sync.stats.to_h
+        sync.resource_type == event.resource_type && [ stats["resource_id"], stats[:resource_id] ].include?(event.resource_id)
+      end.first(limit)
+    end
+
+    def related_request_logs(event, limit: 12)
+      return [] unless event.integration_connection
+
+      event.integration_connection.api_request_logs.recent_first.select do |log|
+        haystack = [ log.operation, log.path, log.request_body.to_json, log.response_body.to_json ].join(" ")
+        haystack.include?(event.resource_type) || haystack.include?(event.resource_id)
+      end.first(limit)
     end
 
     def create_sync_run(connection:, resource_type:, resource_id:)

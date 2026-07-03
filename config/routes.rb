@@ -7,6 +7,9 @@ Rails.application.routes.draw do
     post :accept, on: :member
     post :waive, on: :member
   end
+  resources :webhook_events, only: [ :show ] do
+    post :replay, on: :member
+  end
 
   get "workforce", to: "operations#workforce"
   get "payroll", to: "operations#payroll"

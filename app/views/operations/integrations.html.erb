@@ -59,7 +59,7 @@
             <% @integrations[:webhooks].each do |event| %>
               <tr class="hover:bg-slate-50">
                 <td class="px-5 py-4">
-                  <p class="font-medium text-slate-950"><%= event.event_name %></p>
+                  <%= link_to event.event_name, webhook_event_path(event.id), class: "font-medium text-slate-950 hover:text-cyan-700" %>
                   <p class="break-all text-xs text-slate-500"><%= event.event_id %></p>
                 </td>
                 <td class="px-5 py-4 text-slate-600"><span class="break-all"><%= event.resource_type %> · <%= event.resource_id %></span></td>

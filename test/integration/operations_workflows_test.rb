@@ -30,7 +30,24 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     @pending_deduction = @payroll_run.payroll_deductions.create!(employee: @employee, enrollment: @pending_enrollment, code: "VITABLE_DENTAL", amount_cents: 0, status: "waiting_on_enrollment")
     @waivable_deduction = @payroll_run.payroll_deductions.create!(employee: @employee, enrollment: @waivable_enrollment, code: "VITABLE_VISION", amount_cents: 0, status: "waiting_on_enrollment")
     @compliance_case = @employer.compliance_cases.create!(employee: @employee, kind: "i9_reverification", severity: "high", due_on: Date.current + 5.days)
-    @organization.integration_connections.create!(provider: "vitable", environment: "production")
+    @connection = @organization.integration_connections.create!(provider: "vitable", environment: "production")
+    @webhook_event = @connection.webhook_events.create!(
+      event_id: "wevt_ops_employee_created",
+      organization_external_id: @organization.external_id,
+      event_name: "employee.created",
+      resource_type: "employee",
+      resource_id: "empl_ops_123",
+      occurred_at: Time.current,
+      status: "needs_credentials",
+      payload: {
+        event_id: "wevt_ops_employee_created",
+        organization_id: @organization.external_id,
+        event_name: "employee.created",
+        resource_type: "employee",
+        resource_id: "empl_ops_123",
+        created_at: Time.current.iso8601
+      }
+    )
   end
 
   test "renders the expanded operations pages" do
@@ -43,6 +60,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       enrollment_path(@pending_enrollment),
       compliance_path,
       integrations_path,
+      webhook_event_path(@webhook_event),
       employee_path(@employee)
     ].each do |path|
       get path
@@ -117,6 +135,36 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_select "h2", "Enrollment preflight"
     assert_select "h2", "Payroll deductions"
     assert_select "h2", "Sync payload"
+  end
+
+  test "webhook event workspace exposes replay diagnostics" do
+    detail = Vitable::WebhookEventDetailQuery.new.call(@webhook_event.id)
+
+    assert_instance_of Vitable::WebhookEventDetailDto, detail
+    assert_instance_of Operations::IntegrationConnectionDto, detail.connection
+    assert_instance_of Vitable::WebhookPreflightCheckDto, detail.preflight_checks.first
+    assert_instance_of Vitable::WebhookTimelineItemDto, detail.timeline.first
+
+    get webhook_event_path(@webhook_event)
+
+    assert_response :success
+    assert_select "h1", @webhook_event.event_name
+    assert_select "h2", "Replay preflight"
+    assert_select "h2", "Stored payload"
+    assert_select "h2", "Event timeline"
+    assert_select "h2", "Sync attempts"
+  end
+
+  test "replays webhook event through command action" do
+    @webhook_event.update!(status: "failed", error_message: "boom", processed_at: 1.hour.ago)
+
+    post replay_webhook_event_path(@webhook_event)
+
+    assert_redirected_to webhook_event_path(@webhook_event)
+    @webhook_event.reload
+    assert_equal "needs_credentials", @webhook_event.status
+    assert_nil @webhook_event.processed_at
+    assert_match "not configured", @webhook_event.error_message
   end
 
   test "accepts an enrollment and readies payroll deductions" do
