@@ -182,6 +182,8 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_instance_of Vitable::ConnectionHealthCheckDto, detail.health_checks.first
     assert_instance_of Vitable::EndpointCoverageDto, detail.endpoint_coverage.first
     assert_instance_of Vitable::ConnectionTimelineItemDto, detail.timeline.first
+    assert_instance_of Vitable::WebhookSimulatorDto, detail.simulator
+    assert_instance_of Vitable::WebhookSimulationEventOptionDto, detail.simulator.event_options.first
     assert_equal @sync_run.id, detail.sync_runs.first.id
     assert_equal @request_log.id, detail.request_logs.first.id
 
@@ -189,6 +191,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_select "h1", "#{@organization.name} Vitable connection"
+    assert_select "h2", "Sandbox webhook composer"
     assert_select "h2", "Readiness checks"
     assert_select "h2", "Resource coverage"
     assert_select "h2", "Connection timeline"
@@ -207,6 +210,25 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal "value", @connection.metadata.fetch("existing")
     assert_equal "needs_credentials", @connection.metadata.dig("last_verification", "status")
     assert_match @connection.api_key_reference, @connection.metadata.dig("last_verification", "message")
+  end
+
+  test "simulates a Vitable webhook through the connection workspace" do
+    assert_difference -> { WebhookEvent.count }, 1 do
+      post simulate_webhook_integration_connection_path(@connection), params: {
+        event_id: "wevt_ops_simulated_benefit_plan",
+        event_name: "benefit_plan.updated",
+        resource_type: "benefit_plan",
+        resource_id: "bpln_ops_primary_care"
+      }
+    end
+
+    event = WebhookEvent.find_by!(event_id: "wevt_ops_simulated_benefit_plan")
+    assert_redirected_to webhook_event_path(event)
+    assert_equal @connection, event.integration_connection
+    assert_equal @organization.external_id, event.organization_external_id
+    assert_equal "benefit_plan.updated", event.event_name
+    assert_equal "needs_credentials", event.status
+    assert_equal "bpln_ops_primary_care", event.payload.fetch("resource_id")
   end
 
   test "replays webhook event through command action" do

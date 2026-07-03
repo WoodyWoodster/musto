@@ -62,6 +62,75 @@
     <% end %>
   </div>
 
+  <section class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div class="grid gap-0 xl:grid-cols-[1fr_0.85fr]">
+      <div class="p-5 lg:p-6">
+        <div class="flex flex-col gap-2 border-b border-slate-100 pb-5 md:flex-row md:items-start md:justify-between">
+          <div>
+            <h2 class="text-base font-semibold text-slate-950">Sandbox webhook composer</h2>
+            <p class="mt-1 text-sm text-slate-500">Generate Vitable-shaped events through the same command path as production webhooks.</p>
+          </div>
+          <%= status_pill(@connection.credentials_missing? ? "needs_credentials" : "ready") %>
+        </div>
+
+        <%= form_with url: simulate_webhook_integration_connection_path(@connection.id), method: :post, class: "mt-5 grid gap-4 lg:grid-cols-2" do %>
+          <div>
+            <%= label_tag :event_name, "Event type", class: "text-xs font-semibold uppercase tracking-wide text-slate-500" %>
+            <%= select_tag :event_name,
+              options_for_select(@connection.simulator.event_options.map { |option| [ option.label, option.event_name ] }, @connection.simulator.default_event_name),
+              class: "mt-2 w-full rounded-md border border-slate-200 bg-white px-3 py-3 text-sm font-medium text-slate-950 shadow-sm focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-100" %>
+          </div>
+
+          <div>
+            <%= label_tag :resource_type, "Resource type", class: "text-xs font-semibold uppercase tracking-wide text-slate-500" %>
+            <%= select_tag :resource_type,
+              options_for_select(@connection.simulator.resource_options.map { |resource_type| [ resource_type.humanize, resource_type ] }, @connection.simulator.default_resource_type),
+              class: "mt-2 w-full rounded-md border border-slate-200 bg-white px-3 py-3 text-sm font-medium text-slate-950 shadow-sm focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-100" %>
+          </div>
+
+          <div>
+            <%= label_tag :resource_id, "Resource ID", class: "text-xs font-semibold uppercase tracking-wide text-slate-500" %>
+            <%= text_field_tag :resource_id,
+              @connection.simulator.default_resource_id,
+              class: "mt-2 w-full rounded-md border border-slate-200 bg-white px-3 py-3 font-mono text-sm text-slate-950 shadow-sm focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-100",
+              autocomplete: "off" %>
+          </div>
+
+          <div>
+            <%= label_tag :event_id, "Event ID override", class: "text-xs font-semibold uppercase tracking-wide text-slate-500" %>
+            <%= text_field_tag :event_id,
+              nil,
+              placeholder: "Auto-generated",
+              class: "mt-2 w-full rounded-md border border-slate-200 bg-white px-3 py-3 font-mono text-sm text-slate-950 shadow-sm placeholder:text-slate-400 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-100",
+              autocomplete: "off" %>
+          </div>
+
+          <div class="lg:col-span-2">
+            <%= submit_tag "Process sandbox webhook", class: "w-full rounded-md bg-slate-950 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-slate-800 md:w-auto" %>
+          </div>
+        <% end %>
+      </div>
+
+      <aside class="border-t border-slate-200 bg-slate-50 p-5 lg:p-6 xl:border-l xl:border-t-0">
+        <h3 class="text-sm font-semibold text-slate-950">Payload contract</h3>
+        <dl class="mt-4 grid gap-3 text-sm">
+          <div class="rounded-md bg-white p-3 shadow-sm ring-1 ring-slate-200">
+            <dt class="text-xs font-semibold uppercase tracking-wide text-slate-400">Organization</dt>
+            <dd class="mt-1 break-all font-mono text-xs text-slate-700"><%= @connection.organization_external_id %></dd>
+          </div>
+          <div class="rounded-md bg-white p-3 shadow-sm ring-1 ring-slate-200">
+            <dt class="text-xs font-semibold uppercase tracking-wide text-slate-400">Result</dt>
+            <dd class="mt-1 text-sm text-slate-700"><%= @connection.credentials_missing? ? "Queued until credentials exist" : "Fetches fresh Vitable resource state" %></dd>
+          </div>
+          <div class="rounded-md bg-white p-3 shadow-sm ring-1 ring-slate-200">
+            <dt class="text-xs font-semibold uppercase tracking-wide text-slate-400">Idempotency</dt>
+            <dd class="mt-1 text-sm text-slate-700">Duplicate event IDs reuse the stored webhook event.</dd>
+          </div>
+        </dl>
+      </aside>
+    </div>
+  </section>
+
   <div class="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
     <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
       <div class="border-b border-slate-100 px-5 py-4">

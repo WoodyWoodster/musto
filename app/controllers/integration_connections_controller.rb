@@ -12,4 +12,14 @@ class IntegrationConnectionsController < ApplicationController
       notice: result.success? ? "Vitable credentials verified." : result.errors.to_sentence
     )
   end
+
+  def simulate_webhook
+    dto = Vitable::SimulateWebhookEventDto.from_params(params)
+    result = Vitable::SimulateWebhookEventCommand.new(dto:).call
+
+    redirect_to(
+      result.record ? webhook_event_path(result.record) : integration_connection_path(dto.connection_id),
+      notice: result.success? ? "Sandbox webhook processed." : result.errors.to_sentence
+    )
+  end
 end

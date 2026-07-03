@@ -18,7 +18,8 @@ module Vitable
     :webhook_events,
     :sync_runs,
     :request_logs,
-    :timeline
+    :timeline,
+    :simulator
   ) do
     RESOURCE_TYPES = %w[employee enrollment benefit_plan payroll_deduction].freeze
 
@@ -47,7 +48,8 @@ module Vitable
         webhook_events: event_dtos,
         sync_runs: sync_dtos,
         request_logs: request_log_dtos,
-        timeline: timeline(webhook_events, sync_runs, request_logs)
+        timeline: timeline(webhook_events, sync_runs, request_logs),
+        simulator: WebhookSimulatorDto.default
       )
     end
 
