@@ -53,7 +53,7 @@
           <% @workforce[:employees].each do |employee| %>
             <tr class="hover:bg-slate-50">
               <td class="px-5 py-4">
-                <p class="font-semibold text-slate-950"><%= employee.full_name %></p>
+                <%= link_to employee.full_name, employee_path(employee.id), class: "font-semibold text-slate-950 hover:text-cyan-700" %>
                 <p class="text-xs text-slate-500"><%= employee.title.presence || "Role pending" %> · <%= employee.email %></p>
               </td>
               <td class="px-5 py-4 text-slate-600"><%= employee.department_name || "Unassigned" %></td>

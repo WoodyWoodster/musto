@@ -28,7 +28,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
   end
 
   test "renders the expanded operations pages" do
-    [ root_path, workforce_path, payroll_path, benefits_path, compliance_path, integrations_path ].each do |path|
+    [ root_path, workforce_path, payroll_path, benefits_path, compliance_path, integrations_path, employee_path(@employee) ].each do |path|
       get path
       assert_response :success
     end
@@ -49,6 +49,24 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_instance_of Operations::BenefitPlanDto, benefits.fetch(:benefit_plans).first
     assert_instance_of Operations::ComplianceCaseDto, compliance.fetch(:cases).first
     assert_instance_of Operations::IntegrationConnectionDto, integrations.fetch(:connections).first
+  end
+
+  test "employee profile exposes a feature-rich employee 360 DTO" do
+    profile = Employees::DetailQuery.new.call(@employee.id)
+
+    assert_instance_of Employees::ProfileDto, profile
+    assert_instance_of Employees::ProfileMetricDto, profile.metrics.first
+    assert_instance_of Employees::ProfileTimelineItemDto, profile.timeline.first
+    assert_instance_of Operations::EnrollmentDto, profile.enrollments.first
+    assert_instance_of Operations::OnboardingTaskDto, profile.onboarding_tasks.first
+
+    get employee_path(@employee)
+
+    assert_response :success
+    assert_select "h1", @employee.full_name
+    assert_select "h2", "Benefit elections"
+    assert_select "h2", "Payroll ledger"
+    assert_select "h2", "PTO and compliance"
   end
 
   test "completes an onboarding task through the command action" do

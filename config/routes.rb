@@ -2,6 +2,7 @@ Rails.application.routes.draw do
   root "dashboard#index"
 
   resources :employers, only: [ :index, :show ]
+  resources :employees, only: [ :show ]
 
   get "workforce", to: "operations#workforce"
   get "payroll", to: "operations#payroll"

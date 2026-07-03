@@ -1,0 +1,244 @@
+<section class="space-y-7">
+  <div class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div class="grid gap-0 xl:grid-cols-[1.25fr_0.75fr]">
+      <div class="p-6 lg:p-8">
+        <%= link_to "Back to workforce", workforce_path, class: "text-sm font-semibold text-cyan-700 hover:text-cyan-900" %>
+        <div class="mt-5 flex flex-wrap items-center gap-2">
+          <%= status_pill(@employee.employment_status) %>
+          <%= status_pill(@employee.onboarding_status) %>
+          <%= status_pill(@employee.benefits_status) %>
+        </div>
+        <h1 class="mt-5 text-4xl font-semibold tracking-tight text-slate-950"><%= @employee.full_name %></h1>
+        <p class="mt-3 max-w-3xl text-base leading-7 text-slate-600">
+          <%= @employee.title.presence || "Role pending" %> for <%= @employee.employer_name %>, with payroll, benefits, onboarding, time off, documents, compliance, and Vitable state in one workspace.
+        </p>
+        <div class="mt-6 grid gap-3 sm:grid-cols-3">
+          <a href="#benefits" class="rounded-md bg-slate-950 px-4 py-3 text-center text-sm font-semibold text-white shadow-sm hover:bg-slate-800">Benefits</a>
+          <a href="#payroll" class="rounded-md border border-slate-200 bg-white px-4 py-3 text-center text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300">Payroll</a>
+          <a href="#attention" class="rounded-md border border-slate-200 bg-white px-4 py-3 text-center text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300">Attention queue</a>
+        </div>
+      </div>
+
+      <aside class="border-t border-slate-200 bg-slate-950 p-6 text-white xl:border-l xl:border-t-0 xl:p-8">
+        <p class="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-300">Vitable identity</p>
+        <div class="mt-6 space-y-5">
+          <div>
+            <p class="text-sm text-slate-300">External employee ID</p>
+            <p class="mt-1 break-all font-mono text-sm font-semibold"><%= @employee.vitable_id.presence || "Not synced yet" %></p>
+          </div>
+          <div class="h-px bg-white/10"></div>
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <p class="text-sm text-slate-300">Organization</p>
+              <p class="mt-1 font-semibold"><%= @employee.organization_name %></p>
+            </div>
+            <div>
+              <p class="text-sm text-slate-300">Integration</p>
+              <p class="mt-1 font-semibold"><%= @employee.connected_to_vitable? ? "Connected" : "Queued" %></p>
+            </div>
+          </div>
+          <div class="rounded-md bg-white/10 p-4">
+            <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Operational posture</p>
+            <p class="mt-2 text-sm leading-6 text-slate-200">
+              <%= @employee.needs_attention? ? "Review outstanding tasks before the next payroll or benefits export." : "Profile is clean for the next payroll and benefits sync." %>
+            </p>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+    <% @employee.metrics.each do |metric| %>
+      <article class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <div class="flex items-center justify-between">
+          <p class="text-sm font-medium text-slate-500"><%= metric.label %></p>
+          <span class="h-2.5 w-2.5 rounded-full <%= metric.accent %>"></span>
+        </div>
+        <p class="mt-4 text-3xl font-semibold tracking-tight text-slate-950"><%= metric.label == "Compensation" ? money_cents(metric.value) : compact_number(metric.value) %></p>
+        <p class="mt-1 text-sm text-slate-500"><%= metric.hint %></p>
+      </article>
+    <% end %>
+  </div>
+
+  <div class="grid gap-6 xl:grid-cols-[0.85fr_1.15fr]">
+    <section class="rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="border-b border-slate-100 px-5 py-4">
+        <h2 class="text-base font-semibold text-slate-950">Employment profile</h2>
+        <p class="text-sm text-slate-500">Identity, role, location, and pay setup for HRIS parity.</p>
+      </div>
+      <dl class="grid gap-px bg-slate-100 sm:grid-cols-2">
+        <% [
+          ["Email", @employee.email],
+          ["Department", @employee.department_name || "Unassigned"],
+          ["Location", @employee.work_location_name || "Unassigned"],
+          ["Start date", @employee.start_on&.strftime("%b %-d, %Y") || "Pending"],
+          ["Pay type", @employee.pay_type.humanize],
+          ["Payroll deductions", money_cents(@employee.payroll_deduction_cents)]
+        ].each do |label, value| %>
+          <div class="bg-white p-5">
+            <dt class="text-xs font-semibold uppercase tracking-wide text-slate-400"><%= label %></dt>
+            <dd class="mt-2 text-sm font-semibold text-slate-950"><%= value %></dd>
+          </div>
+        <% end %>
+      </dl>
+    </section>
+
+    <section class="rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="border-b border-slate-100 px-5 py-4">
+        <h2 class="text-base font-semibold text-slate-950">Activity timeline</h2>
+        <p class="text-sm text-slate-500">Recent onboarding, benefits, payroll, and compliance changes.</p>
+      </div>
+      <div class="divide-y divide-slate-100">
+        <% @employee.timeline.each do |item| %>
+          <div class="flex items-start justify-between gap-4 px-5 py-4">
+            <div>
+              <p class="text-xs font-semibold uppercase tracking-wide text-slate-400"><%= item.type %></p>
+              <p class="mt-1 font-medium text-slate-950"><%= item.title %></p>
+              <p class="mt-1 text-sm text-slate-500"><%= item.subtitle %></p>
+              <p class="mt-1 text-xs text-slate-400"><%= time_ago_in_words(item.timestamp) %> ago</p>
+            </div>
+            <%= status_pill(item.status) %>
+          </div>
+        <% end %>
+      </div>
+    </section>
+  </div>
+
+  <div id="benefits" class="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
+    <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="border-b border-slate-100 px-5 py-4">
+        <h2 class="text-base font-semibold text-slate-950">Benefit elections</h2>
+        <p class="text-sm text-slate-500"><%= @employee.accepted_enrollment_count %> accepted and <%= @employee.pending_enrollment_count %> pending elections.</p>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-slate-100 text-sm">
+          <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <tr>
+              <th class="px-5 py-3">Plan</th>
+              <th class="px-5 py-3">Coverage</th>
+              <th class="px-5 py-3">Effective</th>
+              <th class="px-5 py-3">Status</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            <% @employee.enrollments.each do |enrollment| %>
+              <tr class="hover:bg-slate-50">
+                <td class="px-5 py-4 font-medium text-slate-950"><%= enrollment.benefit_plan_name %></td>
+                <td class="px-5 py-4 text-slate-600"><%= enrollment.coverage_level.humanize %></td>
+                <td class="px-5 py-4 text-slate-600"><%= enrollment.effective_on&.strftime("%b %-d, %Y") || "Pending" %></td>
+                <td class="px-5 py-4"><%= status_pill(enrollment.status) %></td>
+              </tr>
+            <% end %>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="payroll" class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="border-b border-slate-100 px-5 py-4">
+        <h2 class="text-base font-semibold text-slate-950">Payroll ledger</h2>
+        <p class="text-sm text-slate-500">Benefit deductions and one-time adjustments tied to payroll runs.</p>
+      </div>
+      <div class="divide-y divide-slate-100">
+        <% @employee.payroll_deductions.each do |deduction| %>
+          <div class="flex items-start justify-between gap-4 px-5 py-4">
+            <div>
+              <p class="font-semibold text-slate-950"><%= deduction.code %></p>
+              <p class="mt-1 text-sm text-slate-500"><%= deduction.enrollment_name || "Pending enrollment" %></p>
+            </div>
+            <div class="text-right">
+              <p class="font-semibold text-slate-950"><%= money_cents(deduction.amount_cents) %></p>
+              <div class="mt-1"><%= status_pill(deduction.status) %></div>
+            </div>
+          </div>
+        <% end %>
+        <% @employee.payroll_adjustments.each do |adjustment| %>
+          <div class="flex items-start justify-between gap-4 px-5 py-4">
+            <div>
+              <p class="font-semibold text-slate-950"><%= adjustment.description %></p>
+              <p class="mt-1 text-sm text-slate-500"><%= adjustment.adjustment_type.humanize %> · <%= adjustment.taxable? ? "Taxable" : "Non-taxable" %></p>
+            </div>
+            <p class="font-semibold text-slate-950"><%= money_cents(adjustment.amount_cents) %></p>
+          </div>
+        <% end %>
+      </div>
+    </section>
+  </div>
+
+  <div id="attention" class="grid gap-6 xl:grid-cols-[1fr_1fr]">
+    <section class="rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="border-b border-slate-100 px-5 py-4">
+        <h2 class="text-base font-semibold text-slate-950">Onboarding and documents</h2>
+        <p class="text-sm text-slate-500">Tasks and document exceptions that can block payroll or benefits readiness.</p>
+      </div>
+      <div class="divide-y divide-slate-100">
+        <% @employee.onboarding_tasks.each do |task| %>
+          <div class="grid gap-4 px-5 py-4 sm:grid-cols-[1fr_auto] sm:items-center">
+            <div>
+              <p class="font-semibold text-slate-950"><%= task.title %></p>
+              <p class="mt-1 text-sm text-slate-500"><%= task.category.humanize %> · due <%= task.due_on.strftime("%b %-d") %></p>
+            </div>
+            <% if task.complete? %>
+              <%= status_pill(task.status) %>
+            <% else %>
+              <%= button_to "Complete", complete_onboarding_task_path(task.id), method: :post, class: "rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-800" %>
+            <% end %>
+          </div>
+        <% end %>
+        <% @employee.documents.each do |document| %>
+          <div class="flex items-start justify-between gap-4 px-5 py-4">
+            <div>
+              <p class="font-semibold text-slate-950"><%= document.title %></p>
+              <p class="mt-1 text-sm text-slate-500"><%= document.document_type.humanize %> · <%= document.expires_on&.strftime("expires %b %-d, %Y") || "no expiry" %></p>
+            </div>
+            <%= status_pill(document.status) %>
+          </div>
+        <% end %>
+      </div>
+    </section>
+
+    <section class="rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="border-b border-slate-100 px-5 py-4">
+        <h2 class="text-base font-semibold text-slate-950">PTO and compliance</h2>
+        <p class="text-sm text-slate-500">Requests and cases that need operator review.</p>
+      </div>
+      <div class="divide-y divide-slate-100">
+        <% @employee.time_off_requests.each do |request| %>
+          <div class="px-5 py-4">
+            <div class="flex items-start justify-between gap-4">
+              <div>
+                <p class="font-semibold text-slate-950"><%= request.policy_name %></p>
+                <p class="mt-1 text-sm text-slate-500"><%= request.starts_on.strftime("%b %-d") %> - <%= request.ends_on.strftime("%b %-d") %> · <%= request.hours.to_i %>h</p>
+                <p class="mt-2 text-sm text-slate-600"><%= request.reason.presence || "No reason provided" %></p>
+              </div>
+              <%= status_pill(request.status) %>
+            </div>
+            <% if request.requested? %>
+              <div class="mt-4 flex gap-2">
+                <%= button_to "Approve", approve_time_off_request_path(request.id), method: :post, class: "rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700" %>
+                <%= button_to "Deny", deny_time_off_request_path(request.id), method: :post, class: "rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:border-slate-300" %>
+              </div>
+            <% end %>
+          </div>
+        <% end %>
+        <% @employee.compliance_cases.each do |item| %>
+          <div class="grid gap-4 px-5 py-4 sm:grid-cols-[1fr_auto] sm:items-center">
+            <div>
+              <div class="flex flex-wrap items-center gap-2">
+                <p class="font-semibold text-slate-950"><%= item.kind.humanize %></p>
+                <%= status_pill(item.severity) %>
+                <%= status_pill(item.status) %>
+              </div>
+              <p class="mt-1 text-sm text-slate-500">Due <%= item.due_on&.strftime("%b %-d") || "unscheduled" %></p>
+              <p class="mt-2 text-sm text-slate-600"><%= item.description %></p>
+            </div>
+            <% unless item.resolved? %>
+              <%= button_to "Resolve", resolve_compliance_case_path(item.id), method: :post, class: "rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-800" %>
+            <% end %>
+          </div>
+        <% end %>
+      </div>
+    </section>
+  </div>
+</section>

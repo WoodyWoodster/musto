@@ -15,13 +15,13 @@ module ApplicationHelper
   def status_pill(status)
     normalized = status.to_s
     palette = case normalized
-    when "active", "available", "accepted", "approved", "complete", "processed", "succeeded", "finalized", "ready"
+    when "active", "available", "accepted", "approved", "complete", "processed", "succeeded", "finalized", "ready", "connected"
       "bg-emerald-50 text-emerald-700 ring-emerald-200"
-    when "pending", "requested", "received", "onboarding", "estimated", "open", "running"
+    when "pending", "requested", "received", "onboarding", "estimated", "open", "running", "in_progress"
       "bg-cyan-50 text-cyan-700 ring-cyan-200"
-    when "needs_credentials", "waiting_on_enrollment", "needs_review", "draft"
+    when "needs_credentials", "waiting_on_enrollment", "needs_review", "draft", "not_synced"
       "bg-amber-50 text-amber-800 ring-amber-200"
-    when "failed", "expired", "denied", "critical", "high"
+    when "failed", "expired", "denied", "critical", "high", "blocked"
       "bg-rose-50 text-rose-700 ring-rose-200"
     else
       "bg-slate-100 text-slate-700 ring-slate-200"

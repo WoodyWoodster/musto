@@ -33,7 +33,7 @@
         <% @employer.employees.each do |employee| %>
           <div class="grid gap-3 px-5 py-4 md:grid-cols-[1fr_auto]">
             <div>
-              <p class="font-semibold text-slate-950"><%= employee.full_name %></p>
+              <%= link_to employee.full_name, employee_path(employee.id), class: "font-semibold text-slate-950 hover:text-cyan-700" %>
               <p class="mt-1 text-sm text-slate-500"><%= employee.title.presence || "Role pending" %> · <%= employee.department_name || "Unassigned" %> · <%= employee.work_location_name || "Unassigned" %></p>
             </div>
             <div class="text-left md:text-right">
