@@ -1,0 +1,262 @@
+<section class="space-y-7">
+  <div class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div class="grid xl:grid-cols-[1.25fr_0.75fr]">
+      <div class="p-6 lg:p-8">
+        <div class="flex flex-wrap items-center gap-2">
+          <%= status_pill(@eligibility.generated? ? @eligibility.latest_batch.status : "needs_review") %>
+          <span class="rounded-full bg-cyan-50 px-3 py-1 text-xs font-semibold text-cyan-800 ring-1 ring-inset ring-cyan-200">Member eligibility</span>
+          <span class="rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-800 ring-1 ring-inset ring-indigo-200">Vitable sync</span>
+        </div>
+
+        <h1 class="mt-5 text-4xl font-semibold tracking-tight text-slate-950">Benefits eligibility sync</h1>
+        <p class="mt-3 max-w-3xl text-base leading-7 text-slate-600">
+          Prepare employee and dependent eligibility records, resolve enrollment holdbacks, and generate a Vitable-ready member batch for <%= @eligibility.employer&.name || "your employer portfolio" %>.
+        </p>
+
+        <div class="mt-6 flex flex-wrap gap-3">
+          <%= link_to "Benefits cockpit", benefits_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
+          <%= link_to "Reconcile deductions", benefits_reconciliation_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
+          <%= link_to "Vitable connection", integrations_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
+          <%= button_to "Generate eligibility batch", generate_benefits_eligibility_batch_path, method: :post, params: { requested_by: "ops_console" }, class: "rounded-md bg-slate-950 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-slate-800" %>
+        </div>
+      </div>
+
+      <aside class="border-t border-slate-200 bg-slate-950 p-6 text-white xl:border-l xl:border-t-0 xl:p-8">
+        <p class="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-300">Latest eligibility batch</p>
+        <% if @eligibility.latest_batch.present? %>
+          <p class="mt-6 break-all font-mono text-sm font-semibold"><%= @eligibility.latest_batch.batch_id %></p>
+          <p class="mt-3 text-sm text-slate-300">Generated <%= time_ago_in_words(@eligibility.latest_batch.generated_at) %> ago by <%= @eligibility.latest_batch.requested_by %></p>
+          <div class="mt-6 grid grid-cols-2 gap-3">
+            <div class="rounded-md bg-white/10 p-4">
+              <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Members</p>
+              <p class="mt-2 text-2xl font-semibold"><%= compact_number(@eligibility.latest_batch.member_count) %></p>
+            </div>
+            <div class="rounded-md bg-white/10 p-4">
+              <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Holdbacks</p>
+              <p class="mt-2 text-2xl font-semibold"><%= compact_number(@eligibility.latest_batch.holdback_count) %></p>
+            </div>
+          </div>
+          <div class="mt-5 grid grid-cols-2 gap-3">
+            <div class="rounded-md bg-white/10 p-4">
+              <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Employees</p>
+              <p class="mt-2 text-2xl font-semibold"><%= compact_number(@eligibility.latest_batch.employee_count) %></p>
+            </div>
+            <div class="rounded-md bg-white/10 p-4">
+              <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Dependents</p>
+              <p class="mt-2 text-2xl font-semibold"><%= compact_number(@eligibility.latest_batch.dependent_count) %></p>
+            </div>
+          </div>
+        <% else %>
+          <p class="mt-6 text-3xl font-semibold tracking-tight">No batch</p>
+          <p class="mt-2 text-sm leading-6 text-slate-300">Generate an eligibility batch after accepted elections and dependent records are reviewed.</p>
+        <% end %>
+      </aside>
+    </div>
+  </div>
+
+  <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+    <% @eligibility.metrics.each do |metric| %>
+      <article class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <div class="flex items-center justify-between gap-3">
+          <p class="text-sm font-medium text-slate-500"><%= metric.label %></p>
+          <span class="h-2.5 w-2.5 shrink-0 rounded-full <%= metric.accent %>"></span>
+        </div>
+        <p class="mt-4 text-3xl font-semibold tracking-tight text-slate-950"><%= compact_number(metric.value) %></p>
+        <div class="mt-2 flex flex-wrap items-center gap-2">
+          <%= status_pill(metric.status) %>
+          <p class="text-sm text-slate-500"><%= metric.hint %></p>
+        </div>
+      </article>
+    <% end %>
+  </div>
+
+  <div class="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+    <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="border-b border-slate-100 px-5 py-4">
+        <h2 class="text-base font-semibold text-slate-950">Member eligibility ledger</h2>
+        <p class="text-sm text-slate-500">Employee elections with plan, coverage, dependent count, and remote ID readiness.</p>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-slate-100 text-sm">
+          <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <tr>
+              <th class="px-5 py-3">Employee</th>
+              <th class="px-5 py-3">Plan</th>
+              <th class="px-5 py-3">Coverage</th>
+              <th class="px-5 py-3">Effective</th>
+              <th class="px-5 py-3">Dependents</th>
+              <th class="px-5 py-3">Remote</th>
+              <th class="px-5 py-3">Readiness</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            <% @eligibility.members.each do |member| %>
+              <tr class="hover:bg-slate-50">
+                <td class="px-5 py-4">
+                  <%= link_to member.employee_name, employee_path(member.employee_id), class: "font-semibold text-slate-950 hover:text-cyan-700" %>
+                  <p class="mt-1 text-xs text-slate-500"><%= member.department_name %> · <%= member.location_name %></p>
+                </td>
+                <td class="px-5 py-4">
+                  <%= link_to member.plan_name, enrollment_path(member.enrollment_id), class: "font-medium text-slate-700 hover:text-cyan-700" %>
+                  <p class="mt-1 text-xs text-slate-500"><%= member.plan_category.humanize %></p>
+                </td>
+                <td class="px-5 py-4 text-slate-600"><%= member.coverage_level.humanize %></td>
+                <td class="px-5 py-4 text-slate-600"><%= member.effective_on&.strftime("%b %-d, %Y") || "Missing" %></td>
+                <td class="px-5 py-4 text-slate-600">
+                  <%= compact_number(member.eligible_dependent_count) %> ready
+                  <p class="mt-1 text-xs text-slate-500"><%= compact_number(member.dependent_count) %> total</p>
+                </td>
+                <td class="px-5 py-4">
+                  <%= status_pill(member.remote_pending? ? "remote_pending" : "synced") %>
+                  <p class="mt-1 max-w-36 truncate text-xs text-slate-500"><%= member.remote_enrollment_id.presence || "Create on sync" %></p>
+                </td>
+                <td class="px-5 py-4">
+                  <%= status_pill(member.readiness_status) %>
+                  <p class="mt-1 text-xs text-slate-500"><%= member.readiness_reason %></p>
+                </td>
+              </tr>
+            <% end %>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="border-b border-slate-100 px-5 py-4">
+        <h2 class="text-base font-semibold text-slate-950">Eligibility issues</h2>
+        <p class="text-sm text-slate-500">Holdbacks and sync prep items before a clean eligibility push.</p>
+      </div>
+      <div class="divide-y divide-slate-100">
+        <% @eligibility.issues.each do |issue| %>
+          <div class="p-5">
+            <div class="flex flex-wrap items-start justify-between gap-3">
+              <div class="min-w-0">
+                <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400"><%= issue.owner %> · <%= issue.severity %></p>
+                <h3 class="mt-2 text-base font-semibold text-slate-950"><%= issue.title %></h3>
+              </div>
+              <%= status_pill(issue.status) %>
+            </div>
+            <p class="mt-3 text-sm leading-6 text-slate-600"><%= issue.detail %></p>
+            <%= link_to "Open workflow", issue.action_path, class: "mt-4 inline-flex text-sm font-semibold text-cyan-700 hover:text-cyan-900" %>
+          </div>
+        <% end %>
+      </div>
+    </section>
+  </div>
+
+  <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div class="border-b border-slate-100 px-5 py-4">
+      <h2 class="text-base font-semibold text-slate-950">Dependent roster</h2>
+      <p class="text-sm text-slate-500">Dependent eligibility profiles attached to employees and member sync.</p>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="min-w-full divide-y divide-slate-100 text-sm">
+        <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <tr>
+            <th class="px-5 py-3">Dependent</th>
+            <th class="px-5 py-3">Employee</th>
+            <th class="px-5 py-3">Relationship</th>
+            <th class="px-5 py-3">DOB</th>
+            <th class="px-5 py-3">Enrollment</th>
+            <th class="px-5 py-3">Eligibility</th>
+            <th class="px-5 py-3">Remote ID</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          <% @eligibility.dependents.each do |dependent| %>
+            <tr class="hover:bg-slate-50">
+              <td class="px-5 py-4 font-semibold text-slate-950"><%= dependent.full_name %></td>
+              <td class="px-5 py-4"><%= link_to dependent.employee_name, employee_path(dependent.employee_id), class: "font-medium text-slate-700 hover:text-cyan-700" %></td>
+              <td class="px-5 py-4 text-slate-600"><%= dependent.relationship.humanize %></td>
+              <td class="px-5 py-4 text-slate-600"><%= dependent.date_of_birth&.strftime("%b %-d, %Y") || "Missing" %></td>
+              <td class="px-5 py-4"><%= status_pill(dependent.enrollment_status) %></td>
+              <td class="px-5 py-4"><%= status_pill(dependent.eligibility_status) %></td>
+              <td class="px-5 py-4">
+                <%= status_pill(dependent.vitable_id.present? ? "synced" : "remote_pending") %>
+                <p class="mt-1 max-w-40 truncate text-xs text-slate-500"><%= dependent.vitable_id.presence || "Create on sync" %></p>
+              </td>
+            </tr>
+          <% end %>
+          <% if @eligibility.dependents.empty? %>
+            <tr>
+              <td colspan="7" class="px-5 py-5 text-sm text-slate-600">No dependents are attached to this employer yet.</td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div class="border-b border-slate-100 px-5 py-4">
+      <h2 class="text-base font-semibold text-slate-950">Eligibility batch ledger</h2>
+      <p class="text-sm text-slate-500">Member lines and holdbacks from the latest generated eligibility batch.</p>
+    </div>
+    <% if @eligibility.latest_batch.present? %>
+      <div class="grid divide-y divide-slate-100 xl:grid-cols-[1.05fr_0.95fr] xl:divide-x xl:divide-y-0">
+        <div class="min-w-0">
+          <div class="border-b border-slate-100 px-5 py-3">
+            <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Included members</p>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-slate-100 text-sm">
+              <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th class="px-5 py-3">Member</th>
+                  <th class="px-5 py-3">Type</th>
+                  <th class="px-5 py-3">Plan</th>
+                  <th class="px-5 py-3">Effective</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100">
+                <% @eligibility.batch_members.each do |member| %>
+                  <tr class="hover:bg-slate-50">
+                    <td class="px-5 py-4">
+                      <p class="font-semibold text-slate-950"><%= member.name %></p>
+                      <p class="mt-1 max-w-48 truncate text-xs text-slate-500"><%= member.remote_member_id %></p>
+                    </td>
+                    <td class="px-5 py-4 text-slate-600"><%= member.member_type.humanize %> · <%= member.relationship.humanize %></td>
+                    <td class="px-5 py-4 text-slate-600"><%= member.plan_name %></td>
+                    <td class="px-5 py-4 text-slate-600"><%= member.effective_on.strftime("%b %-d, %Y") %></td>
+                  </tr>
+                <% end %>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="min-w-0">
+          <div class="border-b border-slate-100 px-5 py-3">
+            <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Holdbacks</p>
+          </div>
+          <div class="divide-y divide-slate-100">
+            <% @eligibility.batch_holdbacks.each do |holdback| %>
+              <div class="p-5">
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                  <div class="min-w-0">
+                    <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400"><%= holdback.source_type.humanize %></p>
+                    <h3 class="mt-2 text-base font-semibold text-slate-950"><%= holdback.label %></h3>
+                    <p class="mt-1 text-sm text-slate-500"><%= holdback.employee_name %></p>
+                  </div>
+                  <%= status_pill(holdback.status) %>
+                </div>
+                <p class="mt-3 text-sm leading-6 text-slate-600"><%= holdback.reason %></p>
+              </div>
+            <% end %>
+            <% if @eligibility.batch_holdbacks.empty? %>
+              <div class="p-5">
+                <p class="font-semibold text-slate-950">No holdbacks</p>
+                <p class="mt-2 text-sm leading-6 text-slate-600">All member eligibility records were included in the latest batch.</p>
+              </div>
+            <% end %>
+          </div>
+        </div>
+      </div>
+    <% else %>
+      <div class="p-5">
+        <p class="font-semibold text-slate-950">No generated eligibility batch</p>
+        <p class="mt-2 text-sm leading-6 text-slate-600">The latest included member lines and holdbacks will appear here after generation.</p>
+      </div>
+    <% end %>
+  </section>
+</section>

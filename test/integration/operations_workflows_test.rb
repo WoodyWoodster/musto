@@ -33,6 +33,8 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     @pending_enrollment = @employee.enrollments.create!(benefit_plan: @pending_plan, status: "pending", effective_on: Date.current.next_month.beginning_of_month)
     @waivable_plan = @employer.benefit_plans.create!(name: "Vision", category: "vision", monthly_premium_cents: 2_500)
     @waivable_enrollment = @employee.enrollments.create!(benefit_plan: @waivable_plan, status: "pending", effective_on: Date.current.next_month.beginning_of_month)
+    @dependent = @employee.dependents.create!(first_name: "Harper", last_name: "Ng", relationship: "spouse", date_of_birth: Date.current - 30.years, enrollment_status: "enrolled", eligibility_status: "eligible")
+    @dependent_holdback = @employee.dependents.create!(first_name: "Rowan", last_name: "Ng", relationship: "child", date_of_birth: Date.current - 8.years, enrollment_status: "pending", eligibility_status: "needs_review")
     @task = @employee.onboarding_tasks.create!(title: "Confirm payroll setup", category: "payroll", due_on: Date.current)
     @pending_document = @employee.employee_documents.create!(title: "Benefits disclosure", document_type: "benefits", status: "pending", expires_on: Date.current + 30.days)
     @complete_document = @employee.employee_documents.create!(title: "Form W-4", document_type: "tax", status: "complete", issued_on: Date.current)
@@ -142,6 +144,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       payroll_run_path(@payroll_run),
       payroll_run_benefits_export_path(@payroll_run),
       benefits_path,
+      benefits_eligibility_path,
       benefits_reconciliation_path,
       enrollment_path(@pending_enrollment),
       compliance_path,
@@ -168,6 +171,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     taxes = Taxes::CenterQuery.new.call
     reports = Reports::CenterQuery.new.call
     benefits = Operations::BenefitsQuery.new.call
+    eligibility = Benefits::EligibilityQuery.new.call
     reconciliation = Benefits::ReconciliationQuery.new.call
     compliance = Operations::ComplianceQuery.new.call
     integrations = Operations::IntegrationsQuery.new.call
@@ -212,6 +216,11 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_instance_of Reports::MetricDto, reports.metrics.first
     assert_instance_of Reports::ReportCardDto, reports.report_cards.first
     assert_instance_of Operations::BenefitPlanDto, benefits.fetch(:benefit_plans).first
+    assert_instance_of Benefits::EligibilityCenterDto, eligibility
+    assert_instance_of Benefits::EligibilityMetricDto, eligibility.metrics.first
+    assert_instance_of Benefits::EligibilityMemberDto, eligibility.members.first
+    assert_instance_of Benefits::EligibilityDependentDto, eligibility.dependents.first
+    assert_instance_of Benefits::EligibilityIssueDto, eligibility.issues.first
     assert_instance_of Benefits::ReconciliationDetailDto, reconciliation
     assert_instance_of Operations::ComplianceCaseDto, compliance.fetch(:cases).first
     assert_instance_of Operations::IntegrationConnectionDto, integrations.fetch(:connections).first
@@ -597,6 +606,46 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_select "h2", "Enrollment preflight"
     assert_select "h2", "Payroll deductions"
     assert_select "h2", "Sync payload"
+  end
+
+  test "benefits eligibility center exposes member and dependent DTOs" do
+    detail = Benefits::EligibilityQuery.new.call
+
+    assert_instance_of Benefits::EligibilityCenterDto, detail
+    assert_instance_of Benefits::EligibilityMetricDto, detail.metrics.first
+    assert_instance_of Benefits::EligibilityMemberDto, detail.members.first
+    assert_instance_of Benefits::EligibilityDependentDto, detail.dependents.first
+    assert_instance_of Benefits::EligibilityIssueDto, detail.issues.first
+    assert detail.ready_members.any? { |member| member.enrollment_id == @enrollment.id }
+    assert detail.review_dependents.any? { |dependent| dependent.id == @dependent_holdback.id }
+
+    get benefits_eligibility_path
+
+    assert_response :success
+    assert_select "h1", "Benefits eligibility sync"
+    assert_select "h2", "Member eligibility ledger"
+    assert_select "h2", "Eligibility issues"
+    assert_select "h2", "Dependent roster"
+    assert_select "h2", "Eligibility batch ledger"
+  end
+
+  test "generates a benefits eligibility batch through command action" do
+    post generate_benefits_eligibility_batch_path
+
+    assert_redirected_to benefits_eligibility_path
+    batch = @employer.reload.settings.fetch("vitable_eligibility_batch")
+    assert_match(/\Avitable_eligibility_#{@employer.id}_/, batch.fetch("batch_id"))
+    assert_equal "ops_console", batch.fetch("requested_by")
+    assert_equal 2, batch.fetch("totals").fetch("member_count")
+    assert_equal 1, batch.fetch("totals").fetch("employee_count")
+    assert_equal 1, batch.fetch("totals").fetch("dependent_count")
+    assert_equal 3, batch.fetch("totals").fetch("holdback_count")
+    assert_equal @employee.full_name, batch.fetch("members").first.fetch("name")
+
+    detail = Benefits::EligibilityQuery.new.call
+    assert_instance_of Benefits::EligibilityBatchDto, detail.latest_batch
+    assert_instance_of Benefits::EligibilityBatchMemberDto, detail.batch_members.first
+    assert_instance_of Benefits::EligibilityBatchHoldbackDto, detail.batch_holdbacks.first
   end
 
   test "benefits reconciliation workspace exposes deduction exception DTOs" do

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_03_130001) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_03_140000) do
   create_table "api_request_logs", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.integer "duration_ms"
@@ -119,6 +119,24 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_03_130001) do
     t.index ["employer_id", "code"], name: "index_departments_on_employer_id_and_code", unique: true
     t.index ["employer_id"], name: "index_departments_on_employer_id"
     t.index ["manager_id"], name: "index_departments_on_manager_id"
+  end
+
+  create_table "dependents", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.date "date_of_birth"
+    t.string "eligibility_status", default: "needs_review", null: false
+    t.integer "employee_id", null: false
+    t.string "enrollment_status", default: "pending", null: false
+    t.string "first_name", null: false
+    t.string "last_name", null: false
+    t.json "metadata", default: {}, null: false
+    t.string "relationship", null: false
+    t.datetime "updated_at", null: false
+    t.string "vitable_id"
+    t.index ["eligibility_status", "enrollment_status"], name: "index_dependents_on_eligibility_status_and_enrollment_status"
+    t.index ["employee_id", "relationship"], name: "index_dependents_on_employee_id_and_relationship"
+    t.index ["employee_id", "vitable_id"], name: "index_dependents_on_employee_id_and_vitable_id", unique: true
+    t.index ["employee_id"], name: "index_dependents_on_employee_id"
   end
 
   create_table "employee_documents", force: :cascade do |t|
@@ -409,6 +427,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_03_130001) do
   add_foreign_key "contractors", "employers"
   add_foreign_key "departments", "employees", column: "manager_id"
   add_foreign_key "departments", "employers"
+  add_foreign_key "dependents", "employees"
   add_foreign_key "employee_documents", "employees"
   add_foreign_key "employees", "departments"
   add_foreign_key "employees", "employers"

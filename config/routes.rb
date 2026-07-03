@@ -35,6 +35,8 @@ Rails.application.routes.draw do
   post "taxes/packet", to: "taxes#generate_packet", as: :generate_tax_filing_packet
   get "payroll", to: "operations#payroll"
   get "benefits", to: "operations#benefits"
+  get "benefits/eligibility", to: "benefits_eligibility#show", as: :benefits_eligibility
+  post "benefits/eligibility/batch", to: "benefits_eligibility#generate_batch", as: :generate_benefits_eligibility_batch
   get "benefits/reconciliation", to: "benefits_reconciliations#show", as: :benefits_reconciliation
   post "benefits/reconciliation/:enrollment_id/resolve", to: "benefits_reconciliations#resolve", as: :resolve_benefits_reconciliation_item
   get "compliance", to: "operations#compliance"

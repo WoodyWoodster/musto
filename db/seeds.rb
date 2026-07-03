@@ -123,6 +123,23 @@ employees.each_with_index do |employee, index|
   end
 end
 
+[
+  [ employees.first, "Jamie", "Kim", "spouse", "1989-03-04", "enrolled", "eligible" ],
+  [ employees.first, "Parker", "Kim", "child", "2016-07-12", "enrolled", "eligible" ],
+  [ employees.second, "Rowan", "Lee", "domestic_partner", "1991-11-20", "pending", "needs_review" ],
+  [ employees.fourth, "Quinn", "Chen", "child", "2020-02-15", "enrolled", "needs_review" ],
+  [ employees.last, "Sky", "Brooks", "child", "2019-05-01", "enrolled", "eligible" ]
+].each do |employee, first_name, last_name, relationship, date_of_birth, enrollment_status, eligibility_status|
+  dependent = employee.dependents.find_or_initialize_by(first_name:, last_name:, relationship:)
+  dependent.assign_attributes(
+    date_of_birth:,
+    enrollment_status:,
+    eligibility_status:,
+    metadata: { source: "seed", verification_channel: "embedded_benefits" }
+  )
+  dependent.save!
+end
+
 employees.each do |employee|
   [
     [ "Complete I-9 verification", "identity", employee.onboarding_status == "blocked" ? "open" : "complete", Date.current - 2.days, "people" ],
