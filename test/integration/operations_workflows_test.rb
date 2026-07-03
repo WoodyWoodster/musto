@@ -55,7 +55,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       start_on: Date.current - 2.years,
       compensation_cents: 115_000_00,
       onboarding_status: "in_progress",
-      metadata: { phone: "5551234567" }
+      metadata: { phone: "5551234567", workers_comp_class_code: "8810", workers_comp_rate_basis_points: 32, workers_comp_state: "CO" }
     )
     @employer_bank_account = @employer.employer_bank_accounts.create!(name: "Payroll checking", institution_name: "Mercury Bank", routing_number_last4: "1101", account_last4: "4821", status: "verified", primary_account: true, verified_at: 1.day.ago)
     @employee_bank_account = @employee.employee_bank_accounts.create!(nickname: "Primary checking", institution_name: "Ally", routing_number_last4: "1040", account_last4: "9088", status: "pending_verification")
@@ -277,6 +277,35 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       consent_status: "electronic_consented",
       due_on: Date.new(Date.current.year + 1, 1, 31)
     )
+    @workers_comp_policy = @employer.workers_comp_policies.create!(
+      carrier: "Pinnacol Assurance",
+      policy_number: "WC-OPS-2026",
+      status: "active",
+      coverage_start_on: Date.current.beginning_of_year,
+      coverage_end_on: Date.current.end_of_year,
+      renewal_due_on: Date.current + 30.days,
+      payroll_basis_cents: @employee.compensation_cents,
+      manual_premium_cents: 2_875_00,
+      deposit_premium_cents: 700_00,
+      rate_basis_points: 250,
+      contact_name: "Mara Wells",
+      contact_email: "mara.wells@carrier.example"
+    )
+    @workers_comp_claim = @workers_comp_policy.workers_comp_claims.create!(
+      employer: @employer,
+      employee: @employee,
+      claim_number: "WC-OPS-1001",
+      incident_on: Date.current - 9.days,
+      reported_on: Date.current - 8.days,
+      status: "accepted",
+      severity: "lost_time",
+      injury_type: "strain",
+      body_part: "Shoulder",
+      description: "Employee reported a shoulder strain during workstation setup.",
+      lost_time_days: 2,
+      reserve_cents: 1_500_00,
+      paid_cents: 250_00
+    )
     @compliance_case = @employer.compliance_cases.create!(employee: @employee, kind: "i9_reverification", severity: "high", due_on: Date.current + 5.days)
     @compliance_notice = @employer.compliance_notices.create!(
       employee: @employee,
@@ -393,6 +422,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       benefits_reconciliation_path,
       enrollment_path(@pending_enrollment),
       compliance_path,
+      workers_comp_path,
       compliance_notices_path,
       integrations_path,
       vitable_employer_provisioning_path,
@@ -446,6 +476,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     offboarding = Benefits::OffboardingQuery.new.call
     reconciliation = Benefits::ReconciliationQuery.new.call
     compliance = Operations::ComplianceQuery.new.call
+    workers_comp = WorkersComp::CenterQuery.new.call
     compliance_notices = Compliance::NoticeCenterQuery.new.call
     integrations = Operations::IntegrationsQuery.new.call
     employer_provisioning = Vitable::EmployerProvisioningQuery.new.call
@@ -613,6 +644,12 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_instance_of Benefits::OffboardingIssueDto, offboarding.issues.first
     assert_instance_of Benefits::ReconciliationDetailDto, reconciliation
     assert_instance_of Operations::ComplianceCaseDto, compliance.fetch(:cases).first
+    assert_instance_of WorkersComp::CenterDto, workers_comp
+    assert_instance_of WorkersComp::MetricDto, workers_comp.metrics.first
+    assert_instance_of WorkersComp::PolicyDto, workers_comp.policy
+    assert_instance_of WorkersComp::ExposureDto, workers_comp.exposures.first
+    assert_instance_of WorkersComp::ClaimDto, workers_comp.claims.first
+    assert_instance_of WorkersComp::IssueDto, workers_comp.issues.first
     assert_instance_of Compliance::NoticeCenterDto, compliance_notices
     assert_instance_of Compliance::NoticeMetricDto, compliance_notices.metrics.first
     assert_instance_of Compliance::NoticeDto, compliance_notices.notices.first
@@ -2909,6 +2946,61 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_redirected_to compliance_path
     assert_equal "resolved", @compliance_case.reload.status
     assert_not_nil @compliance_case.resolved_at
+  end
+
+  test "workers comp center exposes coverage and claim DTOs" do
+    detail = WorkersComp::CenterQuery.new.call
+
+    assert_instance_of WorkersComp::CenterDto, detail
+    assert_instance_of WorkersComp::MetricDto, detail.metrics.first
+    assert_instance_of WorkersComp::PolicyDto, detail.policy
+    assert_instance_of WorkersComp::ExposureDto, detail.exposures.first
+    assert_instance_of WorkersComp::ClaimDto, detail.claims.first
+    assert_instance_of WorkersComp::IssueDto, detail.issues.first
+    assert detail.claims.any? { |claim| claim.id == @workers_comp_claim.id }
+
+    get workers_comp_path
+
+    assert_response :success
+    assert_select "h1", "Workers comp coverage"
+    assert_select "h2", "Audit readiness issues"
+    assert_select "h2", "Open claims"
+    assert_select "h2", "Class-code payroll exposure"
+    assert_select "h2", "Audit packet exposure lines"
+    assert_select "h2", "Audit packet holdbacks"
+  end
+
+  test "closes a workers comp claim through command action" do
+    post close_workers_comp_claim_path(@workers_comp_claim), params: { closed_by: "compliance_admin", resolution: "Returned to work and carrier file closed." }
+
+    assert_redirected_to workers_comp_path
+    @workers_comp_claim.reload
+    assert_equal "closed", @workers_comp_claim.status
+    assert_equal "compliance_admin", @workers_comp_claim.metadata.fetch("closed_by")
+    assert_equal "Returned to work and carrier file closed.", @workers_comp_claim.metadata.fetch("resolution")
+    assert_not_nil @workers_comp_claim.closed_at
+  end
+
+  test "generates a workers comp audit packet through command action" do
+    post generate_workers_comp_audit_packet_path, params: { requested_by: "compliance_admin" }
+
+    assert_redirected_to workers_comp_path
+    packet = @employer.reload.settings.fetch("workers_comp_audit_packet")
+    assert_match(/\Aworkers_comp_audit_#{@employer.id}_#{@workers_comp_policy.id}_/, packet.fetch("packet_id"))
+    assert_equal "compliance_admin", packet.fetch("requested_by")
+    assert_equal @workers_comp_policy.id, packet.fetch("policy_id")
+    assert_equal 1, packet.fetch("totals").fetch("exposure_count")
+    assert_equal 1, packet.fetch("totals").fetch("employee_count")
+    assert_equal @employee.compensation_cents, packet.fetch("totals").fetch("payroll_basis_cents")
+    assert packet.fetch("totals").fetch("estimated_premium_cents").positive?
+    assert_equal 1, packet.fetch("totals").fetch("claim_count")
+    assert packet.fetch("totals").fetch("holdback_count").positive?
+
+    detail = WorkersComp::CenterQuery.new.call
+    assert_instance_of WorkersComp::AuditPacketDto, detail.latest_packet
+    assert_instance_of WorkersComp::ExposureDto, detail.packet_lines.first
+    assert_instance_of WorkersComp::AuditClaimDto, detail.packet_claims.first
+    assert_instance_of WorkersComp::IssueDto, detail.packet_holdbacks.first
   end
 
   test "compliance notices center exposes notice DTOs" do

@@ -227,6 +227,22 @@ employees.fourth.update!(manager: employees.third, metadata: employees.fourth.me
 employees[4].update!(manager: employees.first, metadata: employees[4].metadata.to_h.merge(manager_assignment_source: "seed"))
 employees.last.update!(manager: employees.second, metadata: employees.last.metadata.to_h.merge(manager_assignment_source: "seed"))
 
+[
+  [ employees.first, "8810", 32, "PA" ],
+  [ employees.second, "9079", 215, "PA" ],
+  [ employees.third, "8810", 32, "Remote" ],
+  [ employees.fourth, "8803", 36, "Remote" ],
+  [ employees.last, "9079", 215, "CO" ]
+].each do |employee, class_code, rate_basis_points, service_state|
+  employee.update!(
+    metadata: employee.metadata.to_h.merge(
+      workers_comp_class_code: class_code,
+      workers_comp_rate_basis_points: rate_basis_points,
+      workers_comp_state: service_state
+    )
+  )
+end
+
 job_openings = [
   [ "RET-GM-2026", "Retail General Manager", "RET", "Philadelphia HQ", "open", "full_time", 1, 92_000_00, 118_000_00, false, Date.current.next_month.beginning_of_month + 14.days, "Own Philadelphia retail operations and manager enablement." ],
   [ "FIN-PAY-2026", "Payroll Operations Specialist", "FIN", "Remote US", "open", "full_time", 1, 82_000_00, 98_000_00, true, Date.current.next_month.beginning_of_month + 21.days, "Run payroll controls, funding review, and Vitable deduction checks." ],
@@ -1194,6 +1210,48 @@ contractors.third.update!(metadata: contractors.third.metadata.to_h.merge(tin_la
     metadata: { source: "seeded_year_end_tax_form" }
   )
   form.save!
+end
+
+workers_comp_policy = employer.workers_comp_policies.find_or_initialize_by(policy_number: "WC-ATLAS-2026")
+workers_comp_policy.assign_attributes(
+  carrier: "Pinnacol Assurance",
+  status: "active",
+  coverage_start_on: Date.current.beginning_of_year,
+  coverage_end_on: Date.current.end_of_year,
+  renewal_due_on: Date.current + 30.days,
+  payroll_basis_cents: employees.sum(&:compensation_cents),
+  manual_premium_cents: 18_750_00,
+  deposit_premium_cents: 4_200_00,
+  rate_basis_points: 250,
+  contact_name: "Mara Wells",
+  contact_email: "mara.wells@pinnacol.example",
+  contact_phone: "555-010-2291",
+  certificate_url: nil,
+  metadata: { source: "seeded_workers_comp_policy", audit_owner: "compliance_ops" }
+)
+workers_comp_policy.save!
+
+[
+  [ employees.second, "WC-CLAIM-1048", Date.current - 24.days, Date.current - 23.days, "accepted", "lost_time", "strain", "Lower back", "Retail lead reported a lifting injury while closing floor inventory.", 4, 8_500_00, 1_250_00, nil ],
+  [ employees.last, nil, Date.current - 6.days, Date.current - 5.days, "reported", "medical_only", "burn", "Hand", "Cafe associate reported a minor burn during espresso bar prep.", 0, 1_200_00, 175_00, Date.current + 2.days ]
+].each do |employee, claim_number, incident_on, reported_on, status, severity, injury_type, body_part, description, lost_time_days, reserve_cents, paid_cents, return_to_work_on|
+  claim = workers_comp_policy.workers_comp_claims.find_or_initialize_by(employee:, incident_on:)
+  claim.assign_attributes(
+    employer:,
+    claim_number:,
+    reported_on:,
+    status:,
+    severity:,
+    injury_type:,
+    body_part:,
+    description:,
+    lost_time_days:,
+    reserve_cents:,
+    paid_cents:,
+    return_to_work_on:,
+    metadata: { source: "seeded_workers_comp_claim", adjuster: "carrier_portal" }
+  )
+  claim.save!
 end
 
 [

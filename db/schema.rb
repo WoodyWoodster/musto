@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_04_005000) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_04_011000) do
   create_table "api_request_logs", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.integer "duration_ms"
@@ -1060,6 +1060,61 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_04_005000) do
     t.index ["work_location_id"], name: "index_work_shifts_on_work_location_id"
   end
 
+  create_table "workers_comp_claims", force: :cascade do |t|
+    t.string "body_part"
+    t.string "claim_number"
+    t.datetime "closed_at"
+    t.datetime "created_at", null: false
+    t.text "description", null: false
+    t.integer "employee_id", null: false
+    t.integer "employer_id", null: false
+    t.date "incident_on", null: false
+    t.string "injury_type"
+    t.integer "lost_time_days", default: 0, null: false
+    t.json "metadata", default: {}, null: false
+    t.integer "paid_cents", default: 0, null: false
+    t.date "reported_on", null: false
+    t.integer "reserve_cents", default: 0, null: false
+    t.date "return_to_work_on"
+    t.string "severity", default: "medical_only", null: false
+    t.string "status", default: "reported", null: false
+    t.datetime "updated_at", null: false
+    t.integer "workers_comp_policy_id", null: false
+    t.index ["claim_number"], name: "index_workers_comp_claims_on_claim_number", unique: true
+    t.index ["employee_id", "status"], name: "index_workers_comp_claims_on_employee_id_and_status"
+    t.index ["employee_id"], name: "index_workers_comp_claims_on_employee_id"
+    t.index ["employer_id", "status"], name: "index_workers_comp_claims_on_employer_id_and_status"
+    t.index ["employer_id"], name: "index_workers_comp_claims_on_employer_id"
+    t.index ["incident_on", "reported_on"], name: "index_workers_comp_claims_on_incident_on_and_reported_on"
+    t.index ["workers_comp_policy_id", "status"], name: "index_workers_comp_claims_on_workers_comp_policy_id_and_status"
+    t.index ["workers_comp_policy_id"], name: "index_workers_comp_claims_on_workers_comp_policy_id"
+  end
+
+  create_table "workers_comp_policies", force: :cascade do |t|
+    t.string "carrier", null: false
+    t.string "certificate_url"
+    t.string "contact_email"
+    t.string "contact_name"
+    t.string "contact_phone"
+    t.date "coverage_end_on", null: false
+    t.date "coverage_start_on", null: false
+    t.datetime "created_at", null: false
+    t.integer "deposit_premium_cents", default: 0, null: false
+    t.integer "employer_id", null: false
+    t.integer "manual_premium_cents", default: 0, null: false
+    t.json "metadata", default: {}, null: false
+    t.integer "payroll_basis_cents", default: 0, null: false
+    t.string "policy_number", null: false
+    t.integer "rate_basis_points", default: 250, null: false
+    t.date "renewal_due_on", null: false
+    t.string "status", default: "draft", null: false
+    t.datetime "updated_at", null: false
+    t.index ["employer_id", "policy_number"], name: "index_workers_comp_policies_on_employer_id_and_policy_number", unique: true
+    t.index ["employer_id", "status"], name: "index_workers_comp_policies_on_employer_id_and_status"
+    t.index ["employer_id"], name: "index_workers_comp_policies_on_employer_id"
+    t.index ["status", "renewal_due_on"], name: "index_workers_comp_policies_on_status_and_renewal_due_on"
+  end
+
   create_table "year_end_tax_forms", force: :cascade do |t|
     t.datetime "accepted_at"
     t.integer "benefit_reportable_cents", default: 0, null: false
@@ -1181,6 +1236,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_04_005000) do
   add_foreign_key "work_shifts", "employees"
   add_foreign_key "work_shifts", "employers"
   add_foreign_key "work_shifts", "work_locations"
+  add_foreign_key "workers_comp_claims", "employees"
+  add_foreign_key "workers_comp_claims", "employers"
+  add_foreign_key "workers_comp_claims", "workers_comp_policies"
+  add_foreign_key "workers_comp_policies", "employers"
   add_foreign_key "year_end_tax_forms", "contractors"
   add_foreign_key "year_end_tax_forms", "employees"
   add_foreign_key "year_end_tax_forms", "employers"

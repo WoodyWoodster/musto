@@ -6,6 +6,7 @@
       <p class="mt-2 max-w-3xl text-sm leading-6 text-slate-600">Resolve compliance cases, keep documents current, and review time-off requests from the same operational queue.</p>
     </div>
     <div class="flex flex-wrap gap-2">
+      <%= link_to "Workers comp", workers_comp_path, class: "rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-800 shadow-sm hover:border-red-300" %>
       <%= link_to "Notice response", compliance_notices_path, class: "rounded-md border border-orange-200 bg-orange-50 px-4 py-3 text-sm font-semibold text-orange-800 shadow-sm hover:border-orange-300" %>
       <%= link_to "Document vault", documents_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm hover:border-slate-300" %>
       <%= link_to "Time off center", time_off_path, class: "rounded-md bg-slate-950 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-slate-800" %>

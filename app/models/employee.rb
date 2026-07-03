@@ -34,6 +34,7 @@ class Employee < ApplicationRecord
   has_many :open_enrollment_invitations, dependent: :destroy
   has_many :compliance_cases, dependent: :nullify
   has_many :compliance_notices, dependent: :nullify
+  has_many :workers_comp_claims, dependent: :destroy
   has_many :year_end_tax_forms, dependent: :nullify
   has_many :candidate_profiles, class_name: "Candidate", dependent: :nullify
   has_many :direct_reports, class_name: "Employee", foreign_key: :manager_id, dependent: :nullify, inverse_of: :manager

@@ -36,6 +36,8 @@ class Employer < ApplicationRecord
   has_many :employee_goals, through: :employees
   has_many :compliance_cases, dependent: :destroy
   has_many :compliance_notices, dependent: :destroy
+  has_many :workers_comp_policies, dependent: :destroy
+  has_many :workers_comp_claims, dependent: :destroy
   has_many :year_end_tax_forms, dependent: :destroy
 
   validates :name, :status, presence: true
