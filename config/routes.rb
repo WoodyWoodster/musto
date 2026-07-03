@@ -24,6 +24,8 @@ Rails.application.routes.draw do
   post "reports/snapshot", to: "reports#generate_snapshot", as: :generate_reports_snapshot
   get "compensation", to: "compensation#show"
   post "compensation/packet", to: "compensation#generate_packet", as: :generate_compensation_packet
+  get "taxes", to: "taxes#show"
+  post "taxes/packet", to: "taxes#generate_packet", as: :generate_tax_filing_packet
   get "payroll", to: "operations#payroll"
   get "benefits", to: "operations#benefits"
   get "benefits/reconciliation", to: "benefits_reconciliations#show", as: :benefits_reconciliation

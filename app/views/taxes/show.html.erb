@@ -1,0 +1,232 @@
+<section class="space-y-7">
+  <div class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div class="grid xl:grid-cols-[1.25fr_0.75fr]">
+      <div class="p-6 lg:p-8">
+        <div class="flex flex-wrap items-center gap-2">
+          <%= status_pill(@taxes.generated? ? @taxes.latest_packet.status : "pending") %>
+          <span class="rounded-full bg-teal-50 px-3 py-1 text-xs font-semibold text-teal-800 ring-1 ring-inset ring-teal-200">Payroll tax ops</span>
+          <span class="rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-800 ring-1 ring-inset ring-indigo-200">Filing packet</span>
+        </div>
+
+        <h1 class="mt-5 text-4xl font-semibold tracking-tight text-slate-950">Tax filings center</h1>
+        <p class="mt-3 max-w-3xl text-base leading-7 text-slate-600">
+          Track payroll tax liabilities, agency account readiness, filing deadlines, employee tax documents, and jurisdiction exposure for <%= @taxes.employer&.name || "your employer portfolio" %>.
+        </p>
+
+        <div class="mt-6 flex flex-wrap gap-3">
+          <%= link_to "Company setup", company_setup_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
+          <%= link_to "Payroll", payroll_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
+          <%= link_to "Compliance", compliance_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
+          <%= button_to "Generate filing packet", generate_tax_filing_packet_path, method: :post, params: { requested_by: "ops_console" }, class: "rounded-md bg-slate-950 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-slate-800" %>
+        </div>
+      </div>
+
+      <aside class="border-t border-slate-200 bg-slate-950 p-6 text-white xl:border-l xl:border-t-0 xl:p-8">
+        <p class="text-xs font-semibold uppercase tracking-[0.2em] text-teal-300">Latest filing packet</p>
+        <% if @taxes.latest_packet.present? %>
+          <p class="mt-6 break-all font-mono text-sm font-semibold"><%= @taxes.latest_packet.packet_id %></p>
+          <p class="mt-3 text-sm text-slate-300">Generated <%= time_ago_in_words(@taxes.latest_packet.generated_at) %> ago by <%= @taxes.latest_packet.requested_by %></p>
+          <div class="mt-6 grid grid-cols-2 gap-3">
+            <div class="rounded-md bg-white/10 p-4">
+              <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Runs</p>
+              <p class="mt-2 text-2xl font-semibold"><%= compact_number(@taxes.latest_packet.payroll_run_count) %></p>
+            </div>
+            <div class="rounded-md bg-white/10 p-4">
+              <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Agencies</p>
+              <p class="mt-2 text-2xl font-semibold"><%= compact_number(@taxes.latest_packet.agency_account_count) %></p>
+            </div>
+          </div>
+          <div class="mt-5 rounded-md bg-white/10 p-4">
+            <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Estimated liability</p>
+            <p class="mt-2 text-2xl font-semibold"><%= money_cents(@taxes.latest_packet.total_liability_cents) %></p>
+          </div>
+        <% else %>
+          <p class="mt-6 text-3xl font-semibold tracking-tight">No packet</p>
+          <p class="mt-2 text-sm leading-6 text-slate-300">Generate a filing packet once payroll runs and agency readiness have been reviewed.</p>
+        <% end %>
+      </aside>
+    </div>
+  </div>
+
+  <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+    <% @taxes.metrics.each do |metric| %>
+      <article class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <div class="flex items-center justify-between gap-3">
+          <p class="text-sm font-medium text-slate-500"><%= metric.label %></p>
+          <span class="h-2.5 w-2.5 shrink-0 rounded-full <%= metric.accent %>"></span>
+        </div>
+        <p class="mt-4 text-3xl font-semibold tracking-tight text-slate-950"><%= metric.format == "money" ? money_cents(metric.value) : compact_number(metric.value) %></p>
+        <div class="mt-2 flex flex-wrap items-center gap-2">
+          <%= status_pill(metric.status) %>
+          <p class="text-sm text-slate-500"><%= metric.hint %></p>
+        </div>
+      </article>
+    <% end %>
+  </div>
+
+  <div class="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+    <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="border-b border-slate-100 px-5 py-4">
+        <h2 class="text-base font-semibold text-slate-950">Agency accounts</h2>
+        <p class="text-sm text-slate-500">Deposit schedules, registration posture, next due dates, and estimated liability by agency.</p>
+      </div>
+      <div class="grid divide-y divide-slate-100 md:grid-cols-2 md:divide-x md:divide-y-0">
+        <% @taxes.agency_accounts.each do |account| %>
+          <article class="p-5">
+            <div class="flex flex-wrap items-start justify-between gap-3">
+              <div class="min-w-0">
+                <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400"><%= account.jurisdiction %></p>
+                <h3 class="mt-2 text-base font-semibold text-slate-950"><%= account.agency_name %></h3>
+              </div>
+              <%= status_pill(account.status) %>
+            </div>
+            <dl class="mt-5 grid gap-3">
+              <div class="flex items-center justify-between gap-4">
+                <dt class="text-sm text-slate-500">Account</dt>
+                <dd class="text-right text-sm font-semibold text-slate-950"><%= account.account_reference %></dd>
+              </div>
+              <div class="flex items-center justify-between gap-4">
+                <dt class="text-sm text-slate-500">Deposit</dt>
+                <dd class="text-right text-sm font-semibold text-slate-950"><%= account.deposit_schedule.to_s.humanize %></dd>
+              </div>
+              <div class="flex items-center justify-between gap-4">
+                <dt class="text-sm text-slate-500">Next due</dt>
+                <dd class="text-right text-sm font-semibold text-slate-950"><%= account.next_due_on.strftime("%b %-d, %Y") %></dd>
+              </div>
+              <div class="flex items-center justify-between gap-4">
+                <dt class="text-sm text-slate-500">Liability</dt>
+                <dd class="text-right text-sm font-semibold text-slate-950"><%= money_cents(account.liability_cents) %></dd>
+              </div>
+            </dl>
+            <p class="mt-4 text-sm leading-6 text-slate-600"><%= account.detail %></p>
+          </article>
+        <% end %>
+      </div>
+    </section>
+
+    <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="border-b border-slate-100 px-5 py-4">
+        <h2 class="text-base font-semibold text-slate-950">Readiness recommendations</h2>
+        <p class="text-sm text-slate-500">Items that should be cleared before filing packets leave draft mode.</p>
+      </div>
+      <div class="divide-y divide-slate-100">
+        <% @taxes.recommendations.each do |recommendation| %>
+          <div class="p-5">
+            <div class="flex flex-wrap items-start justify-between gap-3">
+              <div class="min-w-0">
+                <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400"><%= recommendation.owner %> · <%= recommendation.severity %></p>
+                <h3 class="mt-2 text-base font-semibold text-slate-950"><%= recommendation.title %></h3>
+              </div>
+              <%= status_pill(recommendation.status) %>
+            </div>
+            <p class="mt-3 text-sm leading-6 text-slate-600"><%= recommendation.detail %></p>
+            <%= link_to "Open source workflow", recommendation.action_path, class: "mt-4 inline-flex text-sm font-semibold text-cyan-700 hover:text-cyan-900" %>
+          </div>
+        <% end %>
+      </div>
+    </section>
+  </div>
+
+  <div class="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
+    <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="border-b border-slate-100 px-5 py-4">
+        <h2 class="text-base font-semibold text-slate-950">Filing calendar</h2>
+        <p class="text-sm text-slate-500">Upcoming deposits and filings derived from agency schedules.</p>
+      </div>
+      <div class="divide-y divide-slate-100">
+        <% @taxes.filing_calendar.each do |item| %>
+          <div class="grid gap-4 px-5 py-4 sm:grid-cols-[auto_1fr_auto] sm:items-center">
+            <div class="flex h-14 w-14 items-center justify-center rounded-lg bg-slate-100 text-center">
+              <div>
+                <p class="text-[10px] font-semibold uppercase text-slate-500"><%= item.due_on.strftime("%b") %></p>
+                <p class="text-lg font-semibold leading-5 text-slate-950"><%= item.due_on.day %></p>
+              </div>
+            </div>
+            <div class="min-w-0">
+              <div class="flex flex-wrap items-center gap-2">
+                <p class="font-semibold text-slate-950"><%= item.title %></p>
+                <%= status_pill(item.status) %>
+              </div>
+              <p class="mt-1 text-sm text-slate-500"><%= item.agency_name %> · <%= item.period_label %> · <%= item.deposit_schedule.to_s.humanize %></p>
+            </div>
+            <p class="text-sm font-semibold text-slate-950"><%= money_cents(item.liability_cents) %></p>
+          </div>
+        <% end %>
+      </div>
+    </section>
+
+    <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="border-b border-slate-100 px-5 py-4">
+        <h2 class="text-base font-semibold text-slate-950">Payroll tax liabilities</h2>
+        <p class="text-sm text-slate-500">Estimated employee and employer liability by payroll run. Amounts are planning estimates, not official filings.</p>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-slate-100 text-sm">
+          <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <tr>
+              <th class="px-5 py-3">Period</th>
+              <th class="px-5 py-3">Pay date</th>
+              <th class="px-5 py-3">Gross</th>
+              <th class="px-5 py-3">Adjustments</th>
+              <th class="px-5 py-3">Employee tax</th>
+              <th class="px-5 py-3">Employer tax</th>
+              <th class="px-5 py-3">Liability</th>
+              <th class="px-5 py-3">Status</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            <% @taxes.liabilities.each do |liability| %>
+              <tr class="hover:bg-slate-50">
+                <td class="px-5 py-4">
+                  <%= link_to liability.period_label, payroll_run_path(liability.payroll_run_id), class: "font-semibold text-slate-950 hover:text-cyan-700" %>
+                </td>
+                <td class="px-5 py-4 text-slate-600"><%= liability.pay_date.strftime("%b %-d, %Y") %></td>
+                <td class="px-5 py-4 text-slate-600"><%= money_cents(liability.gross_pay_cents) %></td>
+                <td class="px-5 py-4 text-slate-600"><%= money_cents(liability.adjustment_cents) %></td>
+                <td class="px-5 py-4 text-slate-600"><%= money_cents(liability.employee_tax_cents) %></td>
+                <td class="px-5 py-4 text-slate-600"><%= money_cents(liability.employer_tax_cents) %></td>
+                <td class="px-5 py-4 font-semibold text-slate-950"><%= money_cents(liability.total_liability_cents) %></td>
+                <td class="px-5 py-4"><%= status_pill(liability.status) %></td>
+              </tr>
+            <% end %>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div class="border-b border-slate-100 px-5 py-4">
+      <h2 class="text-base font-semibold text-slate-950">Jurisdiction exposure</h2>
+      <p class="text-sm text-slate-500">Work locations and remote teams that drive state and local registration review.</p>
+    </div>
+    <div class="grid divide-y divide-slate-100 md:grid-cols-3 md:divide-x md:divide-y-0">
+      <% @taxes.jurisdictions.each do |jurisdiction| %>
+        <article class="p-5">
+          <div class="flex flex-wrap items-start justify-between gap-3">
+            <div class="min-w-0">
+              <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400"><%= jurisdiction.jurisdiction %></p>
+              <h3 class="mt-2 text-base font-semibold text-slate-950"><%= jurisdiction.location_name %></h3>
+            </div>
+            <%= status_pill(jurisdiction.status) %>
+          </div>
+          <div class="mt-5 grid grid-cols-3 gap-2 text-center">
+            <div class="rounded-md bg-slate-50 px-2 py-3">
+              <p class="text-xs text-slate-500">People</p>
+              <p class="mt-1 text-lg font-semibold text-slate-950"><%= compact_number(jurisdiction.employee_count) %></p>
+            </div>
+            <div class="rounded-md bg-slate-50 px-2 py-3">
+              <p class="text-xs text-slate-500">Payroll</p>
+              <p class="mt-1 text-lg font-semibold text-slate-950"><%= money_cents(jurisdiction.current_run_payroll_cents) %></p>
+            </div>
+            <div class="rounded-md bg-slate-50 px-2 py-3">
+              <p class="text-xs text-slate-500">Remote</p>
+              <p class="mt-1 text-lg font-semibold text-slate-950"><%= jurisdiction.remote ? "Yes" : "No" %></p>
+            </div>
+          </div>
+          <p class="mt-4 text-sm leading-6 text-slate-600">Annual payroll exposure <span class="font-semibold text-slate-950"><%= money_cents(jurisdiction.annual_payroll_cents) %></span> · <%= jurisdiction.registration_status.humanize %></p>
+        </article>
+      <% end %>
+    </div>
+  </section>
+</section>

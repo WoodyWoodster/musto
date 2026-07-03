@@ -92,6 +92,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       onboarding_path,
       time_off_path,
       compensation_path,
+      taxes_path,
       reports_path,
       payroll_path,
       payroll_run_path(@payroll_run),
@@ -118,6 +119,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     onboarding = Onboarding::CommandCenterQuery.new.call
     time_off = TimeOff::CommandCenterQuery.new.call
     compensation = Compensation::CenterQuery.new.call
+    taxes = Taxes::CenterQuery.new.call
     reports = Reports::CenterQuery.new.call
     benefits = Operations::BenefitsQuery.new.call
     reconciliation = Benefits::ReconciliationQuery.new.call
@@ -145,6 +147,11 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_instance_of Compensation::DepartmentBudgetDto, compensation.departments.first
     assert_instance_of Compensation::AdjustmentDto, compensation.adjustments.first
     assert_instance_of Compensation::RecommendationDto, compensation.recommendations.first
+    assert_instance_of Taxes::CenterDto, taxes
+    assert_instance_of Taxes::AgencyAccountDto, taxes.agency_accounts.first
+    assert_instance_of Taxes::PayrollLiabilityDto, taxes.liabilities.first
+    assert_instance_of Taxes::FilingCalendarItemDto, taxes.filing_calendar.first
+    assert_instance_of Taxes::JurisdictionExposureDto, taxes.jurisdictions.first
     assert_instance_of Reports::CenterDto, reports
     assert_instance_of Reports::MetricDto, reports.metrics.first
     assert_instance_of Reports::ReportCardDto, reports.report_cards.first
@@ -207,6 +214,43 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal 1, packet.fetch("totals").fetch("employee_count")
     assert_equal @employee.compensation_cents, packet.fetch("totals").fetch("annual_compensation_cents")
     assert_equal @payroll_adjustment.amount_cents, packet.fetch("totals").fetch("adjustment_cents")
+    assert_instance_of Array, packet.fetch("recommendations")
+  end
+
+  test "tax filings center exposes agency and liability DTOs" do
+    detail = Taxes::CenterQuery.new.call
+
+    assert_instance_of Taxes::CenterDto, detail
+    assert_instance_of Taxes::MetricDto, detail.metrics.first
+    assert_instance_of Taxes::AgencyAccountDto, detail.agency_accounts.first
+    assert_instance_of Taxes::FilingCalendarItemDto, detail.filing_calendar.first
+    assert_instance_of Taxes::PayrollLiabilityDto, detail.liabilities.first
+    assert_instance_of Taxes::JurisdictionExposureDto, detail.jurisdictions.first
+    assert_instance_of Taxes::RecommendationDto, detail.recommendations.first
+    assert_equal @payroll_run.id, detail.liabilities.first.payroll_run_id
+
+    get taxes_path
+
+    assert_response :success
+    assert_select "h1", "Tax filings center"
+    assert_select "h2", "Agency accounts"
+    assert_select "h2", "Filing calendar"
+    assert_select "h2", "Payroll tax liabilities"
+    assert_select "h2", "Jurisdiction exposure"
+    assert_select "h2", "Readiness recommendations"
+  end
+
+  test "generates a tax filing packet through command action" do
+    post generate_tax_filing_packet_path
+
+    assert_redirected_to taxes_path
+    packet = @employer.reload.settings.fetch("tax_filing_packet")
+    assert_match(/\Atax_filing_#{@employer.id}_/, packet.fetch("packet_id"))
+    assert_equal "ops_console", packet.fetch("requested_by")
+    assert_equal 1, packet.fetch("totals").fetch("payroll_run_count")
+    assert_equal @payroll_run.gross_pay_cents, packet.fetch("totals").fetch("gross_pay_cents")
+    assert packet.fetch("totals").fetch("total_liability_cents").positive?
+    assert_instance_of Array, packet.fetch("agency_accounts")
     assert_instance_of Array, packet.fetch("recommendations")
   end
 
