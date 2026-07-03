@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_04_003500) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_04_005000) do
   create_table "api_request_logs", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.integer "duration_ms"
@@ -1060,6 +1060,42 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_04_003500) do
     t.index ["work_location_id"], name: "index_work_shifts_on_work_location_id"
   end
 
+  create_table "year_end_tax_forms", force: :cascade do |t|
+    t.datetime "accepted_at"
+    t.integer "benefit_reportable_cents", default: 0, null: false
+    t.string "consent_status", default: "not_requested", null: false
+    t.integer "contractor_id"
+    t.integer "contractor_payment_cents", default: 0, null: false
+    t.string "correction_status", default: "none", null: false
+    t.datetime "created_at", null: false
+    t.datetime "delivered_at"
+    t.string "delivery_method", default: "employee_portal", null: false
+    t.date "due_on", null: false
+    t.integer "employee_id"
+    t.integer "employer_id", null: false
+    t.integer "federal_withholding_cents", default: 0, null: false
+    t.datetime "filed_at"
+    t.string "form_type", null: false
+    t.integer "gross_wages_cents", default: 0, null: false
+    t.string "jurisdiction", default: "Federal", null: false
+    t.json "metadata", default: {}, null: false
+    t.string "recipient_email", null: false
+    t.string "recipient_name", null: false
+    t.integer "state_withholding_cents", default: 0, null: false
+    t.string "status", default: "draft", null: false
+    t.integer "tax_year", null: false
+    t.string "tin_last4"
+    t.datetime "updated_at", null: false
+    t.index ["contractor_id", "tax_year"], name: "index_year_end_tax_forms_on_contractor_id_and_tax_year", unique: true
+    t.index ["contractor_id"], name: "index_year_end_tax_forms_on_contractor_id"
+    t.index ["employee_id", "tax_year"], name: "index_year_end_tax_forms_on_employee_id_and_tax_year", unique: true
+    t.index ["employee_id"], name: "index_year_end_tax_forms_on_employee_id"
+    t.index ["employer_id", "status"], name: "index_year_end_tax_forms_on_employer_id_and_status"
+    t.index ["employer_id", "tax_year", "form_type"], name: "idx_on_employer_id_tax_year_form_type_1b1d44d496"
+    t.index ["employer_id"], name: "index_year_end_tax_forms_on_employer_id"
+    t.index ["status", "due_on"], name: "index_year_end_tax_forms_on_status_and_due_on"
+  end
+
   add_foreign_key "api_request_logs", "integration_connections"
   add_foreign_key "benefit_invoice_lines", "benefit_invoices"
   add_foreign_key "benefit_invoice_lines", "benefit_plans"
@@ -1145,4 +1181,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_04_003500) do
   add_foreign_key "work_shifts", "employees"
   add_foreign_key "work_shifts", "employers"
   add_foreign_key "work_shifts", "work_locations"
+  add_foreign_key "year_end_tax_forms", "contractors"
+  add_foreign_key "year_end_tax_forms", "employees"
+  add_foreign_key "year_end_tax_forms", "employers"
 end

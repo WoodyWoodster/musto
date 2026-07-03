@@ -1,0 +1,258 @@
+<section class="space-y-7">
+  <div class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div class="grid xl:grid-cols-[1.2fr_0.8fr]">
+      <div class="p-6 lg:p-8">
+        <div class="flex flex-wrap items-center gap-2">
+          <%= status_pill(@year_end.packet&.status || "pending") %>
+          <span class="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-800 ring-1 ring-inset ring-emerald-200">Year-end tax</span>
+          <span class="rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-800 ring-1 ring-inset ring-indigo-200">W-2 + 1099</span>
+        </div>
+
+        <h1 class="mt-5 text-4xl font-semibold tracking-tight text-slate-950">Year-end tax forms</h1>
+        <p class="mt-3 max-w-3xl text-base leading-7 text-slate-600">
+          Generate, review, deliver, and package <%= @year_end.tax_year %> W-2 and 1099-NEC forms with wage, withholding, contractor payment, and correction readiness in one workspace.
+        </p>
+
+        <div class="mt-6 flex flex-wrap gap-3">
+          <%= link_to "Tax filings", taxes_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
+          <%= link_to "Pay statements", pay_statements_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
+          <%= link_to "Contractors", contractors_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
+          <%= button_to "Generate year-end packet", generate_year_end_tax_form_packet_path, method: :post, params: { requested_by: "tax_ops", tax_year: @year_end.tax_year }, class: "rounded-md bg-slate-950 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-slate-800" %>
+        </div>
+      </div>
+
+      <aside class="border-t border-slate-200 bg-slate-950 p-6 text-white xl:border-l xl:border-t-0 xl:p-8">
+        <p class="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-300">Latest year-end packet</p>
+        <% if @year_end.packet.present? %>
+          <p class="mt-6 break-all font-mono text-sm font-semibold"><%= @year_end.packet.packet_id %></p>
+          <p class="mt-3 text-sm text-slate-300">Generated <%= time_ago_in_words(@year_end.packet.generated_at) %> ago by <%= @year_end.packet.requested_by %></p>
+          <div class="mt-6 grid grid-cols-2 gap-3">
+            <div class="rounded-md bg-white/10 p-4">
+              <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Forms</p>
+              <p class="mt-2 text-2xl font-semibold"><%= compact_number(@year_end.packet.form_count) %></p>
+            </div>
+            <div class="rounded-md bg-white/10 p-4">
+              <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Holdbacks</p>
+              <p class="mt-2 text-2xl font-semibold"><%= compact_number(@year_end.packet.holdback_count) %></p>
+            </div>
+          </div>
+          <div class="mt-5 rounded-md bg-white/10 p-4">
+            <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Taxable wages</p>
+            <p class="mt-2 text-2xl font-semibold"><%= money_cents(@year_end.packet.gross_wages_cents) %></p>
+          </div>
+        <% else %>
+          <p class="mt-6 text-3xl font-semibold tracking-tight">No packet</p>
+          <p class="mt-2 text-sm leading-6 text-slate-300">Generate a packet after payroll statements, contractor payments, and tax profiles are ready for review.</p>
+        <% end %>
+      </aside>
+    </div>
+  </div>
+
+  <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+    <% @year_end.metrics.each do |metric| %>
+      <article class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <div class="flex items-center justify-between gap-3">
+          <p class="text-sm font-medium text-slate-500"><%= metric.label %></p>
+          <span class="h-2.5 w-2.5 shrink-0 rounded-full <%= metric.accent %>"></span>
+        </div>
+        <p class="mt-4 text-3xl font-semibold tracking-tight text-slate-950"><%= metric.format == "text" ? metric.value : compact_number(metric.value) %></p>
+        <div class="mt-2 flex flex-wrap items-center gap-2">
+          <%= status_pill(metric.status) %>
+          <p class="text-sm text-slate-500"><%= metric.hint %></p>
+        </div>
+      </article>
+    <% end %>
+  </div>
+
+  <div class="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+    <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
+        <div>
+          <h2 class="text-base font-semibold text-slate-950">Tax form delivery queue</h2>
+          <p class="text-sm text-slate-500">Forms ready for recipient portal delivery, mail handling, or correction review.</p>
+        </div>
+        <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700"><%= compact_number(@year_end.deliverable_forms.count) %> deliverable</span>
+      </div>
+      <div class="divide-y divide-slate-100">
+        <% if @year_end.forms.any? %>
+          <% @year_end.forms.each do |form| %>
+            <article class="p-5">
+              <div class="flex flex-wrap items-start justify-between gap-4">
+                <div class="min-w-0">
+                  <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400"><%= form.form_type == "w2" ? "W-2" : "1099-NEC" %> · <%= form.jurisdiction %></p>
+                  <h3 class="mt-2 text-lg font-semibold tracking-tight text-slate-950"><%= form.recipient_name %></h3>
+                  <p class="mt-1 text-sm leading-6 text-slate-600"><%= form.recipient_email %> · TIN <%= form.tin_last4.presence || "missing" %> · due <%= form.due_on.strftime("%b %-d, %Y") %></p>
+                </div>
+                <div class="flex flex-wrap items-center gap-2">
+                  <%= status_pill(form.status) %>
+                  <%= status_pill(form.consent_status) %>
+                </div>
+              </div>
+
+              <div class="mt-5 grid gap-3 md:grid-cols-4">
+                <div class="rounded-md bg-slate-50 px-3 py-3">
+                  <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Wages</p>
+                  <p class="mt-1 text-sm font-semibold text-slate-950"><%= money_cents(form.gross_wages_cents) %></p>
+                </div>
+                <div class="rounded-md bg-slate-50 px-3 py-3">
+                  <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Contractor</p>
+                  <p class="mt-1 text-sm font-semibold text-slate-950"><%= money_cents(form.contractor_payment_cents) %></p>
+                </div>
+                <div class="rounded-md bg-slate-50 px-3 py-3">
+                  <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Withholding</p>
+                  <p class="mt-1 text-sm font-semibold text-slate-950"><%= money_cents(form.federal_withholding_cents + form.state_withholding_cents) %></p>
+                </div>
+                <div class="rounded-md bg-slate-50 px-3 py-3">
+                  <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Delivery</p>
+                  <p class="mt-1 text-sm font-semibold text-slate-950"><%= form.delivery_method.humanize %></p>
+                </div>
+              </div>
+
+              <div class="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
+                <p class="text-sm text-slate-500">
+                  Correction <span class="font-semibold text-slate-700"><%= form.correction_status.humanize %></span>
+                  <% if form.delivered_at.present? %>
+                    · delivered <%= form.delivered_at.strftime("%b %-d, %Y") %>
+                  <% end %>
+                </p>
+                <% if form.deliverable %>
+                  <%= button_to "Deliver form", deliver_year_end_tax_form_path(form.id), method: :post, params: { delivered_by: "tax_ops", tax_year: @year_end.tax_year }, class: "rounded-md bg-emerald-600 px-3.5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700" %>
+                <% else %>
+                  <span class="rounded-md border border-slate-200 bg-white px-3.5 py-2 text-sm font-semibold text-slate-600">Not deliverable</span>
+                <% end %>
+              </div>
+            </article>
+          <% end %>
+        <% else %>
+          <div class="p-5">
+            <p class="font-semibold text-slate-950">No forms generated</p>
+            <p class="mt-2 text-sm leading-6 text-slate-600">Generate the year-end packet to build W-2 and 1099 records from payroll and contractor payment history.</p>
+          </div>
+        <% end %>
+      </div>
+    </section>
+
+    <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="border-b border-slate-100 px-5 py-4">
+        <h2 class="text-base font-semibold text-slate-950">Filing holdbacks</h2>
+        <p class="text-sm text-slate-500">Missing tax data, W-9 gaps, correction flags, and threshold exceptions.</p>
+      </div>
+      <div class="divide-y divide-slate-100">
+        <% if @year_end.issues.any? %>
+          <% @year_end.issues.each do |issue| %>
+            <div class="p-5">
+              <div class="flex flex-wrap items-start justify-between gap-3">
+                <div class="min-w-0">
+                  <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400"><%= issue.form_type == "w2" ? "W-2" : "1099-NEC" %> · <%= issue.severity %></p>
+                  <h3 class="mt-2 text-base font-semibold text-slate-950"><%= issue.reason_code.humanize %></h3>
+                </div>
+                <%= status_pill(issue.status) %>
+              </div>
+              <p class="mt-3 text-sm leading-6 text-slate-600"><%= issue.recipient_name %>: <%= issue.reason %></p>
+              <p class="mt-3 text-sm font-semibold text-slate-950"><%= money_cents(issue.amount_cents) %></p>
+            </div>
+          <% end %>
+        <% else %>
+          <div class="p-5">
+            <%= status_pill("ready") %>
+            <p class="mt-3 text-sm leading-6 text-slate-600">No year-end form holdbacks are open for this tax year.</p>
+          </div>
+        <% end %>
+      </div>
+    </section>
+  </div>
+
+  <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div class="border-b border-slate-100 px-5 py-4">
+      <h2 class="text-base font-semibold text-slate-950">Year-end form ledger</h2>
+      <p class="text-sm text-slate-500">Recipient-level W-2 and 1099 totals for tax operations review.</p>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="min-w-full divide-y divide-slate-100 text-sm">
+        <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <tr>
+            <th class="px-5 py-3">Recipient</th>
+            <th class="px-5 py-3">Form</th>
+            <th class="px-5 py-3">Wages</th>
+            <th class="px-5 py-3">Contractor pay</th>
+            <th class="px-5 py-3">Withholding</th>
+            <th class="px-5 py-3">Delivery</th>
+            <th class="px-5 py-3">Status</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          <% @year_end.forms.each do |form| %>
+            <tr class="hover:bg-slate-50">
+              <td class="px-5 py-4">
+                <p class="font-semibold text-slate-950"><%= form.recipient_name %></p>
+                <p class="mt-1 text-xs text-slate-500"><%= form.recipient_email %></p>
+              </td>
+              <td class="px-5 py-4 text-slate-600"><%= form.form_type == "w2" ? "W-2" : "1099-NEC" %></td>
+              <td class="px-5 py-4 text-slate-600"><%= money_cents(form.gross_wages_cents) %></td>
+              <td class="px-5 py-4 text-slate-600"><%= money_cents(form.contractor_payment_cents) %></td>
+              <td class="px-5 py-4 text-slate-600"><%= money_cents(form.federal_withholding_cents + form.state_withholding_cents) %></td>
+              <td class="px-5 py-4 text-slate-600"><%= form.delivery_method.humanize %></td>
+              <td class="px-5 py-4"><%= status_pill(form.status) %></td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <div class="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+    <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="border-b border-slate-100 px-5 py-4">
+        <h2 class="text-base font-semibold text-slate-950">Packet form lines</h2>
+        <p class="text-sm text-slate-500">Generated W-2 and 1099 lines retained in the latest filing packet.</p>
+      </div>
+      <div class="divide-y divide-slate-100">
+        <% if @year_end.packet_lines.any? %>
+          <% @year_end.packet_lines.each do |line| %>
+            <div class="grid gap-4 px-5 py-4 md:grid-cols-[1fr_auto] md:items-center">
+              <div class="min-w-0">
+                <div class="flex flex-wrap items-center gap-2">
+                  <p class="font-semibold text-slate-950"><%= line.recipient_name %></p>
+                  <%= status_pill(line.status) %>
+                </div>
+                <p class="mt-1 text-sm text-slate-500"><%= line.form_type == "w2" ? "W-2" : "1099-NEC" %> · <%= line.recipient_email %> · TIN <%= line.tin_last4.presence || "missing" %></p>
+              </div>
+              <p class="text-sm font-semibold text-slate-950"><%= money_cents(line.gross_wages_cents + line.contractor_payment_cents) %></p>
+            </div>
+          <% end %>
+        <% else %>
+          <div class="p-5">
+            <p class="text-sm leading-6 text-slate-600">No packet lines yet. Generate a year-end packet after payroll and contractor totals are ready.</p>
+          </div>
+        <% end %>
+      </div>
+    </section>
+
+    <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="border-b border-slate-100 px-5 py-4">
+        <h2 class="text-base font-semibold text-slate-950">Packet holdbacks</h2>
+        <p class="text-sm text-slate-500">Readiness issues captured at packet generation time.</p>
+      </div>
+      <div class="divide-y divide-slate-100">
+        <% if @year_end.packet_holdbacks.any? %>
+          <% @year_end.packet_holdbacks.each do |holdback| %>
+            <div class="p-5">
+              <div class="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400"><%= holdback.form_type == "w2" ? "W-2" : "1099-NEC" %> · <%= holdback.severity %></p>
+                  <h3 class="mt-2 text-base font-semibold text-slate-950"><%= holdback.reason_code.humanize %></h3>
+                </div>
+                <%= status_pill(holdback.status) %>
+              </div>
+              <p class="mt-3 text-sm leading-6 text-slate-600"><%= holdback.recipient_name %>: <%= holdback.reason %></p>
+            </div>
+          <% end %>
+        <% else %>
+          <div class="p-5">
+            <p class="text-sm leading-6 text-slate-600">Holdbacks will appear here after packet generation.</p>
+          </div>
+        <% end %>
+      </div>
+    </section>
+  </div>
+</section>

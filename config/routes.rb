@@ -90,6 +90,9 @@ Rails.application.routes.draw do
   get "pay-statements", to: "pay_statements#show", as: :pay_statements
   post "pay-statements/batch", to: "pay_statements#generate_batch", as: :generate_pay_statement_batch
   post "pay-statements/:id/deliver", to: "pay_statements#deliver_statement", as: :deliver_pay_statement
+  get "year-end/tax-forms", to: "year_end_tax_forms#show", as: :year_end_tax_forms
+  post "year-end/tax-forms/packet", to: "year_end_tax_forms#generate_packet", as: :generate_year_end_tax_form_packet
+  post "year-end/tax-forms/:id/deliver", to: "year_end_tax_forms#deliver", as: :deliver_year_end_tax_form
   get "benefits", to: "operations#benefits"
   get "benefits/plans", to: "benefits_plan_admin#show", as: :benefits_plan_admin
   post "benefits/plans/catalog_packet", to: "benefits_plan_admin#generate_packet", as: :generate_benefit_plan_catalog_packet

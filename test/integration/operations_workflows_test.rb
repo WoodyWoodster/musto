@@ -234,6 +234,48 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       amount_cents: 900_00,
       status: "draft"
     )
+    @approved_contractor_tax_payment = @contractor.contractor_payments.create!(
+      work_period_start_on: @payroll_run.period_start_on,
+      work_period_end_on: @payroll_run.period_end_on,
+      pay_date: @payroll_run.pay_date + 1.day,
+      description: "Year-end implementation advisory",
+      amount_cents: 1_250_00,
+      status: "approved",
+      approved_at: 1.day.ago
+    )
+    @employee.update!(metadata: @employee.metadata.to_h.merge(ssn_last4: "6789", tax_form_consent_status: "electronic_consented"))
+    @contractor.update!(metadata: @contractor.metadata.to_h.merge(tin_last4: "4422", tax_form_consent_status: "electronic_consented"))
+    @year_end_tax_form = @employer.year_end_tax_forms.create!(
+      employee: @employee,
+      tax_year: Date.current.year,
+      form_type: "w2",
+      recipient_name: @employee.full_name,
+      recipient_email: @employee.email,
+      tin_last4: "6789",
+      jurisdiction: "Federal",
+      gross_wages_cents: @pay_statement.gross_pay_cents,
+      federal_withholding_cents: @pay_statement.tax_cents,
+      state_withholding_cents: (@pay_statement.tax_cents * 0.18).round,
+      benefit_reportable_cents: @pay_statement.deduction_cents,
+      status: "ready",
+      delivery_method: "employee_portal",
+      consent_status: "electronic_consented",
+      due_on: Date.new(Date.current.year + 1, 1, 31)
+    )
+    @contractor_year_end_tax_form = @employer.year_end_tax_forms.create!(
+      contractor: @contractor,
+      tax_year: Date.current.year,
+      form_type: "1099_nec",
+      recipient_name: @contractor.display_name,
+      recipient_email: @contractor.email,
+      tin_last4: nil,
+      jurisdiction: "Federal",
+      contractor_payment_cents: @approved_contractor_tax_payment.amount_cents,
+      status: "ready",
+      delivery_method: "contractor_portal",
+      consent_status: "electronic_consented",
+      due_on: Date.new(Date.current.year + 1, 1, 31)
+    )
     @compliance_case = @employer.compliance_cases.create!(employee: @employee, kind: "i9_reverification", severity: "high", due_on: Date.current + 5.days)
     @compliance_notice = @employer.compliance_notices.create!(
       employee: @employee,
@@ -334,6 +376,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       payroll_calendar_path,
       payroll_funding_path,
       pay_statements_path,
+      year_end_tax_forms_path,
       benefits_billing_path,
       reports_path,
       payroll_path,
@@ -384,6 +427,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     expenses = Expenses::CenterQuery.new.call
     funding = PayrollFunding::CenterQuery.new.call
     statements = PayStatements::CenterQuery.new.call
+    year_end = YearEnd::TaxFormsQuery.new.call
     billing = Benefits::BillingQuery.new.call
     contractors = Contractors::CenterQuery.new.call
     compensation = Compensation::CenterQuery.new.call
@@ -500,6 +544,10 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_instance_of PayStatements::StatementDto, statements.statements.first
     assert_instance_of PayStatements::PayrollRunDto, statements.payroll_run
     assert_instance_of PayStatements::DeliveryIssueDto, statements.delivery_issues.first
+    assert_instance_of YearEnd::CenterDto, year_end
+    assert_instance_of YearEnd::MetricDto, year_end.metrics.first
+    assert_instance_of YearEnd::TaxFormDto, year_end.forms.first
+    assert_instance_of YearEnd::IssueDto, year_end.issues.first
     assert_instance_of Benefits::BillingCenterDto, billing
     assert_instance_of Benefits::BillingMetricDto, billing.metrics.first
     assert_instance_of Benefits::BillingInvoiceDto, billing.invoices.first
@@ -1808,6 +1856,56 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_instance_of PayStatements::BatchLineDto, detail.batch_lines.first
   end
 
+  test "year-end tax forms center exposes W-2 and 1099 DTOs" do
+    detail = YearEnd::TaxFormsQuery.new.call
+
+    assert_instance_of YearEnd::CenterDto, detail
+    assert_instance_of YearEnd::MetricDto, detail.metrics.first
+    assert_instance_of YearEnd::TaxFormDto, detail.forms.first
+    assert_instance_of YearEnd::IssueDto, detail.issues.first
+    assert detail.forms.any? { |form| form.id == @year_end_tax_form.id }
+    assert detail.forms.any? { |form| form.id == @contractor_year_end_tax_form.id }
+
+    get year_end_tax_forms_path
+
+    assert_response :success
+    assert_select "h1", "Year-end tax forms"
+    assert_select "h2", "Tax form delivery queue"
+    assert_select "h2", "Filing holdbacks"
+    assert_select "h2", "Year-end form ledger"
+    assert_select "h2", "Packet form lines"
+    assert_select "h2", "Packet holdbacks"
+  end
+
+  test "delivers a year-end tax form through command action" do
+    post deliver_year_end_tax_form_path(@year_end_tax_form), params: { delivered_by: "tax_ops", tax_year: Date.current.year }
+
+    assert_redirected_to year_end_tax_forms_path(tax_year: Date.current.year)
+    @year_end_tax_form.reload
+    assert_equal "delivered", @year_end_tax_form.status
+    assert_equal "tax_ops", @year_end_tax_form.metadata.fetch("delivered_by")
+    assert_not_nil @year_end_tax_form.delivered_at
+  end
+
+  test "generates a year-end tax form packet through command action" do
+    post generate_year_end_tax_form_packet_path, params: { requested_by: "tax_ops", tax_year: Date.current.year }
+
+    assert_redirected_to year_end_tax_forms_path(tax_year: Date.current.year)
+    packet = @employer.reload.settings.fetch("year_end_tax_form_packet")
+    assert_match(/\Ayear_end_tax_forms_#{@employer.id}_#{Date.current.year}_/, packet.fetch("packet_id"))
+    assert_equal "tax_ops", packet.fetch("requested_by")
+    assert_equal Date.current.year, packet.fetch("tax_year")
+    assert_equal 2, packet.fetch("totals").fetch("form_count")
+    assert_equal 1, packet.fetch("totals").fetch("w2_count")
+    assert_equal 1, packet.fetch("totals").fetch("form_1099_count")
+    assert packet.fetch("totals").fetch("gross_wages_cents").positive?
+    assert_equal @approved_contractor_tax_payment.amount_cents, packet.fetch("totals").fetch("contractor_payment_cents")
+
+    detail = YearEnd::TaxFormsQuery.new.call
+    assert_instance_of YearEnd::PacketDto, detail.packet
+    assert_instance_of YearEnd::PacketLineDto, detail.packet_lines.first
+  end
+
   test "benefit plan administration exposes plan catalog DTOs" do
     detail = Benefits::PlanAdministrationQuery.new.call
 
@@ -2032,10 +2130,10 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     batch = @employer.reload.settings.fetch("contractor_payment_batch")
     assert_match(/\Acontractor_payments_#{@employer.id}_/, batch.fetch("batch_id"))
     assert_equal "ops_console", batch.fetch("requested_by")
-    assert_equal 1, batch.fetch("totals").fetch("payment_count")
+    assert_equal 2, batch.fetch("totals").fetch("payment_count")
     assert_equal 1, batch.fetch("totals").fetch("contractor_count")
     assert_equal 1, batch.fetch("totals").fetch("holdback_count")
-    assert_equal @contractor_payment.amount_cents, batch.fetch("totals").fetch("total_cents")
+    assert_equal @contractor_payment.amount_cents + @approved_contractor_tax_payment.amount_cents, batch.fetch("totals").fetch("total_cents")
 
     detail = Contractors::CenterQuery.new.call
     assert_instance_of Contractors::BatchDto, detail.latest_batch

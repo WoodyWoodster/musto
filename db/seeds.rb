@@ -1142,6 +1142,53 @@ end
   payment.save!
 end
 
+tax_form_due_on = Date.new(Date.current.year + 1, 1, 31)
+employees.first.update!(metadata: employees.first.metadata.to_h.merge(ssn_last4: "1842", tax_form_consent_status: "electronic_consented"))
+employees.fourth.update!(metadata: employees.fourth.metadata.to_h.merge(ssn_last4: "4501", tax_form_consent_status: "electronic_consented"))
+employees.last.update!(metadata: employees.last.metadata.to_h.merge(tax_form_correction_needed: true, tax_form_consent_status: "paper_required"))
+contractors.third.update!(metadata: contractors.third.metadata.to_h.merge(tin_last4: "7781", tax_form_consent_status: "electronic_consented"))
+
+[
+  [ employees.first, nil, "w2", "ready", nil, nil ],
+  [ employees.fourth, nil, "w2", "delivered", 1.day.ago, nil ],
+  [ employees.last, nil, "w2", "correction_needed", nil, nil ],
+  [ nil, contractors.third, "1099_nec", "ready", nil, nil ]
+].each do |employee, contractor, form_type, status, delivered_at, accepted_at|
+  statement_scope = employee&.pay_statements&.select { |statement| statement.pay_date.year == Date.current.year && !statement.void? } || []
+  payment_scope = contractor&.contractor_payments&.select { |payment| payment.pay_date.year == Date.current.year && payment.status.in?(%w[approved scheduled paid]) } || []
+  gross_wages_cents = statement_scope.sum(&:gross_pay_cents)
+  federal_withholding_cents = statement_scope.sum(&:tax_cents)
+  contractor_payment_cents = payment_scope.sum(&:amount_cents)
+  form = employer.year_end_tax_forms.find_or_initialize_by(
+    employee:,
+    contractor:,
+    tax_year: Date.current.year,
+    form_type:
+  )
+  tin_last4 = employee.present? ? employee.metadata.to_h.fetch("ssn_last4", nil) : contractor.metadata.to_h.fetch("tin_last4", nil)
+  consent_status = employee.present? ? employee.metadata.to_h.fetch("tax_form_consent_status", "electronic_consented") : contractor.metadata.to_h.fetch("tax_form_consent_status", "requested")
+  form.assign_attributes(
+    recipient_name: employee&.full_name || contractor.display_name,
+    recipient_email: employee&.email || contractor.email,
+    tin_last4:,
+    jurisdiction: employee&.work_location&.state.presence || "Federal",
+    gross_wages_cents:,
+    federal_withholding_cents:,
+    state_withholding_cents: (federal_withholding_cents * 0.18).round,
+    benefit_reportable_cents: statement_scope.sum(&:deduction_cents),
+    contractor_payment_cents:,
+    status:,
+    delivery_method: employee.present? ? "employee_portal" : "contractor_portal",
+    consent_status:,
+    correction_status: status == "correction_needed" ? "pending" : "none",
+    due_on: tax_form_due_on,
+    delivered_at:,
+    accepted_at:,
+    metadata: { source: "seeded_year_end_tax_form" }
+  )
+  form.save!
+end
+
 [
   [ employees[4], "i9_reverification", "critical", "open", Date.current + 2.days, "I-9 document still pending for Denver manager." ],
   [ nil, "aca_measurement_period", "high", "open", Date.current + 9.days, "ACA measurement period needs review before the next benefits export." ],

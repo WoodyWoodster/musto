@@ -2,6 +2,7 @@ class Contractor < ApplicationRecord
   belongs_to :employer
 
   has_many :contractor_payments, dependent: :destroy
+  has_many :year_end_tax_forms, dependent: :nullify
 
   validates :first_name, :last_name, :email, :contractor_type, :status, :tax_form_status, :payment_method_status, presence: true
   validates :hourly_rate_cents, numericality: { greater_than_or_equal_to: 0 }

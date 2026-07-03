@@ -19,6 +19,7 @@
             <%= link_to "Open current run", payroll_run_path(@statements.payroll_run.id), class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
           <% end %>
           <%= link_to "Funding", payroll_funding_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
+          <%= link_to "Year-end forms", year_end_tax_forms_path, class: "rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800 shadow-sm hover:border-emerald-300" %>
           <%= button_to "Generate statement batch", generate_pay_statement_batch_path, method: :post, params: { requested_by: "ops_console" }, class: "rounded-md bg-slate-950 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-slate-800" %>
         </div>
       </div>
