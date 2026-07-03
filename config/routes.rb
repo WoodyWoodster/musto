@@ -104,6 +104,8 @@ Rails.application.routes.draw do
   post "benefits/dependents/packet", to: "benefits_dependent_verifications#generate_packet", as: :generate_dependent_verification_packet
   post "benefits/dependents/verifications/:id/approve", to: "benefits_dependent_verifications#approve", as: :approve_dependent_verification
   post "benefits/dependents/verifications/:id/reject", to: "benefits_dependent_verifications#reject", as: :reject_dependent_verification
+  get "benefits/offboarding", to: "benefits_offboarding#show", as: :benefits_offboarding
+  post "benefits/offboarding/packet", to: "benefits_offboarding#generate_packet", as: :generate_benefits_offboarding_packet
   get "benefits/reconciliation", to: "benefits_reconciliations#show", as: :benefits_reconciliation
   post "benefits/reconciliation/:enrollment_id/resolve", to: "benefits_reconciliations#resolve", as: :resolve_benefits_reconciliation_item
   get "compliance", to: "operations#compliance"

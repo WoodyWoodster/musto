@@ -282,6 +282,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       benefits_open_enrollment_path,
       benefits_eligibility_path,
       benefits_dependent_verifications_path,
+      benefits_offboarding_path,
       benefits_reconciliation_path,
       enrollment_path(@pending_enrollment),
       compliance_path,
@@ -331,6 +332,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     open_enrollment = OpenEnrollment::CenterQuery.new.call
     eligibility = Benefits::EligibilityQuery.new.call
     dependent_verifications = Benefits::DependentVerificationQuery.new.call
+    offboarding = Benefits::OffboardingQuery.new.call
     reconciliation = Benefits::ReconciliationQuery.new.call
     compliance = Operations::ComplianceQuery.new.call
     integrations = Operations::IntegrationsQuery.new.call
@@ -480,6 +482,11 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_instance_of Benefits::DependentVerificationDependentDto, dependent_verifications.dependents.first
     assert_instance_of Benefits::DependentVerificationRecordDto, dependent_verifications.verifications.first
     assert_instance_of Benefits::DependentVerificationIssueDto, dependent_verifications.issues.first
+    assert_instance_of Benefits::OffboardingCenterDto, offboarding
+    assert_instance_of Benefits::OffboardingMetricDto, offboarding.metrics.first
+    assert_instance_of Benefits::OffboardingEventDto, offboarding.events.first
+    assert_instance_of Benefits::OffboardingCoverageLineDto, offboarding.coverage_lines.first
+    assert_instance_of Benefits::OffboardingIssueDto, offboarding.issues.first
     assert_instance_of Benefits::ReconciliationDetailDto, reconciliation
     assert_instance_of Operations::ComplianceCaseDto, compliance.fetch(:cases).first
     assert_instance_of Operations::IntegrationConnectionDto, integrations.fetch(:connections).first
@@ -2129,6 +2136,52 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_instance_of Benefits::DependentVerificationPacketDto, detail.packet
     assert_instance_of Benefits::DependentVerificationPacketLineDto, detail.packet_lines.first
     assert_instance_of Benefits::DependentVerificationIssueDto, detail.packet_holdbacks.first
+  end
+
+  test "benefits offboarding workspace exposes coverage termination DTOs" do
+    detail = Benefits::OffboardingQuery.new.call
+
+    assert_instance_of Benefits::OffboardingCenterDto, detail
+    assert_instance_of Benefits::OffboardingMetricDto, detail.metrics.first
+    assert_instance_of Benefits::OffboardingEventDto, detail.events.first
+    assert_instance_of Benefits::OffboardingCoverageLineDto, detail.coverage_lines.first
+    assert_instance_of Benefits::OffboardingIssueDto, detail.issues.first
+    assert detail.events.any? { |event| event.id == @approved_lifecycle_event.id }
+
+    get benefits_offboarding_path
+
+    assert_response :success
+    assert_select "h1", "Benefits offboarding"
+    assert_select "h2", "Termination queue"
+    assert_select "h2", "Offboarding blockers"
+    assert_select "h2", "Coverage termination lines"
+    assert_select "h2", "Packet termination lines"
+    assert_select "h2", "Packet holdbacks"
+  end
+
+  test "generates a benefits offboarding packet through command action" do
+    @employee.update!(vitable_id: "empl_ops_casey")
+    @enrollment.update!(vitable_id: "enrl_ops_primary")
+    @dependent.update!(vitable_id: "dep_ops_harper")
+
+    post generate_benefits_offboarding_packet_path, params: { requested_by: "benefits_admin" }
+
+    assert_redirected_to benefits_offboarding_path
+    packet = @employer.reload.settings.fetch("benefits_offboarding_packet")
+    assert_match(/\Abenefits_offboarding_#{@employer.id}_/, packet.fetch("packet_id"))
+    assert_equal "benefits_admin", packet.fetch("requested_by")
+    assert_equal "ready", packet.fetch("status")
+    assert_equal 1, packet.fetch("totals").fetch("event_count")
+    assert_equal 2, packet.fetch("totals").fetch("member_count")
+    assert_equal 1, packet.fetch("totals").fetch("employee_count")
+    assert_equal 0, packet.fetch("totals").fetch("holdback_count")
+    assert_equal "/v1/groups/members/sync", packet.fetch("endpoint")
+    assert_equal "employee", packet.fetch("terminations").first.fetch("member_type")
+
+    detail = Benefits::OffboardingQuery.new.call
+    assert_instance_of Benefits::OffboardingPacketDto, detail.packet
+    assert_instance_of Benefits::OffboardingCoverageLineDto, detail.packet_lines.first
+    assert_empty detail.packet_holdbacks
   end
 
   test "benefits reconciliation workspace exposes deduction exception DTOs" do
