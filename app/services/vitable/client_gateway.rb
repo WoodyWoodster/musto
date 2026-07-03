@@ -47,6 +47,22 @@ module Vitable
       end
     end
 
+    def create_employer(payload)
+      body = employer_create_payload(payload)
+
+      instrument("employer.create", :post, "/v1/employers", request_body: body) do
+        client.employers.create(body)
+      end
+    end
+
+    def update_employer_settings(employer_id, pay_frequency)
+      body = { pay_frequency: pay_frequency_value(pay_frequency) }
+
+      instrument("employer.update_settings", :put, "/v1/employers/#{employer_id}/settings", request_body: body) do
+        client.employers.update_settings(employer_id, body)
+      end
+    end
+
     private
 
     def client
@@ -130,6 +146,25 @@ module Vitable
       attributes = address.to_h.deep_symbolize_keys
       attributes[:state] = attributes[:state].to_sym if attributes[:state].present?
       attributes.compact
+    end
+
+    def employer_create_payload(payload)
+      attributes = payload.to_h.deep_symbolize_keys
+      attributes[:address] = attributes[:address].to_h.deep_symbolize_keys.compact if attributes[:address].present?
+      attributes.compact
+    end
+
+    def pay_frequency_value(value)
+      value.to_s.tr("-", "_").then do |frequency|
+        {
+          "weekly" => :weekly,
+          "biweekly" => :bi_weekly,
+          "bi_weekly" => :bi_weekly,
+          "semi_monthly" => :semi_monthly,
+          "semimonthly" => :semi_monthly,
+          "monthly" => :monthly
+        }.fetch(frequency, frequency.to_sym)
+      end
     end
   end
 end

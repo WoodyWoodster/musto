@@ -30,6 +30,8 @@ VITABLE_WEBHOOK_SECRET=...
 
 Webhook payloads are stored idempotently by `event_id`. Vitable webhook events include identifiers only, so `Vitable::ProcessWebhookCommand` records the event and, when credentials exist, calls `Vitable::FetchResourceCommand` to retrieve the fresh resource state.
 
+The Vitable employer provisioning workspace builds the `POST /v1/employers` payload and, once a remote employer ID exists, switches to the settings update path for pay frequency. It uses DTO-backed packet review, repository-generated holdbacks, and `needs_credentials` sync runs so the create path can be proofed before an API key exists.
+
 The Vitable census sync workspace builds a local review manifest for `POST /v1/employers/:id/census-sync`, separates ready employee rows from holdbacks, and records submit attempts as `SyncRun` rows. Without `VITABLE_CONNECT_API_KEY`, submits are accepted by the app as `needs_credentials` runs so the full workflow can be proofed before live credentials exist.
 
 The embedded enrollment session workspace prepares employee-bound access-token requests for Vitable's embedded flows. It uses `bound_entity: { type: :employee, id: "empl_..." }`, records every issue attempt as a `SyncRun`, and filters token values before any API telemetry is persisted.
@@ -52,6 +54,7 @@ Read-side UI:
 - `GET /`
 - `GET /employers`
 - `GET /employers/:id`
+- `GET /integrations/vitable/employer-provisioning`
 - `GET /integrations/vitable/census`
 - `GET /integrations/vitable/embedded-sessions`
 

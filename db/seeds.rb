@@ -24,6 +24,8 @@ employer.assign_attributes(
   onboarded_at: 2.weeks.ago,
   settings: {
     pay_frequency: "biweekly",
+    billing_email: "benefits@atlas.example",
+    phone_number: "5551239000",
     contribution_strategy: "fixed_employer_contribution",
     enrollment_widget: "embedded",
     payroll_provider: "musto_payroll"

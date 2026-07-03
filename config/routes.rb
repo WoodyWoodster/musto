@@ -88,6 +88,9 @@ Rails.application.routes.draw do
   post "benefits/reconciliation/:enrollment_id/resolve", to: "benefits_reconciliations#resolve", as: :resolve_benefits_reconciliation_item
   get "compliance", to: "operations#compliance"
   get "integrations", to: "operations#integrations"
+  get "integrations/vitable/employer-provisioning", to: "vitable_employer_provisioning#show", as: :vitable_employer_provisioning
+  post "integrations/vitable/employer-provisioning/packet", to: "vitable_employer_provisioning#generate_packet", as: :generate_vitable_employer_provisioning
+  post "integrations/vitable/employer-provisioning/submit", to: "vitable_employer_provisioning#submit", as: :submit_vitable_employer_provisioning
   get "integrations/vitable/census", to: "vitable_census_sync#show", as: :vitable_census_sync
   post "integrations/vitable/census/manifest", to: "vitable_census_sync#generate_manifest", as: :generate_vitable_census_manifest
   post "integrations/vitable/census/submit", to: "vitable_census_sync#submit", as: :submit_vitable_census_sync

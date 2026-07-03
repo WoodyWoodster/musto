@@ -274,6 +274,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       enrollment_path(@pending_enrollment),
       compliance_path,
       integrations_path,
+      vitable_employer_provisioning_path,
       vitable_census_sync_path,
       vitable_embedded_sessions_path,
       integration_connection_path(@connection),
@@ -316,6 +317,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     reconciliation = Benefits::ReconciliationQuery.new.call
     compliance = Operations::ComplianceQuery.new.call
     integrations = Operations::IntegrationsQuery.new.call
+    employer_provisioning = Vitable::EmployerProvisioningQuery.new.call
     census = Vitable::CensusSyncQuery.new.call
     embedded_sessions = Vitable::EmbeddedSessionsQuery.new.call
 
@@ -442,6 +444,10 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_instance_of Benefits::ReconciliationDetailDto, reconciliation
     assert_instance_of Operations::ComplianceCaseDto, compliance.fetch(:cases).first
     assert_instance_of Operations::IntegrationConnectionDto, integrations.fetch(:connections).first
+    assert_instance_of Vitable::EmployerProvisioningCenterDto, employer_provisioning
+    assert_instance_of Vitable::EmployerProvisioningMetricDto, employer_provisioning.metrics.first
+    assert_instance_of Vitable::EmployerProvisioningPreflightCheckDto, employer_provisioning.preflight_checks.first
+    assert_instance_of Vitable::EmployerProvisioningPayloadDto, employer_provisioning.payload
     assert_instance_of Vitable::CensusSyncCenterDto, census
     assert_instance_of Vitable::CensusSyncMetricDto, census.metrics.first
     assert_instance_of Vitable::CensusSyncPreflightCheckDto, census.preflight_checks.first
@@ -1760,6 +1766,119 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_select "h2", "API request trail"
   end
 
+  test "vitable employer provisioning workspace exposes packet DTOs" do
+    prepare_provisioning_profile
+    Vitable::GenerateEmployerProvisioningCommand.new(dto: Vitable::GenerateEmployerProvisioningDto.new(requested_by: "ops_test")).call
+    detail = Vitable::EmployerProvisioningQuery.new.call
+
+    assert_instance_of Vitable::EmployerProvisioningCenterDto, detail
+    assert_instance_of Vitable::EmployerProvisioningMetricDto, detail.metrics.first
+    assert_instance_of Vitable::EmployerProvisioningPreflightCheckDto, detail.preflight_checks.first
+    assert_instance_of Vitable::EmployerProvisioningPacketDto, detail.latest_packet
+    assert_instance_of Vitable::EmployerProvisioningPayloadDto, detail.payload
+    assert_empty detail.holdbacks
+    assert_equal "create", detail.latest_packet.mode
+    assert_equal "bi_weekly", detail.payload.pay_frequency
+
+    get vitable_employer_provisioning_path
+
+    assert_response :success
+    assert_select "h1", "Vitable employer provisioning"
+    assert_select "h2", "Provisioning preflight"
+    assert_select "h2", "SDK payload review"
+    assert_select "h2", "Provisioning holdbacks"
+    assert_select "h2", "Provisioning attempts"
+    assert_select "h2", "Employer API request trail"
+  end
+
+  test "generates a Vitable employer provisioning packet" do
+    prepare_provisioning_profile
+
+    post generate_vitable_employer_provisioning_path, params: { requested_by: "integration_admin" }
+
+    assert_redirected_to vitable_employer_provisioning_path
+    packet = @employer.reload.settings.fetch("vitable_employer_provisioning_packet")
+    assert_match(/\Avitable_employer_provisioning_#{@employer.id}_/, packet.fetch("packet_id"))
+    assert_equal "integration_admin", packet.fetch("requested_by")
+    assert_equal "create", packet.fetch("mode")
+    assert_equal "ready", packet.fetch("status")
+    assert_equal "/v1/employers", packet.fetch("endpoint")
+    assert_equal "ops-benefits@example.com", packet.fetch("create_payload").fetch("email")
+    assert_equal "214 Market Street", packet.fetch("create_payload").fetch("address").fetch("address_line_1")
+    assert_equal "bi_weekly", packet.fetch("settings_payload").fetch("pay_frequency")
+    assert_empty packet.fetch("holdbacks")
+  end
+
+  test "submits Vitable employer provisioning as missing credentials sync run without API key" do
+    prepare_provisioning_profile
+    Vitable::GenerateEmployerProvisioningCommand.new(dto: Vitable::GenerateEmployerProvisioningDto.new(requested_by: "ops_test")).call
+
+    assert_difference -> { @connection.sync_runs.where(operation: "employer_create").count }, 1 do
+      post submit_vitable_employer_provisioning_path, params: { requested_by: "integration_admin" }
+    end
+
+    assert_redirected_to vitable_employer_provisioning_path
+    sync = @connection.sync_runs.where(operation: "employer_create").recent_first.first
+    assert_equal "needs_credentials", sync.status
+    assert_match @connection.api_key_reference, sync.error_message
+    assert_equal "integration_admin", sync.stats.fetch("requested_by")
+    assert_equal "ops-benefits@example.com", sync.stats.dig("payload", "create", "email")
+  end
+
+  test "successful employer provisioning command stores remote id" do
+    prepare_provisioning_profile
+    response_class = Data.define(:data)
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:create_employer) do |payload|
+        response_class.new(data: { id: "empr_created_123", name: payload.fetch("name") })
+      end
+    end
+    previous_key = ENV[@connection.api_key_reference]
+    ENV[@connection.api_key_reference] = "vit_apk_test_value"
+
+    result = Vitable::SubmitEmployerProvisioningCommand.new(
+      dto: Vitable::SubmitEmployerProvisioningDto.new(requested_by: "integration_admin"),
+      gateway_class:
+    ).call
+
+    assert result.success?
+    assert_equal "empr_created_123", @employer.reload.vitable_id
+    assert_equal "bi_weekly", @employer.settings.fetch("vitable_pay_frequency")
+    sync = @connection.sync_runs.where(operation: "employer_create").recent_first.first
+    assert_equal "succeeded", sync.status
+    assert_equal "empr_created_123", sync.stats.fetch("remote_employer_id")
+  ensure
+    ENV[@connection.api_key_reference] = previous_key
+  end
+
+  test "successful employer settings command stores pay frequency metadata" do
+    prepare_provisioning_profile(remote_id: "empr_ops_123")
+    response_class = Data.define(:data)
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:update_employer_settings) do |employer_id, pay_frequency|
+        response_class.new(data: { employer_id:, pay_frequency: })
+      end
+    end
+    previous_key = ENV[@connection.api_key_reference]
+    ENV[@connection.api_key_reference] = "vit_apk_test_value"
+
+    result = Vitable::SubmitEmployerProvisioningCommand.new(
+      dto: Vitable::SubmitEmployerProvisioningDto.new(requested_by: "integration_admin"),
+      gateway_class:
+    ).call
+
+    assert result.success?
+    assert_equal "empr_ops_123", @employer.reload.vitable_id
+    assert_equal "bi_weekly", @employer.settings.fetch("vitable_pay_frequency")
+    sync = @connection.sync_runs.where(operation: "employer_settings_update").recent_first.first
+    assert_equal "succeeded", sync.status
+    assert_equal "bi_weekly", sync.stats.dig("payload", "settings", "pay_frequency")
+  ensure
+    ENV[@connection.api_key_reference] = previous_key
+  end
+
   test "vitable census sync workspace exposes manifest DTOs" do
     holdback_employee = create_census_holdback_employee
     Vitable::GenerateCensusManifestCommand.new(dto: Vitable::GenerateCensusManifestDto.new(requested_by: "ops_test")).call
@@ -2016,6 +2135,28 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_redirected_to compliance_path
     assert_equal "resolved", @compliance_case.reload.status
     assert_not_nil @compliance_case.resolved_at
+  end
+
+  def prepare_provisioning_profile(remote_id: nil)
+    @employer.update!(
+      vitable_id: remote_id,
+      settings: @employer.settings.to_h.merge(
+        "billing_email" => "ops-benefits@example.com",
+        "phone_number" => "5551239000",
+        "pay_frequency" => "biweekly"
+      )
+    )
+    @employer.work_locations.find_or_initialize_by(name: "Ops HQ").tap do |location|
+      location.assign_attributes(
+        address_line1: "214 Market Street",
+        city: "Philadelphia",
+        state: "PA",
+        postal_code: "19106",
+        country: "US",
+        remote: false
+      )
+      location.save!
+    end
   end
 
   def create_census_holdback_employee

@@ -19,5 +19,26 @@ module Vitable
       assert_equal 3_600, serialized.fetch("expires_in")
       assert_not_includes serialized.to_json, "vit_at_secret"
     end
+
+    test "normalizes employer provisioning payloads for the SDK" do
+      organization = Organization.create!(name: "Gateway Payload Test", external_id: "org_gateway_payload_test")
+      connection = organization.integration_connections.create!(provider: "vitable", environment: "production")
+      gateway = ClientGateway.new(connection)
+
+      payload = gateway.send(:employer_create_payload, {
+        "name" => "Ops Employer",
+        "address" => {
+          "address_line_1" => "214 Market Street",
+          "city" => "Philadelphia",
+          "state" => "PA",
+          "zipcode" => "19106"
+        }
+      })
+
+      assert_equal "Ops Employer", payload.fetch(:name)
+      assert_equal "PA", payload.dig(:address, :state)
+      assert_equal :bi_weekly, gateway.send(:pay_frequency_value, "bi_weekly")
+      assert_equal :semi_monthly, gateway.send(:pay_frequency_value, "semimonthly")
+    end
   end
 end
