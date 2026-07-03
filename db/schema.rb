@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_03_200000) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_03_203000) do
   create_table "api_request_logs", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.integer "duration_ms"
@@ -234,6 +234,27 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_03_200000) do
     t.index ["employee_id", "status"], name: "index_employee_bank_accounts_on_employee_id_and_status"
     t.index ["employee_id"], name: "index_employee_bank_accounts_on_employee_id"
     t.index ["status"], name: "index_employee_bank_accounts_on_status"
+  end
+
+  create_table "employee_change_requests", force: :cascade do |t|
+    t.datetime "applied_at"
+    t.datetime "created_at", null: false
+    t.date "effective_on", null: false
+    t.integer "employee_id", null: false
+    t.json "metadata", default: {}, null: false
+    t.datetime "rejected_at"
+    t.string "request_type", null: false
+    t.datetime "reviewed_at"
+    t.string "reviewed_by"
+    t.string "status", default: "submitted", null: false
+    t.datetime "submitted_at", null: false
+    t.text "summary"
+    t.string "title", null: false
+    t.datetime "updated_at", null: false
+    t.index ["employee_id", "status"], name: "index_employee_change_requests_on_employee_id_and_status"
+    t.index ["employee_id"], name: "index_employee_change_requests_on_employee_id"
+    t.index ["request_type", "status"], name: "index_employee_change_requests_on_request_type_and_status"
+    t.index ["status", "submitted_at"], name: "index_employee_change_requests_on_status_and_submitted_at"
   end
 
   create_table "employee_documents", force: :cascade do |t|
@@ -730,6 +751,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_03_200000) do
   add_foreign_key "departments", "employers"
   add_foreign_key "dependents", "employees"
   add_foreign_key "employee_bank_accounts", "employees"
+  add_foreign_key "employee_change_requests", "employees"
   add_foreign_key "employee_documents", "employees"
   add_foreign_key "employee_expenses", "employees"
   add_foreign_key "employee_lifecycle_events", "employees"

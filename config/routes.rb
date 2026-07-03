@@ -24,6 +24,10 @@ Rails.application.routes.draw do
   get "hiring", to: "hiring#show"
   post "hiring/candidates/:id/send_offer", to: "hiring#send_offer", as: :send_candidate_offer
   post "hiring/onboarding_handoff", to: "hiring#generate_handoff", as: :generate_hiring_onboarding_handoff
+  get "employee-changes", to: "employee_changes#show", as: :employee_changes
+  post "employee-changes/requests/:id/approve", to: "employee_changes#approve", as: :approve_employee_change_request
+  post "employee-changes/requests/:id/reject", to: "employee_changes#reject", as: :reject_employee_change_request
+  post "employee-changes/sync_batch", to: "employee_changes#generate_batch", as: :generate_employee_changes_sync_batch
   get "onboarding", to: "onboarding#show"
   get "documents", to: "employee_documents#show", as: :documents
   post "documents/request_batch", to: "employee_documents#request_batch", as: :request_document_batch

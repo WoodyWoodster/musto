@@ -15,6 +15,7 @@ class Employee < ApplicationRecord
   has_many :payroll_adjustments, dependent: :destroy
   has_many :employee_expenses, dependent: :destroy
   has_many :employee_bank_accounts, dependent: :destroy
+  has_many :employee_change_requests, dependent: :destroy
   has_many :pay_statements, dependent: :destroy
   has_many :benefit_invoice_lines, dependent: :destroy
   has_many :open_enrollment_invitations, dependent: :destroy

@@ -43,6 +43,53 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     @pending_document = @employee.employee_documents.create!(title: "Benefits disclosure", document_type: "benefits", status: "pending", expires_on: Date.current + 30.days, requested_at: 2.days.ago)
     @complete_document = @employee.employee_documents.create!(title: "W-4", document_type: "tax", status: "complete", issued_on: Date.current, verified_at: 1.day.ago)
     @expiring_document = @employee.employee_documents.create!(title: "Handbook acknowledgment", document_type: "policy", status: "complete", issued_on: Date.current - 1.year, expires_on: Date.current + 10.days, verified_at: 1.year.ago)
+    @profile_change_request = @employee.employee_change_requests.create!(
+      request_type: "profile_update",
+      title: "Update preferred name",
+      summary: "Casey submitted a preferred name change from employee self-service.",
+      status: "submitted",
+      effective_on: Date.current,
+      submitted_at: 2.days.ago,
+      metadata: {
+        payload: { preferred_name: "Case" },
+        impact: { payroll: "none", benefits: "none", compliance: "profile_record" }
+      }
+    )
+    @direct_deposit_change_request = @employee.employee_change_requests.create!(
+      request_type: "direct_deposit",
+      title: "Replace primary direct deposit",
+      summary: "Casey submitted a new primary direct deposit account.",
+      status: "submitted",
+      effective_on: Date.current + 1.day,
+      submitted_at: 1.day.ago,
+      metadata: {
+        payload: {
+          nickname: "New primary checking",
+          institution_name: "SoFi Bank",
+          account_type: "checking",
+          routing_number_last4: "1188",
+          account_last4: "6204",
+          allocation_type: "remainder",
+          allocation_value: 100
+        },
+        impact: { payroll: "direct_deposit_prenote", benefits: "none", compliance: "none" }
+      }
+    )
+    @applied_employee_change_request = @employee.employee_change_requests.create!(
+      request_type: "tax_withholding",
+      title: "Update federal withholding",
+      summary: "Casey updated W-4 withholding selections.",
+      status: "applied",
+      effective_on: Date.current,
+      submitted_at: 3.days.ago,
+      reviewed_at: 2.days.ago,
+      reviewed_by: "people_ops",
+      applied_at: 2.days.ago,
+      metadata: {
+        payload: { filing_status: "head_of_household", extra_withholding_cents: 5_000 },
+        impact: { payroll: "tax_withholding_update", benefits: "none", compliance: "w4_document" }
+      }
+    )
     @job_opening = @employer.job_openings.create!(title: "Payroll Implementation Lead", code: "PAY-LEAD", department: @department, work_location: @location, compensation_min_cents: 98_000_00, compensation_max_cents: 128_000_00, target_start_on: Date.current + 21.days)
     @offerable_candidate = @job_opening.candidates.create!(first_name: "Nia", last_name: "Okafor", email: "nia.candidate@example.com", source: "referral", stage: "screening", score: 91, applied_on: Date.current - 5.days, target_start_on: Date.current + 21.days, compensation_cents: 118_000_00)
     @accepted_candidate = @job_opening.candidates.create!(first_name: "Miles", last_name: "Sato", email: "miles.candidate@example.com", source: "direct", stage: "accepted", score: 95, applied_on: Date.current - 12.days, target_start_on: Date.current + 28.days, compensation_cents: 122_000_00, offer_sent_at: 2.days.ago, accepted_at: 1.day.ago)
@@ -176,6 +223,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       company_setup_path,
       workforce_path,
       hiring_path,
+      employee_changes_path,
       lifecycle_path,
       onboarding_path,
       documents_path,
@@ -214,6 +262,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     company = Company::SetupQuery.new.call
     workforce = Operations::WorkforceQuery.new.call
     hiring = Hiring::CenterQuery.new.call
+    employee_changes = EmployeeChanges::CenterQuery.new.call
     lifecycle = Lifecycle::CommandCenterQuery.new.call
     payroll = Operations::PayrollQuery.new.call
     payroll_calendar = PayrollCalendar::CenterQuery.new.call
@@ -248,6 +297,11 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_instance_of Hiring::CandidateDto, hiring.candidates.first
     assert_instance_of Hiring::PipelineStageDto, hiring.pipeline_stages.first
     assert_instance_of Hiring::IssueDto, hiring.issues.first
+    assert_instance_of EmployeeChanges::CenterDto, employee_changes
+    assert_instance_of EmployeeChanges::MetricDto, employee_changes.metrics.first
+    assert_instance_of EmployeeChanges::RequestDto, employee_changes.requests.first
+    assert_instance_of EmployeeChanges::TypeSummaryDto, employee_changes.type_summaries.first
+    assert_instance_of EmployeeChanges::ImpactItemDto, employee_changes.impact_items.first
     assert_instance_of Lifecycle::CenterDto, lifecycle
     assert_instance_of Lifecycle::MetricDto, lifecycle.metrics.first
     assert_instance_of Lifecycle::EventDto, lifecycle.events.first
@@ -534,6 +588,75 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_redirected_to hiring_path
     holdback_detail = Hiring::CenterQuery.new.call
     assert_instance_of Hiring::HandoffHoldbackDto, holdback_detail.handoff_holdbacks.first
+  end
+
+  test "employee self-service inbox exposes request DTOs" do
+    detail = EmployeeChanges::CenterQuery.new.call
+
+    assert_instance_of EmployeeChanges::CenterDto, detail
+    assert_instance_of EmployeeChanges::MetricDto, detail.metrics.first
+    assert_instance_of EmployeeChanges::RequestDto, detail.requests.first
+    assert_instance_of EmployeeChanges::TypeSummaryDto, detail.type_summaries.first
+    assert_instance_of EmployeeChanges::ImpactItemDto, detail.impact_items.first
+    assert detail.reviewable_requests.any? { |request| request.id == @direct_deposit_change_request.id }
+    assert detail.applied_requests.any? { |request| request.id == @applied_employee_change_request.id }
+
+    get employee_changes_path
+
+    assert_response :success
+    assert_select "h1", "Employee self-service inbox"
+    assert_select "h2", "Self-service lanes"
+    assert_select "h2", "Review queue"
+    assert_select "h2", "Impact checks"
+    assert_select "h2", "Employee change ledger"
+    assert_select "h2", "Profile sync ledger"
+  end
+
+  test "approves direct deposit employee change through command action" do
+    post approve_employee_change_request_path(@direct_deposit_change_request), params: { reviewed_by: "payroll_admin" }
+
+    assert_redirected_to employee_changes_path
+    @direct_deposit_change_request.reload
+    new_account = @employee.employee_bank_accounts.find_by(account_last4: "6204")
+
+    assert_equal "applied", @direct_deposit_change_request.status
+    assert_equal "payroll_admin", @direct_deposit_change_request.reviewed_by
+    assert_not_nil @direct_deposit_change_request.applied_at
+    assert_not_nil new_account
+    assert_equal "prenote_sent", new_account.status
+    assert new_account.primary_account?
+    assert_equal @direct_deposit_change_request.id, new_account.metadata.fetch("employee_change_request_id")
+    assert_not @employee_bank_account.reload.primary_account?
+  end
+
+  test "rejects employee change through command action" do
+    post reject_employee_change_request_path(@profile_change_request), params: { reviewed_by: "people_ops_admin", reason: "Preferred name requires employee confirmation" }
+
+    assert_redirected_to employee_changes_path
+    @profile_change_request.reload
+    assert_equal "rejected", @profile_change_request.status
+    assert_equal "people_ops_admin", @profile_change_request.reviewed_by
+    assert_equal "Preferred name requires employee confirmation", @profile_change_request.metadata.fetch("rejected_reason")
+    assert_not_nil @profile_change_request.rejected_at
+  end
+
+  test "generates employee change profile sync batch through command action" do
+    post generate_employee_changes_sync_batch_path, params: { requested_by: "integration_admin" }
+
+    assert_redirected_to employee_changes_path
+    batch = @employer.reload.settings.fetch("employee_change_sync_batch")
+    assert_match(/\Aemployee_changes_#{@employer.id}_/, batch.fetch("batch_id"))
+    assert_equal "integration_admin", batch.fetch("requested_by")
+    assert_equal 1, batch.fetch("totals").fetch("request_count")
+    assert_equal 1, batch.fetch("totals").fetch("employee_count")
+    assert_equal 1, batch.fetch("totals").fetch("payroll_impact_count")
+    assert_equal 2, batch.fetch("totals").fetch("holdback_count")
+    assert_equal "sync_queued", @applied_employee_change_request.reload.status
+
+    detail = EmployeeChanges::CenterQuery.new.call
+    assert_instance_of EmployeeChanges::SyncBatchDto, detail.latest_batch
+    assert_instance_of EmployeeChanges::SyncLineDto, detail.sync_lines.first
+    assert_instance_of EmployeeChanges::SyncHoldbackDto, detail.sync_holdbacks.first
   end
 
   test "lifecycle command center exposes employee change DTOs" do

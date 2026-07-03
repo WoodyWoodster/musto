@@ -200,6 +200,110 @@ end
   account.save!
 end
 
+[
+  [
+    employees.second,
+    "direct_deposit",
+    "Replace primary direct deposit",
+    "Jordan submitted a new primary checking account that needs prenote review before payroll funding.",
+    "submitted",
+    Date.current + 2.days,
+    1.day.ago,
+    {
+      payload: {
+        nickname: "New primary checking",
+        institution_name: "SoFi Bank",
+        account_type: "checking",
+        routing_number_last4: "1188",
+        account_last4: "6204",
+        allocation_type: "remainder",
+        allocation_value: 100
+      },
+      impact: { payroll: "direct_deposit_prenote", benefits: "none", compliance: "none" }
+    }
+  ],
+  [
+    employees.third,
+    "tax_withholding",
+    "Update federal withholding",
+    "Morgan updated W-4 selections after a household change and needs payroll tax review.",
+    "submitted",
+    Date.current + 1.day,
+    2.days.ago,
+    {
+      payload: {
+        filing_status: "married_filing_jointly",
+        extra_withholding_cents: 12_500,
+        dependents_claimed: 1
+      },
+      impact: { payroll: "tax_withholding_update", benefits: "none", compliance: "w4_document" }
+    }
+  ],
+  [
+    employees.fourth,
+    "work_location",
+    "Move tax work location",
+    "Riley moved to the Denver roastery and needs payroll tax and benefit eligibility review.",
+    "submitted",
+    Date.current + 7.days,
+    3.days.ago,
+    {
+      payload: {
+        work_location_id: locations.fetch("Denver Roastery").id,
+        reason: "employee_relocation"
+      },
+      impact: { payroll: "state_tax_profile", benefits: "eligibility_review", compliance: "work_location_update" }
+    }
+  ],
+  [
+    employees.first,
+    "emergency_contact",
+    "Refresh emergency contact",
+    "Avery added a new emergency contact from employee self-service.",
+    "applied",
+    Date.current,
+    5.days.ago,
+    {
+      payload: {
+        name: "Jamie Kim",
+        relationship: "spouse",
+        phone: "555-0134"
+      },
+      impact: { payroll: "none", benefits: "none", compliance: "profile_record" }
+    }
+  ],
+  [
+    employees.last,
+    "profile_update",
+    "Preferred name update",
+    "Taylor requested a preferred name update that was rejected because the value matched the current profile.",
+    "rejected",
+    Date.current,
+    7.days.ago,
+    {
+      payload: {
+        preferred_name: "Taylor"
+      },
+      impact: { payroll: "none", benefits: "none", compliance: "none" },
+      rejected_reason: "No profile change was required"
+    }
+  ]
+].each do |employee, request_type, title, summary, status, effective_on, submitted_at, metadata|
+  request = employee.employee_change_requests.find_or_initialize_by(request_type:, title:)
+  request.assign_attributes(
+    summary:,
+    status:,
+    effective_on:,
+    submitted_at:,
+    reviewed_at: status.in?([ "applied", "rejected", "sync_queued" ]) ? submitted_at + 4.hours : nil,
+    reviewed_by: status.in?([ "applied", "rejected", "sync_queued" ]) ? "seed_data" : nil,
+    applied_at: status.in?([ "applied", "sync_queued" ]) ? submitted_at + 4.hours : nil,
+    rejected_at: status == "rejected" ? submitted_at + 4.hours : nil,
+    metadata: metadata.deep_stringify_keys.merge("source" => "seeded_employee_self_service")
+  )
+  request.save!
+end
+
 plans = [
   [ "Vitable Direct Primary Care", "direct_primary_care", "Vitable", 9_900 ],
   [ "Minimum Essential Coverage", "minimum_essential_coverage", "Vitable", 14_900 ],
