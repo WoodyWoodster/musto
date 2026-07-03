@@ -1,25 +1,24 @@
 module Vitable
   class FetchResourceCommand < ApplicationCommand
-    def initialize(connection:, resource_type:, resource_id:)
-      @connection = connection
-      @resource_type = resource_type
-      @resource_id = resource_id
+    def initialize(dto:, repository: IntegrationRepository.new, gateway_class: ClientGateway)
+      @dto = dto
+      @repository = repository
+      @gateway_class = gateway_class
     end
 
     def call
-      sync_run = @connection.sync_runs.create!(
-        resource_type: @resource_type,
-        operation: "fetch",
-        status: "running",
-        started_at: Time.current,
-        stats: { resource_id: @resource_id }
+      connection = @repository.find_connection(@dto.connection_id)
+      sync_run = @repository.create_sync_run(
+        connection:,
+        resource_type: @dto.resource_type,
+        resource_id: @dto.resource_id
       )
 
-      response = ClientGateway.new(@connection).fetch_resource(@resource_type, @resource_id)
-      sync_run.update!(status: "succeeded", completed_at: Time.current, stats: sync_run.stats.merge(response_class: response.class.name))
+      response = @gateway_class.new(connection).fetch_resource(@dto.resource_type, @dto.resource_id)
+      @repository.succeed_sync_run(sync_run, response)
       success(record: sync_run, value: response)
     rescue VitableConnect::Errors::APIError => e
-      sync_run&.update!(status: "failed", completed_at: Time.current, error_message: e.message)
+      @repository.fail_sync_run(sync_run, e)
       failure(record: sync_run, errors: "#{e.class}: #{e.message}")
     end
   end

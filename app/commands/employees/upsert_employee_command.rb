@@ -1,14 +1,14 @@
 module Employees
   class UpsertEmployeeCommand < ApplicationCommand
-    def initialize(dto:)
+    def initialize(dto:, repository: EmployeeRepository.new)
       @dto = dto
+      @repository = repository
     end
 
     def call
-      employee = Employee.find_or_initialize_by(employer_id: @dto.employer_id, email: @dto.email)
-      employee.assign_attributes(@dto.to_attributes)
+      employee = @repository.upsert(@dto)
 
-      if employee.save
+      if employee.persisted?
         success(record: employee)
       else
         failure(record: employee, errors: employee.errors.full_messages)

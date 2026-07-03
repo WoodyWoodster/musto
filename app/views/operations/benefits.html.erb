@@ -9,12 +9,10 @@
   </div>
 
   <div class="grid gap-4 md:grid-cols-4">
-    <% accepted = @benefits[:enrollments].accepted.count %>
-    <% pending = @benefits[:enrollments].pending.count %>
     <% [
       ["Available plans", @benefits[:benefit_plans].count, "bg-cyan-500"],
-      ["Accepted enrollments", accepted, "bg-emerald-500"],
-      ["Pending enrollments", pending, "bg-amber-500"],
+      ["Accepted enrollments", @benefits[:accepted_enrollment_count], "bg-emerald-500"],
+      ["Pending enrollments", @benefits[:pending_enrollment_count], "bg-amber-500"],
       ["Webhook events", @benefits[:webhooks].count, "bg-indigo-500"]
     ].each do |label, value, accent| %>
       <div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
@@ -27,7 +25,7 @@
     <% end %>
   </div>
 
-  <section class="rounded-lg border border-slate-200 bg-white shadow-sm">
+  <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
     <div class="border-b border-slate-100 px-5 py-4">
       <h2 class="text-base font-semibold text-slate-950">Plan catalog</h2>
       <p class="text-sm text-slate-500">Vitable-powered benefits mapped into the employer’s local product catalog.</p>
@@ -49,11 +47,11 @@
             </div>
             <div class="rounded-md bg-slate-50 p-3">
               <p class="text-xs text-slate-500">Accepted</p>
-              <p class="mt-1 font-semibold text-slate-950"><%= plan.enrollments.accepted.count %></p>
+              <p class="mt-1 font-semibold text-slate-950"><%= plan.accepted_enrollment_count %></p>
             </div>
             <div class="rounded-md bg-slate-50 p-3">
               <p class="text-xs text-slate-500">Pending</p>
-              <p class="mt-1 font-semibold text-slate-950"><%= plan.enrollments.pending.count %></p>
+              <p class="mt-1 font-semibold text-slate-950"><%= plan.pending_enrollment_count %></p>
             </div>
           </div>
         </article>
@@ -62,7 +60,7 @@
   </section>
 
   <div class="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-    <section class="rounded-lg border border-slate-200 bg-white shadow-sm">
+    <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
       <div class="border-b border-slate-100 px-5 py-4">
         <h2 class="text-base font-semibold text-slate-950">Enrollment funnel</h2>
         <p class="text-sm text-slate-500">Employee-level enrollment state and effective dates.</p>
@@ -81,8 +79,8 @@
           <tbody class="divide-y divide-slate-100">
             <% @benefits[:enrollments].each do |enrollment| %>
               <tr class="hover:bg-slate-50">
-                <td class="px-5 py-4 font-medium text-slate-950"><%= enrollment.employee.full_name %></td>
-                <td class="px-5 py-4 text-slate-600"><%= enrollment.benefit_plan.name %></td>
+                <td class="px-5 py-4 font-medium text-slate-950"><%= enrollment.employee_name %></td>
+                <td class="px-5 py-4 text-slate-600"><%= enrollment.benefit_plan_name %></td>
                 <td class="px-5 py-4 text-slate-600"><%= enrollment.coverage_level.humanize %></td>
                 <td class="px-5 py-4 text-slate-600"><%= enrollment.effective_on&.strftime("%b %-d, %Y") || "Pending" %></td>
                 <td class="px-5 py-4"><%= status_pill(enrollment.status) %></td>
@@ -93,7 +91,7 @@
       </div>
     </section>
 
-    <section class="rounded-lg border border-slate-200 bg-white shadow-sm">
+    <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
       <div class="border-b border-slate-100 px-5 py-4">
         <h2 class="text-base font-semibold text-slate-950">Vitable connection</h2>
         <p class="text-sm text-slate-500">API key readiness and event intake health.</p>
@@ -103,7 +101,7 @@
           <div class="px-5 py-4">
             <div class="flex items-start justify-between gap-4">
               <div>
-                <p class="font-semibold text-slate-950"><%= connection.organization.name %></p>
+                <p class="font-semibold text-slate-950"><%= connection.organization_name %></p>
                 <p class="mt-1 text-sm text-slate-500"><%= connection.provider %> · <%= connection.environment %></p>
               </div>
               <%= status_pill(connection.status) %>

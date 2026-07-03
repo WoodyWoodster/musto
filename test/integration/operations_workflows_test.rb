@@ -34,6 +34,23 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     end
   end
 
+  test "read side exposes DTOs instead of raw records" do
+    dashboard = DashboardQuery.new.call
+    workforce = Operations::WorkforceQuery.new.call
+    payroll = Operations::PayrollQuery.new.call
+    benefits = Operations::BenefitsQuery.new.call
+    compliance = Operations::ComplianceQuery.new.call
+    integrations = Operations::IntegrationsQuery.new.call
+
+    assert_instance_of Employers::EmployerSummaryDto, dashboard.fetch(:employers).first
+    assert_instance_of Dashboard::IntegrationHealthDto, dashboard.fetch(:integration_health)
+    assert_instance_of Operations::WorkforceEmployeeDto, workforce.fetch(:employees).first
+    assert_instance_of Operations::PayrollRunDto, payroll.fetch(:payroll_runs).first
+    assert_instance_of Operations::BenefitPlanDto, benefits.fetch(:benefit_plans).first
+    assert_instance_of Operations::ComplianceCaseDto, compliance.fetch(:cases).first
+    assert_instance_of Operations::IntegrationConnectionDto, integrations.fetch(:connections).first
+  end
+
   test "completes an onboarding task through the command action" do
     post complete_onboarding_task_path(@task)
 

@@ -4,8 +4,6 @@ class EmployersController < ApplicationController
   end
 
   def show
-    @employer = Employer
-      .includes(:organization, :employees, :benefit_plans, :enrollments, :payroll_runs)
-      .find(params[:id])
+    @employer = Employers::DetailQuery.new.call(params[:id])
   end
 end

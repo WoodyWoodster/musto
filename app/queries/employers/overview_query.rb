@@ -1,13 +1,11 @@
 module Employers
   class OverviewQuery
-    def initialize(scope = Employer.all)
-      @scope = scope
+    def initialize(repository: EmployerRepository.new)
+      @repository = repository
     end
 
     def call
-      @scope
-        .includes(:organization, :employees, :benefit_plans, :enrollments, :payroll_runs)
-        .order(created_at: :desc)
+      @repository.overview.map { |employer| EmployerSummaryDto.from_record(employer) }
     end
   end
 end

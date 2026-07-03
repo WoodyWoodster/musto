@@ -1,29 +1,24 @@
 module Operations
   class BenefitsQuery
-    def initialize(employer: Employer.includes(:organization).order(:created_at).first)
-      @employer = employer
+    def initialize(
+      employer_repository: Employers::EmployerRepository.new,
+      integration_repository: Vitable::IntegrationRepository.new
+    )
+      @employer = employer_repository.first_for_operations
+      @repository = Benefits::BenefitsRepository.new(employer: @employer)
+      @integration_repository = integration_repository
     end
 
     def call
       {
-        employer: @employer,
-        benefit_plans: benefit_plans.includes(:enrollments).order(:category, :name),
-        enrollments: enrollments.includes(:employee, :benefit_plan).order(created_at: :desc),
-        connections: IntegrationConnection.vitable.includes(:organization).order(created_at: :desc),
-        webhooks: WebhookEvent.order(created_at: :desc).limit(12)
+        employer: EmployerContextDto.from_record(@employer),
+        benefit_plans: @repository.plans.map { |plan| BenefitPlanDto.from_record(plan) },
+        enrollments: @repository.enrollments.map { |enrollment| EnrollmentDto.from_record(enrollment) },
+        accepted_enrollment_count: @repository.accepted_enrollment_count,
+        pending_enrollment_count: @repository.pending_enrollment_count,
+        connections: @integration_repository.vitable_connections.map { |connection| IntegrationConnectionDto.from_record(connection) },
+        webhooks: @integration_repository.webhooks(limit: 12).map { |event| IntegrationWebhookEventDto.from_record(event) }
       }
-    end
-
-    private
-
-    def benefit_plans
-      return BenefitPlan.none unless @employer
-
-      @employer.benefit_plans
-    end
-
-    def enrollments
-      Enrollment.joins(:employee).where(employees: { employer_id: @employer&.id })
     end
   end
 end

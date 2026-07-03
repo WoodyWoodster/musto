@@ -1,7 +1,7 @@
 class ComplianceCasesController < ApplicationController
   def resolve
-    compliance_case = ComplianceCase.find(params[:id])
-    result = Compliance::ResolveCaseCommand.new(compliance_case:).call
+    dto = Compliance::ResolveCaseDto.from_params(params)
+    result = Compliance::ResolveCaseCommand.new(dto:).call
 
     redirect_to compliance_path, notice: result.success? ? "Compliance case resolved." : result.errors.to_sentence
   end

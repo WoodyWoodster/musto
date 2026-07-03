@@ -1,43 +1,21 @@
 module Operations
   class ComplianceQuery
-    def initialize(employer: Employer.includes(:organization).order(:created_at).first)
-      @employer = employer
+    def initialize(employer_repository: Employers::EmployerRepository.new)
+      @employer = employer_repository.first_for_operations
+      @repository = Compliance::ComplianceRepository.new(employer: @employer)
     end
 
     def call
       {
-        employer: @employer,
-        cases: compliance_cases.includes(:employee).order(severity_sort, :due_on),
-        documents: documents.includes(:employee).attention_needed.order(:expires_on),
-        time_off_requests: time_off_requests.includes(:employee, :time_off_policy).order(:starts_on),
-        policies: time_off_policies.order(:name)
+        employer: EmployerContextDto.from_record(@employer),
+        cases: @repository.cases.map { |compliance_case| ComplianceCaseDto.from_record(compliance_case) },
+        open_case_count: @repository.open_case_count,
+        urgent_case_count: @repository.urgent_case_count,
+        documents: @repository.documents.map { |document| DocumentExceptionDto.from_record(document) },
+        time_off_requests: @repository.time_off_requests.map { |request| TimeOffRequestDto.from_record(request) },
+        pending_time_off_count: @repository.pending_time_off_count,
+        policies: @repository.time_off_policies.map { |policy| TimeOffPolicyDto.from_record(policy) }
       }
-    end
-
-    private
-
-    def compliance_cases
-      return ComplianceCase.none unless @employer
-
-      @employer.compliance_cases
-    end
-
-    def documents
-      EmployeeDocument.joins(:employee).where(employees: { employer_id: @employer&.id })
-    end
-
-    def time_off_requests
-      TimeOffRequest.joins(:employee).where(employees: { employer_id: @employer&.id })
-    end
-
-    def time_off_policies
-      return TimeOffPolicy.none unless @employer
-
-      @employer.time_off_policies
-    end
-
-    def severity_sort
-      Arel.sql("CASE severity WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END")
     end
   end
 end

@@ -1,52 +1,38 @@
 module Vitable
   class ProcessWebhookCommand < ApplicationCommand
-    def initialize(payload:)
+    def initialize(payload:, repository: IntegrationRepository.new)
       @payload = payload
+      @repository = repository
     end
 
     def call
       dto = WebhookEventDto.from_payload(@payload)
-      connection = resolve_connection(dto)
-      event = persist_event(dto, connection)
+      connection = @repository.connection_for_organization_external_id(dto.organization_external_id)
+      event = @repository.persist_event(dto, connection)
 
       return success(record: event, value: "duplicate") if event.processed?
 
       if connection.blank?
-        event.update!(status: "unmatched_organization", error_message: "No Vitable connection matched #{dto.organization_external_id}")
+        @repository.mark_unmatched_organization(event, dto.organization_external_id)
         return failure(record: event, errors: event.error_message)
       end
 
       unless connection.credentials_present?
-        event.update!(status: "needs_credentials", error_message: "#{connection.api_key_reference} is not configured")
+        @repository.mark_needs_credentials(event, connection)
         return success(record: event, value: "queued_without_credentials")
       end
 
-      fetch_result = FetchResourceCommand.new(connection:, resource_type: dto.resource_type, resource_id: dto.resource_id).call
+      fetch_dto = FetchResourceDto.from_event(connection:, event:)
+      fetch_result = FetchResourceCommand.new(dto: fetch_dto, repository: @repository).call
       if fetch_result.success?
-        event.update!(status: "processed", processed_at: Time.current, error_message: nil)
+        @repository.mark_processed(event)
         success(record: event, value: fetch_result.value)
       else
-        event.update!(status: "failed", error_message: fetch_result.errors.join(", "))
+        @repository.mark_failed(event, fetch_result.errors)
         failure(record: event, value: fetch_result.value, errors: fetch_result.errors)
       end
     rescue KeyError, ArgumentError => e
       failure(errors: "Invalid Vitable webhook payload: #{e.message}")
-    end
-
-    private
-
-    def resolve_connection(dto)
-      organization = Organization.find_by(external_id: dto.organization_external_id)
-      organization&.integration_connections&.vitable&.find_by(environment: "production") ||
-        organization&.integration_connections&.vitable&.first
-    end
-
-    def persist_event(dto, connection)
-      WebhookEvent.find_by(event_id: dto.event_id) || WebhookEvent.create!(event_id: dto.event_id) do |event|
-        event.assign_attributes(dto.to_event_attributes)
-        event.integration_connection = connection
-        event.status = "received"
-      end
     end
   end
 end

@@ -26,14 +26,14 @@
           <% @employers.each do |employer| %>
             <tr class="hover:bg-slate-50">
               <td class="px-5 py-4">
-                <%= link_to employer.name, employer_path(employer), class: "font-semibold text-slate-950 hover:text-cyan-700" %>
+                <%= link_to employer.name, employer_path(employer.id), class: "font-semibold text-slate-950 hover:text-cyan-700" %>
                 <p class="mt-1 text-xs text-slate-500"><%= employer.legal_name.presence || "Legal entity pending" %></p>
               </td>
-              <td class="px-5 py-4 text-slate-600"><%= employer.organization.name %></td>
-              <td class="px-5 py-4 text-slate-600"><%= employer.employees.size %></td>
-              <td class="px-5 py-4 text-slate-600"><%= employer.enrollments.accepted.count %>/<%= employer.enrollments.count %> accepted</td>
-              <td class="px-5 py-4 text-slate-600"><%= employer.payroll_runs.count %> runs</td>
-              <td class="px-5 py-4 text-slate-600"><%= employer.compliance_cases.open.count %> open</td>
+              <td class="px-5 py-4 text-slate-600"><%= employer.organization_name %></td>
+              <td class="px-5 py-4 text-slate-600"><%= employer.employee_count %></td>
+              <td class="px-5 py-4 text-slate-600"><%= employer.accepted_enrollment_count %>/<%= employer.enrollment_count %> accepted</td>
+              <td class="px-5 py-4 text-slate-600"><%= employer.payroll_run_count %> runs</td>
+              <td class="px-5 py-4 text-slate-600"><%= employer.open_compliance_case_count %> open</td>
               <td class="px-5 py-4"><%= status_pill(employer.status) %></td>
             </tr>
           <% end %>

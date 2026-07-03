@@ -1,7 +1,7 @@
 class PayrollRunsController < ApplicationController
   def finalize
-    payroll_run = PayrollRun.find(params[:id])
-    result = Payroll::FinalizeRunCommand.new(payroll_run:).call
+    dto = Payroll::FinalizeRunDto.from_params(params)
+    result = Payroll::FinalizeRunCommand.new(dto:).call
 
     redirect_to payroll_path, notice: result.success? ? "Payroll run finalized." : result.errors.to_sentence
   end

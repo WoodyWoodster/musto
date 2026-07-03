@@ -2,7 +2,7 @@
   <div class="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
     <div>
       <%= link_to "Back to employers", employers_path, class: "text-sm font-semibold text-cyan-700 hover:text-cyan-900" %>
-      <p class="mt-5 text-sm font-semibold uppercase tracking-[0.18em] text-slate-500"><%= @employer.organization.name %></p>
+      <p class="mt-5 text-sm font-semibold uppercase tracking-[0.18em] text-slate-500"><%= @employer.organization_name %></p>
       <h1 class="mt-2 text-3xl font-semibold tracking-tight text-slate-950"><%= @employer.name %></h1>
       <p class="mt-2 max-w-3xl text-sm leading-6 text-slate-600"><%= @employer.legal_name.presence || "Legal entity pending" %> · EIN <%= @employer.ein.presence || "pending" %> · Vitable ID <%= @employer.vitable_id.presence || "not synced" %></p>
     </div>
@@ -11,10 +11,10 @@
 
   <div class="grid gap-4 md:grid-cols-4">
     <% [
-      ["Employees", @employer.employees.count],
-      ["Departments", @employer.departments.count],
-      ["Benefit plans", @employer.benefit_plans.count],
-      ["Open cases", @employer.compliance_cases.open.count]
+      ["Employees", @employer.employee_count],
+      ["Departments", @employer.department_count],
+      ["Benefit plans", @employer.benefit_plan_count],
+      ["Open cases", @employer.open_compliance_case_count]
     ].each do |label, value| %>
       <div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
         <p class="text-sm text-slate-500"><%= label %></p>
@@ -34,7 +34,7 @@
           <div class="grid gap-3 px-5 py-4 md:grid-cols-[1fr_auto]">
             <div>
               <p class="font-semibold text-slate-950"><%= employee.full_name %></p>
-              <p class="mt-1 text-sm text-slate-500"><%= employee.title.presence || "Role pending" %> · <%= employee.department&.name || "Unassigned" %> · <%= employee.work_location&.name || "Unassigned" %></p>
+              <p class="mt-1 text-sm text-slate-500"><%= employee.title.presence || "Role pending" %> · <%= employee.department_name || "Unassigned" %> · <%= employee.work_location_name || "Unassigned" %></p>
             </div>
             <div class="text-left md:text-right">
               <p class="font-semibold text-slate-950"><%= money_cents(employee.compensation_cents) %></p>

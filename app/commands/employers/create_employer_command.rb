@@ -1,13 +1,14 @@
 module Employers
   class CreateEmployerCommand < ApplicationCommand
-    def initialize(dto:)
+    def initialize(dto:, repository: EmployerRepository.new)
       @dto = dto
+      @repository = repository
     end
 
     def call
-      employer = Employer.new(@dto.to_attributes)
+      employer = @repository.create(@dto)
 
-      if employer.save
+      if employer.persisted?
         success(record: employer)
       else
         failure(record: employer, errors: employer.errors.full_messages)

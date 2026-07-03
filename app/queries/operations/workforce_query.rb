@@ -1,46 +1,21 @@
 module Operations
   class WorkforceQuery
-    def initialize(employer: Employer.includes(:organization).order(:created_at).first)
-      @employer = employer
+    def initialize(employer_repository: Employers::EmployerRepository.new)
+      @employer = employer_repository.first_for_operations
+      @repository = Workforce::WorkforceRepository.new(employer: @employer)
     end
 
     def call
       {
-        employer: @employer,
-        departments: departments,
-        locations: locations,
-        employees: employees.includes(:department, :work_location, :enrollments, :onboarding_tasks),
-        onboarding_tasks: onboarding_tasks.includes(employee: [ :department ]).order(:due_on),
-        documents: documents.includes(:employee).order(:expires_on)
+        employer: EmployerContextDto.from_record(@employer),
+        departments: @repository.departments.map { |department| DepartmentDto.from_record(department) },
+        locations: @repository.locations.map { |location| WorkLocationDto.from_record(location) },
+        employees: @repository.employees.map { |employee| WorkforceEmployeeDto.from_record(employee) },
+        onboarding_tasks: @repository.onboarding_tasks.map { |task| OnboardingTaskDto.from_record(task) },
+        open_onboarding_count: @repository.open_onboarding_count,
+        documents: @repository.documents.map { |document| DocumentExceptionDto.from_record(document) },
+        documents_attention_count: @repository.documents_attention_count
       }
-    end
-
-    private
-
-    def departments
-      return Department.none unless @employer
-
-      @employer.departments
-    end
-
-    def locations
-      return WorkLocation.none unless @employer
-
-      @employer.work_locations
-    end
-
-    def employees
-      return Employee.none unless @employer
-
-      @employer.employees
-    end
-
-    def onboarding_tasks
-      OnboardingTask.joins(:employee).where(employees: { employer_id: @employer&.id })
-    end
-
-    def documents
-      EmployeeDocument.joins(:employee).where(employees: { employer_id: @employer&.id })
     end
   end
 end

@@ -1,7 +1,7 @@
 class OnboardingTasksController < ApplicationController
   def complete
-    task = OnboardingTask.find(params[:id])
-    result = Onboarding::CompleteTaskCommand.new(task:).call
+    dto = Onboarding::CompleteTaskDto.from_params(params)
+    result = Onboarding::CompleteTaskCommand.new(dto:).call
 
     redirect_to workforce_path, notice: result.success? ? "Onboarding task completed." : result.errors.to_sentence
   end

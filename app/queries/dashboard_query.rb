@@ -1,42 +1,37 @@
 class DashboardQuery
+  def initialize(
+    employer_repository: Employers::EmployerRepository.new,
+    employee_repository: Employees::EmployeeRepository.new,
+    integration_repository: Vitable::IntegrationRepository.new,
+    dashboard_repository: Dashboard::DashboardRepository.new
+  )
+    @employer_repository = employer_repository
+    @employee_repository = employee_repository
+    @integration_repository = integration_repository
+    @dashboard_repository = dashboard_repository
+  end
+
   def call
     {
-      employer: Employer.includes(:organization).order(:created_at).first,
-      employers: Employer.includes(:organization).order(created_at: :desc),
-      active_employee_count: Employee.active.count,
-      payroll_ready_count: Employee.active.where.not(compensation_cents: 0).count,
-      open_onboarding_count: OnboardingTask.open.count,
-      pending_time_off_count: TimeOffRequest.pending.count,
-      compliance_urgent_count: ComplianceCase.urgent.count,
-      benefits_participation_rate: benefits_participation_rate,
+      employer: Operations::EmployerContextDto.from_record(@employer_repository.first_for_operations),
+      employers: @employer_repository.dashboard_portfolio.map { |employer| Employers::EmployerSummaryDto.from_record(employer) },
+      active_employee_count: @employee_repository.active_count,
+      payroll_ready_count: @employee_repository.payroll_ready_count,
+      open_onboarding_count: @dashboard_repository.open_onboarding_count,
+      pending_time_off_count: @dashboard_repository.pending_time_off_count,
+      compliance_urgent_count: @dashboard_repository.urgent_compliance_count,
+      benefits_participation_rate: @dashboard_repository.benefits_participation_rate,
       recent_activity: recent_activity,
-      upcoming_payroll: PayrollRun.order(pay_date: :asc).where(pay_date: Date.current..).first,
-      integration_health: integration_health
+      upcoming_payroll: Dashboard::PayrollPreviewDto.from_record(@dashboard_repository.upcoming_payroll),
+      integration_health: @integration_repository.integration_health
     }
   end
 
   private
 
-  def benefits_participation_rate
-    total = Enrollment.count
-    return 0 if total.zero?
-
-    ((Enrollment.accepted.count.to_f / total) * 100).round
-  end
-
-  def integration_health
-    {
-      active: IntegrationConnection.where(status: "active").count,
-      needs_credentials: IntegrationConnection.where(status: "needs_credentials").count,
-      pending_webhooks: WebhookEvent.unprocessed.count
-    }
-  end
-
   def recent_activity
-    [
-      *WebhookEvent.order(created_at: :desc).limit(4).map { |event| [ "Webhook", event.event_name, event.status, event.created_at ] },
-      *PayrollRun.order(updated_at: :desc).limit(3).map { |run| [ "Payroll", "Pay date #{run.pay_date}", run.status, run.updated_at ] },
-      *ComplianceCase.order(updated_at: :desc).limit(3).map { |item| [ "Compliance", item.kind.titleize, item.status, item.updated_at ] }
-    ].sort_by(&:last).reverse.first(8)
+    @dashboard_repository.recent_activity.map do |type, title, status, timestamp|
+      Dashboard::ActivityDto.new(type:, title:, status:, timestamp:)
+    end
   end
 end

@@ -17,7 +17,7 @@ module Api
       end
 
       def show
-        employer = Employer.find(params[:id])
+        employer = Employers::EmployerRepository.new.find(params[:id])
         render json: EmployerSerializer.new(employer).as_json
       end
 
