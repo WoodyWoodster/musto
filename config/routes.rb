@@ -34,6 +34,9 @@ Rails.application.routes.draw do
 
   resources :payroll_runs, only: [ :show ] do
     post :finalize, on: :member
+    resource :benefits_export, only: [ :show ], controller: "payroll_benefits_exports" do
+      post :generate
+    end
   end
 
   resources :compliance_cases, only: [] do

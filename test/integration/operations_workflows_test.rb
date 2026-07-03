@@ -74,6 +74,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       workforce_path,
       payroll_path,
       payroll_run_path(@payroll_run),
+      payroll_run_benefits_export_path(@payroll_run),
       benefits_path,
       benefits_reconciliation_path,
       enrollment_path(@pending_enrollment),
@@ -140,6 +141,39 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_select "h2", "Preflight checklist"
     assert_select "h2", "Employee pay lines"
     assert_select "h2", "Export payload"
+  end
+
+  test "payroll benefits export workspace exposes manifest DTOs" do
+    detail = Payroll::BenefitsExportQuery.new.call(@payroll_run.id)
+
+    assert_instance_of Payroll::BenefitsExportDetailDto, detail
+    assert_instance_of Payroll::BenefitsExportMetricDto, detail.metrics.first
+    assert_instance_of Payroll::BenefitsExportPreflightCheckDto, detail.preflight_checks.first
+    assert_instance_of Payroll::BenefitsExportLineDto, detail.lines.first
+    assert_equal 1, detail.included_lines.count
+    assert_equal 2, detail.holdback_lines.count
+
+    get payroll_run_benefits_export_path(@payroll_run)
+
+    assert_response :success
+    assert_select "h1", "Benefits deduction export"
+    assert_select "h2", "Export preflight"
+    assert_select "h2", "Manifest payload"
+    assert_select "h2", "Included deduction lines"
+    assert_select "h2", "Holdbacks"
+  end
+
+  test "generates a payroll benefits export manifest" do
+    post generate_payroll_run_benefits_export_path(@payroll_run)
+
+    assert_redirected_to payroll_run_benefits_export_path(@payroll_run)
+    batch = @payroll_run.reload.metadata.fetch("benefits_export")
+    assert_match(/\Avitable_benefits_#{@payroll_run.id}_/, batch.fetch("batch_id"))
+    assert_equal "needs_review", batch.fetch("status")
+    assert_equal 1, batch.fetch("line_count")
+    assert_equal 2, batch.fetch("holdback_count")
+    assert_equal @plan.monthly_premium_cents, batch.fetch("total_cents")
+    assert_equal @employee.full_name, batch.fetch("lines").first.fetch("employee_name")
   end
 
   test "benefits enrollment workspace exposes review and sync DTOs" do

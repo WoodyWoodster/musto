@@ -10,6 +10,7 @@
     </div>
     <div class="flex flex-wrap items-center gap-2">
       <%= status_pill(@payroll_run.status) %>
+      <%= link_to "Benefits export", payroll_run_benefits_export_path(@payroll_run.id), class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm hover:border-indigo-300 hover:text-indigo-800" %>
       <% unless @payroll_run.finalized? %>
         <%= button_to "Finalize run", finalize_payroll_run_path(@payroll_run.id), method: :post, class: "rounded-md bg-slate-950 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-slate-800" %>
       <% end %>
@@ -72,6 +73,9 @@
         <p class="text-sm text-slate-400">Shape prepared for provider handoff once credentials and exports are enabled.</p>
       </div>
       <pre class="overflow-x-auto p-5 text-xs leading-6 text-cyan-100"><%= JSON.pretty_generate(@payroll_run.export_payload) %></pre>
+      <div class="border-t border-white/10 px-5 py-4">
+        <%= link_to "Open benefits export workspace", payroll_run_benefits_export_path(@payroll_run.id), class: "text-sm font-semibold text-cyan-200 hover:text-white" %>
+      </div>
     </section>
   </div>
 
