@@ -30,6 +30,8 @@ VITABLE_WEBHOOK_SECRET=...
 
 Webhook payloads are stored idempotently by `event_id`. Vitable webhook events include identifiers only, so `Vitable::ProcessWebhookCommand` records the event and, when credentials exist, calls `Vitable::FetchResourceCommand` to retrieve the fresh resource state.
 
+The Vitable census sync workspace builds a local review manifest for `POST /v1/employers/:id/census-sync`, separates ready employee rows from holdbacks, and records submit attempts as `SyncRun` rows. Without `VITABLE_CONNECT_API_KEY`, submits are accepted by the app as `needs_credentials` runs so the full workflow can be proofed before live credentials exist.
+
 ## CQRS Layout
 
 - Commands: `app/commands`
@@ -48,6 +50,7 @@ Read-side UI:
 - `GET /`
 - `GET /employers`
 - `GET /employers/:id`
+- `GET /integrations/vitable/census`
 
 ## Local Setup
 

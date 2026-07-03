@@ -1,0 +1,222 @@
+<section class="space-y-7">
+  <div class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div class="grid gap-0 xl:grid-cols-[1.2fr_0.8fr]">
+      <div class="p-6 lg:p-8">
+        <div class="flex flex-wrap items-center gap-2">
+          <%= status_pill(@census.latest_manifest&.status || "pending") %>
+          <span class="rounded-full bg-cyan-50 px-3 py-1 text-xs font-semibold text-cyan-800 ring-1 ring-inset ring-cyan-200">Census sync</span>
+          <span class="rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-800 ring-1 ring-inset ring-indigo-200">Vitable Connect</span>
+        </div>
+
+        <h1 class="mt-5 text-4xl font-semibold tracking-tight text-slate-950">Vitable census sync</h1>
+        <p class="mt-3 max-w-3xl text-base leading-7 text-slate-600">
+          Build and submit the employer census payload for <%= @census.employer&.name || "your employer portfolio" %>, with required-field holdbacks, credential-aware queueing, and API request telemetry before a live Vitable push.
+        </p>
+
+        <div class="mt-6 flex flex-wrap gap-3">
+          <%= button_to "Generate manifest", generate_vitable_census_manifest_path, method: :post, params: { requested_by: "ops_console" }, class: "rounded-md bg-slate-950 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-slate-800" %>
+          <%= button_to "Submit census sync", submit_vitable_census_sync_path, method: :post, params: { requested_by: "ops_console" }, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
+          <%= link_to "Vitable connection", @census.connection_id ? integration_connection_path(@census.connection_id) : integrations_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
+          <%= link_to "Ruby SDK docs", @census.ruby_docs_url, target: "_blank", rel: "noopener", class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
+        </div>
+      </div>
+
+      <aside class="border-t border-slate-200 bg-slate-950 p-6 text-white xl:border-l xl:border-t-0 xl:p-8">
+        <p class="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-300">Latest manifest</p>
+        <% if @census.latest_manifest.present? %>
+          <p class="mt-6 break-all font-mono text-sm font-semibold"><%= @census.latest_manifest.batch_id %></p>
+          <p class="mt-3 text-sm text-slate-300">Generated <%= time_ago_in_words(@census.latest_manifest.generated_at) %> ago by <%= @census.latest_manifest.requested_by %></p>
+          <div class="mt-6 grid grid-cols-2 gap-3">
+            <div class="rounded-md bg-white/10 p-4">
+              <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Ready</p>
+              <p class="mt-2 text-2xl font-semibold"><%= compact_number(@census.latest_manifest.ready_count) %></p>
+            </div>
+            <div class="rounded-md bg-white/10 p-4">
+              <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Holdbacks</p>
+              <p class="mt-2 text-2xl font-semibold"><%= compact_number(@census.latest_manifest.holdback_count) %></p>
+            </div>
+          </div>
+          <div class="mt-5 rounded-md bg-white/10 p-4">
+            <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Endpoint</p>
+            <p class="mt-2 break-all font-mono text-xs text-slate-200"><%= @census.latest_manifest.endpoint %></p>
+            <p class="mt-2 break-all font-mono text-xs text-slate-400"><%= @census.latest_manifest.remote_employer_id.presence || "Remote employer ID pending" %></p>
+          </div>
+        <% else %>
+          <p class="mt-6 text-3xl font-semibold tracking-tight">No manifest</p>
+          <p class="mt-2 text-sm leading-6 text-slate-300">Generate a local manifest to inspect ready rows, missing fields, and the SDK payload before submit.</p>
+        <% end %>
+      </aside>
+    </div>
+  </div>
+
+  <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+    <% @census.metrics.each do |metric| %>
+      <article class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <div class="flex items-center justify-between gap-3">
+          <p class="text-sm font-medium text-slate-500"><%= metric.label %></p>
+          <span class="h-2.5 w-2.5 shrink-0 rounded-full <%= metric.accent %>"></span>
+        </div>
+        <p class="mt-4 break-words text-3xl font-semibold tracking-tight text-slate-950">
+          <%= metric.format == "number" ? compact_number(metric.value) : metric.value %>
+        </p>
+        <div class="mt-2 flex flex-wrap items-center gap-2">
+          <%= status_pill(metric.status) %>
+          <p class="text-sm text-slate-500"><%= metric.hint %></p>
+        </div>
+      </article>
+    <% end %>
+  </div>
+
+  <div class="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
+    <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="border-b border-slate-100 px-5 py-4">
+        <h2 class="text-base font-semibold text-slate-950">Submit preflight</h2>
+        <p class="text-sm text-slate-500">The checks that decide whether a live census sync can be sent.</p>
+      </div>
+      <div class="divide-y divide-slate-100">
+        <% @census.preflight_checks.each do |check| %>
+          <div class="flex items-start justify-between gap-4 px-5 py-4">
+            <div class="min-w-0">
+              <p class="font-semibold text-slate-950"><%= check.label %></p>
+              <p class="mt-1 break-words text-sm text-slate-500"><%= check.detail %></p>
+            </div>
+            <%= status_pill(check.status) %>
+          </div>
+        <% end %>
+      </div>
+    </section>
+
+    <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="border-b border-slate-100 px-5 py-4">
+        <h2 class="text-base font-semibold text-slate-950">Sync attempts</h2>
+        <p class="text-sm text-slate-500">Credential-safe submit attempts recorded as Vitable sync runs.</p>
+      </div>
+      <div class="divide-y divide-slate-100">
+        <% @census.sync_runs.each do |sync| %>
+          <div class="flex items-start justify-between gap-4 px-5 py-4">
+            <div class="min-w-0">
+              <p class="font-semibold text-slate-950"><%= sync.operation.humanize %> <%= sync.resource_type %></p>
+              <p class="mt-1 text-sm text-slate-500"><%= sync.started_at&.strftime("%b %-d, %I:%M %p") || "n/a" %></p>
+              <% if sync.error_message.present? %>
+                <p class="mt-1 break-words text-xs text-rose-600"><%= sync.error_message %></p>
+              <% end %>
+            </div>
+            <%= status_pill(sync.status) %>
+          </div>
+        <% end %>
+        <% if @census.sync_runs.empty? %>
+          <p class="px-5 py-5 text-sm text-slate-500">No census sync attempts have been recorded yet.</p>
+        <% end %>
+      </div>
+    </section>
+  </div>
+
+  <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div class="border-b border-slate-100 px-5 py-4">
+      <h2 class="text-base font-semibold text-slate-950">Ready census rows</h2>
+      <p class="text-sm text-slate-500">Employees with the SDK-required fields and the exact classification that will be sent.</p>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="min-w-full divide-y divide-slate-100 text-sm">
+        <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <tr>
+            <th class="px-5 py-3">Employee</th>
+            <th class="px-5 py-3">Contact</th>
+            <th class="px-5 py-3">DOB</th>
+            <th class="px-5 py-3">Class</th>
+            <th class="px-5 py-3">Reference</th>
+            <th class="px-5 py-3">Remote</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          <% @census.employees.each do |employee| %>
+            <tr class="hover:bg-slate-50">
+              <td class="px-5 py-4">
+                <%= link_to employee.employee_name, employee_path(employee.employee_id), class: "font-semibold text-slate-950 hover:text-cyan-700" %>
+                <p class="mt-1 text-xs text-slate-500"><%= employee.department_name %> · <%= employee.location_name %></p>
+              </td>
+              <td class="px-5 py-4">
+                <p class="break-all text-slate-700"><%= employee.email %></p>
+                <p class="mt-1 font-mono text-xs text-slate-500"><%= employee.phone %></p>
+              </td>
+              <td class="px-5 py-4 text-slate-600">
+                <%= employee.date_of_birth.strftime("%b %-d, %Y") %>
+                <p class="mt-1 text-xs text-slate-500"><%= employee.start_date&.strftime("Start %b %-d, %Y") || "Start pending" %></p>
+              </td>
+              <td class="px-5 py-4">
+                <%= status_pill(employee.readiness_status) %>
+                <p class="mt-1 text-xs text-slate-500"><%= employee.employee_class %> · <%= employee.compensation_type %></p>
+              </td>
+              <td class="px-5 py-4">
+                <p class="break-all font-mono text-xs text-slate-600"><%= employee.reference_id %></p>
+                <p class="mt-1 text-xs text-slate-500"><%= compact_number(employee.enrollment_count) %> enrollments</p>
+              </td>
+              <td class="px-5 py-4">
+                <%= status_pill(employee.remote_pending? ? "remote_pending" : "synced") %>
+                <p class="mt-1 max-w-40 truncate text-xs text-slate-500"><%= employee.remote_employee_id.presence || "Match or create on sync" %></p>
+              </td>
+            </tr>
+          <% end %>
+          <% if @census.employees.empty? %>
+            <tr>
+              <td colspan="6" class="px-5 py-5 text-sm text-slate-500">Generate a manifest to populate ready census rows.</td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <div class="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
+    <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="border-b border-slate-100 px-5 py-4">
+        <h2 class="text-base font-semibold text-slate-950">Holdbacks</h2>
+        <p class="text-sm text-slate-500">Employees excluded from the SDK payload until census-required fields are repaired.</p>
+      </div>
+      <div class="divide-y divide-slate-100">
+        <% @census.holdbacks.each do |holdback| %>
+          <div class="p-5">
+            <div class="flex flex-wrap items-start justify-between gap-3">
+              <div class="min-w-0">
+                <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400"><%= holdback.department_name %> · <%= holdback.location_name %></p>
+                <h3 class="mt-2 text-base font-semibold text-slate-950"><%= holdback.employee_name %></h3>
+              </div>
+              <%= status_pill(holdback.status) %>
+            </div>
+            <p class="mt-3 text-sm leading-6 text-slate-600"><%= holdback.reason %></p>
+            <p class="mt-2 break-all text-xs text-slate-400"><%= holdback.reason_code %> · <%= holdback.email %></p>
+          </div>
+        <% end %>
+        <% if @census.holdbacks.empty? %>
+          <p class="px-5 py-5 text-sm text-slate-500">No holdbacks in the latest manifest.</p>
+        <% end %>
+      </div>
+    </section>
+
+    <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="border-b border-slate-100 px-5 py-4">
+        <h2 class="text-base font-semibold text-slate-950">API request trail</h2>
+        <p class="text-sm text-slate-500">Live SDK calls to the census endpoint when credentials are configured.</p>
+      </div>
+      <div class="divide-y divide-slate-100">
+        <% @census.request_logs.each do |log| %>
+          <div class="px-5 py-4">
+            <div class="flex items-start justify-between gap-4">
+              <div class="min-w-0">
+                <p class="font-semibold text-slate-950"><%= log.method %> <%= log.path %></p>
+                <p class="mt-1 text-sm text-slate-500"><%= log.operation %> · <%= log.duration_ms || 0 %>ms</p>
+                <% if log.error_class.present? %>
+                  <p class="mt-1 break-all text-xs text-rose-600"><%= log.error_class %></p>
+                <% end %>
+              </div>
+              <%= status_pill(log.error_class.present? ? "failed" : "ready") %>
+            </div>
+          </div>
+        <% end %>
+        <% if @census.request_logs.empty? %>
+          <p class="px-5 py-5 text-sm text-slate-500">No census API requests have been sent yet.</p>
+        <% end %>
+      </div>
+    </section>
+  </div>
+</section>

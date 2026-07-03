@@ -24,8 +24,11 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       department: @department,
       work_location: @location,
       title: "People Ops Lead",
+      date_of_birth: Date.new(1990, 1, 15),
+      start_on: Date.current - 2.years,
       compensation_cents: 115_000_00,
-      onboarding_status: "in_progress"
+      onboarding_status: "in_progress",
+      metadata: { phone: "5551234567" }
     )
     @employer_bank_account = @employer.employer_bank_accounts.create!(name: "Payroll checking", institution_name: "Mercury Bank", routing_number_last4: "1101", account_last4: "4821", status: "verified", primary_account: true, verified_at: 1.day.ago)
     @employee_bank_account = @employee.employee_bank_accounts.create!(nickname: "Primary checking", institution_name: "Ally", routing_number_last4: "1040", account_last4: "9088", status: "pending_verification")
@@ -271,6 +274,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       enrollment_path(@pending_enrollment),
       compliance_path,
       integrations_path,
+      vitable_census_sync_path,
       integration_connection_path(@connection),
       webhook_event_path(@webhook_event),
       employee_path(@employee)
@@ -311,6 +315,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     reconciliation = Benefits::ReconciliationQuery.new.call
     compliance = Operations::ComplianceQuery.new.call
     integrations = Operations::IntegrationsQuery.new.call
+    census = Vitable::CensusSyncQuery.new.call
 
     assert_instance_of Employers::EmployerSummaryDto, dashboard.fetch(:employers).first
     assert_instance_of Dashboard::IntegrationHealthDto, dashboard.fetch(:integration_health)
@@ -435,6 +440,9 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_instance_of Benefits::ReconciliationDetailDto, reconciliation
     assert_instance_of Operations::ComplianceCaseDto, compliance.fetch(:cases).first
     assert_instance_of Operations::IntegrationConnectionDto, integrations.fetch(:connections).first
+    assert_instance_of Vitable::CensusSyncCenterDto, census
+    assert_instance_of Vitable::CensusSyncMetricDto, census.metrics.first
+    assert_instance_of Vitable::CensusSyncPreflightCheckDto, census.preflight_checks.first
   end
 
   test "reports command center exposes finance and risk DTOs" do
@@ -1747,6 +1755,65 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_select "h2", "API request trail"
   end
 
+  test "vitable census sync workspace exposes manifest DTOs" do
+    holdback_employee = create_census_holdback_employee
+    Vitable::GenerateCensusManifestCommand.new(dto: Vitable::GenerateCensusManifestDto.new(requested_by: "ops_test")).call
+    detail = Vitable::CensusSyncQuery.new.call
+
+    assert_instance_of Vitable::CensusSyncCenterDto, detail
+    assert_instance_of Vitable::CensusSyncMetricDto, detail.metrics.first
+    assert_instance_of Vitable::CensusSyncPreflightCheckDto, detail.preflight_checks.first
+    assert_instance_of Vitable::CensusSyncManifestDto, detail.latest_manifest
+    assert_instance_of Vitable::CensusSyncEmployeeDto, detail.employees.first
+    assert_instance_of Vitable::CensusSyncHoldbackDto, detail.holdbacks.first
+    assert_equal @employee.id, detail.employees.first.employee_id
+    assert_equal holdback_employee.id, detail.holdbacks.first.employee_id
+
+    get vitable_census_sync_path
+
+    assert_response :success
+    assert_select "h1", "Vitable census sync"
+    assert_select "h2", "Submit preflight"
+    assert_select "h2", "Ready census rows"
+    assert_select "h2", "Holdbacks"
+    assert_select "h2", "Sync attempts"
+    assert_select "h2", "API request trail"
+  end
+
+  test "generates a Vitable census manifest through command action" do
+    create_census_holdback_employee
+
+    post generate_vitable_census_manifest_path, params: { requested_by: "integration_admin" }
+
+    assert_redirected_to vitable_census_sync_path
+    batch = @employer.reload.settings.fetch("vitable_census_sync_batch")
+    assert_match(/\Avitable_census_#{@employer.id}_/, batch.fetch("batch_id"))
+    assert_equal "integration_admin", batch.fetch("requested_by")
+    assert_equal "needs_review", batch.fetch("status")
+    assert_equal 2, batch.fetch("totals").fetch("employee_count")
+    assert_equal 1, batch.fetch("totals").fetch("ready_count")
+    assert_equal 1, batch.fetch("totals").fetch("holdback_count")
+    assert_equal "5551234567", batch.fetch("employees").first.fetch("phone")
+    assert_equal "missing_required_fields", batch.fetch("holdbacks").first.fetch("reason_code")
+    assert_equal "/v1/employers/:employer_id/census-sync", batch.fetch("endpoint")
+  end
+
+  test "submits Vitable census sync as missing credentials sync run without API key" do
+    @employer.update!(vitable_id: "empr_ops_123")
+    Vitable::GenerateCensusManifestCommand.new(dto: Vitable::GenerateCensusManifestDto.new(requested_by: "ops_test")).call
+
+    assert_difference -> { @connection.sync_runs.where(operation: "census_sync").count }, 1 do
+      post submit_vitable_census_sync_path, params: { requested_by: "integration_admin" }
+    end
+
+    assert_redirected_to vitable_census_sync_path
+    sync = @connection.sync_runs.where(operation: "census_sync").recent_first.first
+    assert_equal "needs_credentials", sync.status
+    assert_match @connection.api_key_reference, sync.error_message
+    assert_equal "integration_admin", sync.stats.fetch("requested_by")
+    assert_equal @employee.email, sync.stats.fetch("payload").fetch("employees").first.fetch("email")
+  end
+
   test "verifies integration connection credentials without leaking secrets" do
     @connection.update!(status: "active", metadata: { existing: "value" })
 
@@ -1851,5 +1918,18 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_redirected_to compliance_path
     assert_equal "resolved", @compliance_case.reload.status
     assert_not_nil @compliance_case.resolved_at
+  end
+
+  def create_census_holdback_employee
+    @employer.employees.create!(
+      first_name: "Alex",
+      last_name: "Missing",
+      email: "alex.missing@example.com",
+      department: @department,
+      work_location: @location,
+      title: "Benefits Analyst",
+      compensation_cents: 82_000_00,
+      onboarding_status: "complete"
+    )
   end
 end
