@@ -32,6 +32,8 @@ Webhook payloads are stored idempotently by `event_id`. Vitable webhook events i
 
 The Vitable census sync workspace builds a local review manifest for `POST /v1/employers/:id/census-sync`, separates ready employee rows from holdbacks, and records submit attempts as `SyncRun` rows. Without `VITABLE_CONNECT_API_KEY`, submits are accepted by the app as `needs_credentials` runs so the full workflow can be proofed before live credentials exist.
 
+The embedded enrollment session workspace prepares employee-bound access-token requests for Vitable's embedded flows. It uses `bound_entity: { type: :employee, id: "empl_..." }`, records every issue attempt as a `SyncRun`, and filters token values before any API telemetry is persisted.
+
 ## CQRS Layout
 
 - Commands: `app/commands`
@@ -51,6 +53,7 @@ Read-side UI:
 - `GET /employers`
 - `GET /employers/:id`
 - `GET /integrations/vitable/census`
+- `GET /integrations/vitable/embedded-sessions`
 
 ## Local Setup
 

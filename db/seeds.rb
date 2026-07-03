@@ -94,18 +94,19 @@ locations = {
 end
 
 employees = [
-  [ "Avery", "Kim", "avery.kim@example.com", "1990-04-11", "5551231001", "Head of Operations", "OPS", "Philadelphia HQ", 132_000_00, "complete" ],
-  [ "Jordan", "Lee", "jordan.lee@example.com", "1987-09-23", "5551231002", "Retail Lead", "RET", "Philadelphia HQ", 86_000_00, "in_progress" ],
-  [ "Morgan", "Patel", "morgan.patel@example.com", "1995-01-18", "5551231003", "People Partner", "PPL", "Remote US", 92_000_00, "complete" ],
-  [ "Riley", "Chen", "riley.chen@example.com", "1992-12-02", "5551231004", "Payroll Analyst", "FIN", "Remote US", 98_000_00, "in_progress" ],
-  [ "Sam", "Rivera", "sam.rivera@example.com", "1989-05-06", "5551231005", "Roastery Manager", "OPS", "Denver Roastery", 104_000_00, "blocked" ],
-  [ "Taylor", "Brooks", "taylor.brooks@example.com", "1998-08-17", "5551231006", "Cafe Associate", "RET", "Denver Roastery", 54_000_00, "complete" ]
-].map do |first_name, last_name, email, date_of_birth, phone, title, department_code, location_name, compensation_cents, onboarding_status|
+  [ "Avery", "Kim", "avery.kim@example.com", "1990-04-11", "5551231001", "empl_atlas_avery", "Head of Operations", "OPS", "Philadelphia HQ", 132_000_00, "complete" ],
+  [ "Jordan", "Lee", "jordan.lee@example.com", "1987-09-23", "5551231002", "empl_atlas_jordan", "Retail Lead", "RET", "Philadelphia HQ", 86_000_00, "in_progress" ],
+  [ "Morgan", "Patel", "morgan.patel@example.com", "1995-01-18", "5551231003", "empl_atlas_morgan", "People Partner", "PPL", "Remote US", 92_000_00, "complete" ],
+  [ "Riley", "Chen", "riley.chen@example.com", "1992-12-02", "5551231004", nil, "Payroll Analyst", "FIN", "Remote US", 98_000_00, "in_progress" ],
+  [ "Sam", "Rivera", "sam.rivera@example.com", "1989-05-06", "5551231005", nil, "Roastery Manager", "OPS", "Denver Roastery", 104_000_00, "blocked" ],
+  [ "Taylor", "Brooks", "taylor.brooks@example.com", "1998-08-17", "5551231006", nil, "Cafe Associate", "RET", "Denver Roastery", 54_000_00, "complete" ]
+].map do |first_name, last_name, email, date_of_birth, phone, vitable_id, title, department_code, location_name, compensation_cents, onboarding_status|
   employee = employer.employees.find_or_initialize_by(email:)
   employee.assign_attributes(
     first_name:,
     last_name:,
     date_of_birth:,
+    vitable_id:,
     title:,
     department: departments.fetch(department_code),
     work_location: locations.fetch(location_name),

@@ -91,6 +91,9 @@ Rails.application.routes.draw do
   get "integrations/vitable/census", to: "vitable_census_sync#show", as: :vitable_census_sync
   post "integrations/vitable/census/manifest", to: "vitable_census_sync#generate_manifest", as: :generate_vitable_census_manifest
   post "integrations/vitable/census/submit", to: "vitable_census_sync#submit", as: :submit_vitable_census_sync
+  get "integrations/vitable/embedded-sessions", to: "vitable_embedded_sessions#show", as: :vitable_embedded_sessions
+  post "integrations/vitable/embedded-sessions/packet", to: "vitable_embedded_sessions#generate_packet", as: :generate_vitable_embedded_sessions
+  post "integrations/vitable/embedded-sessions/employees/:employee_id/issue", to: "vitable_embedded_sessions#issue", as: :issue_vitable_embedded_session
 
   resources :onboarding_tasks, only: [] do
     post :complete, on: :member

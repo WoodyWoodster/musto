@@ -7,8 +7,24 @@ module Vitable
     end
 
     def issue_access_token
-      instrument("auth.issue_access_token", :post, "/auth/token") do
-        client.auth.issue_access_token(grant_type: "client_credentials")
+      body = { grant_type: "client_credentials" }
+
+      instrument("auth.issue_access_token", :post, "/v1/auth/access-tokens", request_body: body) do
+        client.auth.issue_access_token(grant_type: :client_credentials)
+      end
+    end
+
+    def issue_employee_access_token(employee_id)
+      body = {
+        grant_type: "client_credentials",
+        bound_entity: { type: "employee", id: employee_id }
+      }
+
+      instrument("auth.issue_employee_access_token", :post, "/v1/auth/access-tokens", request_body: body) do
+        client.auth.issue_access_token(
+          grant_type: :client_credentials,
+          bound_entity: { type: :employee, id: employee_id }
+        )
       end
     end
 
@@ -74,11 +90,30 @@ module Vitable
     end
 
     def serialize_response(response)
-      return {} if response.blank?
-      return response.deep_to_h if response.respond_to?(:deep_to_h)
-      return response.to_h if response.respond_to?(:to_h)
+      serialized = if response.blank?
+        {}
+      elsif response.respond_to?(:deep_to_h)
+        response.deep_to_h
+      elsif response.respond_to?(:to_h)
+        response.to_h
+      else
+        { value: response.to_s }
+      end
 
-      { value: response.to_s }
+      redact_token_values(serialized.deep_stringify_keys)
+    end
+
+    def redact_token_values(value)
+      case value
+      when Hash
+        value.to_h do |key, entry|
+          [ key, key == "access_token" ? "[FILTERED]" : redact_token_values(entry) ]
+        end
+      when Array
+        value.map { |entry| redact_token_values(entry) }
+      else
+        value
+      end
     end
 
     def census_employee_payload(employee)

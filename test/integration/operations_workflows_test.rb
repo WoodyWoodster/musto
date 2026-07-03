@@ -275,6 +275,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       compliance_path,
       integrations_path,
       vitable_census_sync_path,
+      vitable_embedded_sessions_path,
       integration_connection_path(@connection),
       webhook_event_path(@webhook_event),
       employee_path(@employee)
@@ -316,6 +317,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     compliance = Operations::ComplianceQuery.new.call
     integrations = Operations::IntegrationsQuery.new.call
     census = Vitable::CensusSyncQuery.new.call
+    embedded_sessions = Vitable::EmbeddedSessionsQuery.new.call
 
     assert_instance_of Employers::EmployerSummaryDto, dashboard.fetch(:employers).first
     assert_instance_of Dashboard::IntegrationHealthDto, dashboard.fetch(:integration_health)
@@ -443,6 +445,9 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_instance_of Vitable::CensusSyncCenterDto, census
     assert_instance_of Vitable::CensusSyncMetricDto, census.metrics.first
     assert_instance_of Vitable::CensusSyncPreflightCheckDto, census.preflight_checks.first
+    assert_instance_of Vitable::EmbeddedSessionsCenterDto, embedded_sessions
+    assert_instance_of Vitable::EmbeddedSessionMetricDto, embedded_sessions.metrics.first
+    assert_instance_of Vitable::EmbeddedSessionPreflightCheckDto, embedded_sessions.preflight_checks.first
   end
 
   test "reports command center exposes finance and risk DTOs" do
@@ -1814,6 +1819,99 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal @employee.email, sync.stats.fetch("payload").fetch("employees").first.fetch("email")
   end
 
+  test "embedded enrollment sessions workspace exposes token readiness DTOs" do
+    @employee.update!(vitable_id: "empl_ops_casey")
+    holdback_employee = create_embedded_session_holdback_employee
+    Vitable::GenerateEmbeddedSessionsCommand.new(dto: Vitable::GenerateEmbeddedSessionsDto.new(requested_by: "ops_test")).call
+    detail = Vitable::EmbeddedSessionsQuery.new.call
+
+    assert_instance_of Vitable::EmbeddedSessionsCenterDto, detail
+    assert_instance_of Vitable::EmbeddedSessionMetricDto, detail.metrics.first
+    assert_instance_of Vitable::EmbeddedSessionPreflightCheckDto, detail.preflight_checks.first
+    assert_instance_of Vitable::EmbeddedSessionPacketDto, detail.latest_packet
+    assert_instance_of Vitable::EmbeddedSessionEmployeeDto, detail.employees.first
+    assert_instance_of Vitable::EmbeddedSessionHoldbackDto, detail.holdbacks.first
+    assert_equal @employee.id, detail.employees.first.employee_id
+    assert_equal holdback_employee.id, detail.holdbacks.first.employee_id
+
+    get vitable_embedded_sessions_path
+
+    assert_response :success
+    assert_select "h1", "Embedded enrollment sessions"
+    assert_select "h2", "Issue preflight"
+    assert_select "h2", "Session-ready employees"
+    assert_select "h2", "Session holdbacks"
+    assert_select "h2", "Token attempts"
+    assert_select "h2", "Token API request trail"
+  end
+
+  test "generates a Vitable embedded enrollment session packet" do
+    @employee.update!(vitable_id: "empl_ops_casey")
+
+    post generate_vitable_embedded_sessions_path, params: { requested_by: "integration_admin" }
+
+    assert_redirected_to vitable_embedded_sessions_path
+    packet = @employer.reload.settings.fetch("vitable_embedded_sessions_packet")
+    assert_match(/\Avitable_embedded_sessions_#{@employer.id}_/, packet.fetch("packet_id"))
+    assert_equal "integration_admin", packet.fetch("requested_by")
+    assert_equal "ready", packet.fetch("status")
+    assert_equal 1, packet.fetch("totals").fetch("employee_count")
+    assert_equal 1, packet.fetch("totals").fetch("ready_count")
+    assert_equal 0, packet.fetch("totals").fetch("holdback_count")
+    assert_equal 2, packet.fetch("totals").fetch("pending_election_count")
+    assert_equal "employee", packet.fetch("token_request").fetch("bound_entity_type")
+    assert_equal @employee.vitable_id, packet.fetch("employees").first.fetch("remote_employee_id")
+  end
+
+  test "issues embedded enrollment session as missing credentials sync run without API key" do
+    @employee.update!(vitable_id: "empl_ops_casey")
+    Vitable::GenerateEmbeddedSessionsCommand.new(dto: Vitable::GenerateEmbeddedSessionsDto.new(requested_by: "ops_test")).call
+
+    assert_difference -> { @connection.sync_runs.where(operation: "embedded_enrollment_token").count }, 1 do
+      post issue_vitable_embedded_session_path(@employee), params: { requested_by: "integration_admin" }
+    end
+
+    assert_redirected_to vitable_embedded_sessions_path
+    sync = @connection.sync_runs.where(operation: "embedded_enrollment_token").recent_first.first
+    assert_equal "needs_credentials", sync.status
+    assert_match @connection.api_key_reference, sync.error_message
+    assert_equal @employee.vitable_id, sync.stats.dig("bound_entity", "id")
+    assert_equal "integration_admin", sync.stats.fetch("requested_by")
+    assert_not_includes sync.stats.to_json, "vit_at_"
+  end
+
+  test "successful embedded session command redacts token response" do
+    @employee.update!(vitable_id: "empl_ops_casey")
+    response_class = Data.define(:access_token, :expires_in, :token_type, :bound_entity)
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:issue_employee_access_token) do |employee_id|
+        response_class.new(
+          access_token: "vit_at_secret_value",
+          expires_in: 3_600,
+          token_type: "Bearer",
+          bound_entity: { id: employee_id, type: "employee" }
+        )
+      end
+    end
+    previous_key = ENV[@connection.api_key_reference]
+    ENV[@connection.api_key_reference] = "vit_apk_test_value"
+
+    result = Vitable::IssueEmbeddedSessionCommand.new(
+      dto: Vitable::IssueEmbeddedSessionDto.new(employee_id: @employee.id, requested_by: "integration_admin"),
+      gateway_class:
+    ).call
+
+    assert result.success?
+    sync = @connection.sync_runs.where(operation: "embedded_enrollment_token").recent_first.first
+    assert_equal "succeeded", sync.status
+    assert_equal "[FILTERED]", sync.stats.dig("token_response", "access_token")
+    assert_equal 3_600, sync.stats.dig("token_response", "expires_in")
+    assert_not_includes sync.stats.to_json, "vit_at_secret_value"
+  ensure
+    ENV[@connection.api_key_reference] = previous_key
+  end
+
   test "verifies integration connection credentials without leaking secrets" do
     @connection.update!(status: "active", metadata: { existing: "value" })
 
@@ -1931,5 +2029,24 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       compensation_cents: 82_000_00,
       onboarding_status: "complete"
     )
+  end
+
+  def create_embedded_session_holdback_employee
+    @employer.employees.create!(
+      first_name: "Emery",
+      last_name: "Remote",
+      email: "emery.remote@example.com",
+      department: @department,
+      work_location: @location,
+      title: "Enrollment Specialist",
+      compensation_cents: 78_000_00,
+      onboarding_status: "complete"
+    ).tap do |employee|
+      employee.enrollments.create!(
+        benefit_plan: @pending_plan,
+        status: "pending",
+        effective_on: Date.current.next_month.beginning_of_month
+      )
+    end
   end
 end
