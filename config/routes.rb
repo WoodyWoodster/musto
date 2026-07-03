@@ -16,6 +16,9 @@ Rails.application.routes.draw do
   end
 
   get "workforce", to: "operations#workforce"
+  get "people/directory", to: "people_directory#show", as: :people_directory
+  post "people/directory/snapshot", to: "people_directory#generate_snapshot", as: :generate_people_directory_snapshot
+  post "people/directory/employees/:employee_id/manager/:manager_id", to: "people_directory#assign_manager", as: :assign_people_manager
   get "lifecycle", to: "lifecycle#show"
   post "lifecycle/events/:id/approve", to: "lifecycle#approve_event", as: :approve_lifecycle_event
   post "lifecycle/sync_batch", to: "lifecycle#generate_batch", as: :generate_lifecycle_sync_batch

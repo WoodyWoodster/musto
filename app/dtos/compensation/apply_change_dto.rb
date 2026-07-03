@@ -4,7 +4,7 @@ module Compensation
       attributes = ApplicationDto.coerce_hash(params)
 
       new(
-        change_id: attributes.fetch(:id, attributes.fetch("id")).to_i,
+        change_id: attributes.fetch(:id) { attributes.fetch("id") }.to_i,
         applied_by: attributes.fetch("applied_by", "ops_console")
       )
     end

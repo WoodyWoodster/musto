@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_03_224500) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_03_230000) do
   create_table "api_request_logs", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.integer "duration_ms"
@@ -410,6 +410,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_03_224500) do
     t.string "employment_status", default: "active", null: false
     t.string "first_name", null: false
     t.string "last_name", null: false
+    t.integer "manager_id"
     t.json "metadata", default: {}, null: false
     t.string "onboarding_status", default: "complete", null: false
     t.string "pay_type", default: "salary", null: false
@@ -422,8 +423,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_03_224500) do
     t.index ["department_id"], name: "index_employees_on_department_id"
     t.index ["employer_id", "email"], name: "index_employees_on_employer_id_and_email", unique: true
     t.index ["employer_id", "employment_status"], name: "index_employees_on_employer_id_and_employment_status"
+    t.index ["employer_id", "manager_id"], name: "index_employees_on_employer_id_and_manager_id"
     t.index ["employer_id", "vitable_id"], name: "index_employees_on_employer_id_and_vitable_id", unique: true
     t.index ["employer_id"], name: "index_employees_on_employer_id"
+    t.index ["manager_id"], name: "index_employees_on_manager_id"
     t.index ["onboarding_status"], name: "index_employees_on_onboarding_status"
     t.index ["work_location_id", "employment_status"], name: "index_employees_on_work_location_id_and_employment_status"
     t.index ["work_location_id"], name: "index_employees_on_work_location_id"
@@ -971,6 +974,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_03_224500) do
   add_foreign_key "employee_goals", "performance_cycles"
   add_foreign_key "employee_lifecycle_events", "employees"
   add_foreign_key "employees", "departments"
+  add_foreign_key "employees", "employees", column: "manager_id"
   add_foreign_key "employees", "employers"
   add_foreign_key "employees", "work_locations"
   add_foreign_key "employer_bank_accounts", "employers"

@@ -1,0 +1,235 @@
+<section class="space-y-7">
+  <div class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div class="grid gap-0 xl:grid-cols-[1.18fr_0.82fr]">
+      <div class="p-6 lg:p-8">
+        <div class="flex flex-wrap items-center gap-2">
+          <%= status_pill(@directory.snapshot&.status || "pending") %>
+          <span class="rounded-full bg-teal-50 px-3 py-1 text-xs font-semibold text-teal-800 ring-1 ring-inset ring-teal-200">People directory</span>
+          <span class="rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-800 ring-1 ring-inset ring-indigo-200">Org chart</span>
+        </div>
+
+        <h1 class="mt-5 text-4xl font-semibold tracking-tight text-slate-950">People directory and org chart</h1>
+        <p class="mt-3 max-w-3xl text-base leading-7 text-slate-600">
+          Maintain reporting lines, manager spans, department ownership, and Vitable-linked employee identity for <%= @directory.employer&.name || "your employer portfolio" %>.
+        </p>
+
+        <div class="mt-6 flex flex-wrap gap-3">
+          <%= button_to "Generate snapshot", generate_people_directory_snapshot_path, method: :post, params: { requested_by: "ops_console" }, class: "rounded-md bg-slate-950 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-slate-800" %>
+          <%= link_to "Workforce", workforce_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
+          <%= link_to "Lifecycle", lifecycle_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
+          <%= link_to "Reports", reports_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
+        </div>
+      </div>
+
+      <aside class="border-t border-slate-200 bg-slate-950 p-6 text-white xl:border-l xl:border-t-0 xl:p-8">
+        <p class="text-xs font-semibold uppercase tracking-[0.2em] text-teal-300">Latest directory snapshot</p>
+        <% if @directory.snapshot.present? %>
+          <p class="mt-6 break-all font-mono text-sm font-semibold"><%= @directory.snapshot.snapshot_id %></p>
+          <p class="mt-3 text-sm text-slate-300">Generated <%= time_ago_in_words(@directory.snapshot.generated_at) %> ago by <%= @directory.snapshot.requested_by %></p>
+          <div class="mt-6 grid grid-cols-2 gap-3">
+            <div class="rounded-md bg-white/10 p-4">
+              <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Assigned</p>
+              <p class="mt-2 text-2xl font-semibold"><%= compact_number(@directory.snapshot.assigned_count) %></p>
+            </div>
+            <div class="rounded-md bg-white/10 p-4">
+              <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Issues</p>
+              <p class="mt-2 text-2xl font-semibold"><%= compact_number(@directory.snapshot.issue_count) %></p>
+            </div>
+          </div>
+          <div class="mt-5 rounded-md bg-white/10 p-4">
+            <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Managers</p>
+            <p class="mt-2 text-2xl font-semibold"><%= compact_number(@directory.snapshot.manager_count) %></p>
+            <p class="mt-2 text-xs text-slate-400"><%= compact_number(@directory.snapshot.employee_count) %> people in snapshot</p>
+          </div>
+        <% else %>
+          <p class="mt-6 text-3xl font-semibold tracking-tight">No snapshot</p>
+          <p class="mt-2 text-sm leading-6 text-slate-300">Generate a directory snapshot to preserve reporting-line coverage, gaps, and manager spans for audit review.</p>
+        <% end %>
+      </aside>
+    </div>
+  </div>
+
+  <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+    <% @directory.metrics.each do |metric| %>
+      <article class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <div class="flex items-center justify-between gap-3">
+          <p class="text-sm font-medium text-slate-500"><%= metric.label %></p>
+          <span class="h-2.5 w-2.5 shrink-0 rounded-full <%= metric.accent %>"></span>
+        </div>
+        <p class="mt-4 break-words text-3xl font-semibold tracking-tight text-slate-950">
+          <%= metric.format == "number" ? compact_number(metric.value) : metric.value %>
+        </p>
+        <div class="mt-2 flex flex-wrap items-center gap-2">
+          <%= status_pill(metric.status) %>
+          <p class="text-sm text-slate-500"><%= metric.hint %></p>
+        </div>
+      </article>
+    <% end %>
+  </div>
+
+  <div class="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
+    <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="border-b border-slate-100 px-5 py-4">
+        <h2 class="text-base font-semibold text-slate-950">Manager spans</h2>
+        <p class="text-sm text-slate-500">Direct report load and team ownership for each active manager.</p>
+      </div>
+      <div class="divide-y divide-slate-100">
+        <% @directory.managers.each do |manager| %>
+          <div class="flex items-start justify-between gap-4 px-5 py-4">
+            <div class="min-w-0">
+              <p class="font-semibold text-slate-950"><%= manager.manager_name %></p>
+              <p class="mt-1 text-sm text-slate-500"><%= manager.title.presence || manager.department_name %> · <%= compact_number(manager.direct_report_count) %> direct reports</p>
+            </div>
+            <%= status_pill(manager.status) %>
+          </div>
+        <% end %>
+        <% if @directory.managers.empty? %>
+          <p class="px-5 py-5 text-sm text-slate-500">No manager spans have been assigned yet.</p>
+        <% end %>
+      </div>
+    </section>
+
+    <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="border-b border-slate-100 px-5 py-4">
+        <h2 class="text-base font-semibold text-slate-950">Org hygiene issues</h2>
+        <p class="text-sm text-slate-500">Missing manager and department ownership gaps to resolve before launch review.</p>
+      </div>
+      <div class="divide-y divide-slate-100">
+        <% @directory.issues.each do |issue| %>
+          <div class="p-5">
+            <div class="flex flex-wrap items-start justify-between gap-3">
+              <div class="min-w-0">
+                <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400"><%= issue.reason_code.humanize %></p>
+                <h3 class="mt-2 text-base font-semibold text-slate-950"><%= issue.employee_name %></h3>
+              </div>
+              <%= status_pill(issue.status) %>
+            </div>
+            <p class="mt-3 text-sm leading-6 text-slate-600"><%= issue.reason %></p>
+            <p class="mt-2 text-xs text-slate-400"><%= issue.department_name %></p>
+          </div>
+        <% end %>
+        <% if @directory.issues.empty? %>
+          <p class="px-5 py-5 text-sm text-slate-500">No org hygiene issues are open.</p>
+        <% end %>
+      </div>
+    </section>
+  </div>
+
+  <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div class="border-b border-slate-100 px-5 py-4">
+      <h2 class="text-base font-semibold text-slate-950">Employee directory</h2>
+      <p class="text-sm text-slate-500">Reporting line, department, location, and remote employee identity for every active employee.</p>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="min-w-full divide-y divide-slate-100 text-sm">
+        <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <tr>
+            <th class="px-5 py-3">Employee</th>
+            <th class="px-5 py-3">Manager</th>
+            <th class="px-5 py-3">Team</th>
+            <th class="px-5 py-3">Location</th>
+            <th class="px-5 py-3">Reports</th>
+            <th class="px-5 py-3">Remote ID</th>
+            <th class="px-5 py-3">Status</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          <% @directory.employees.each do |employee| %>
+            <tr class="hover:bg-slate-50">
+              <td class="px-5 py-4">
+                <%= link_to employee.employee_name, employee_path(employee.employee_id), class: "font-semibold text-slate-950 hover:text-cyan-700" %>
+                <p class="mt-1 text-xs text-slate-500"><%= employee.title.presence || "Role pending" %> · <%= employee.email %></p>
+              </td>
+              <td class="px-5 py-4 text-slate-600"><%= employee.manager_name.presence || "Unassigned" %></td>
+              <td class="px-5 py-4 text-slate-600"><%= employee.department_name %></td>
+              <td class="px-5 py-4 text-slate-600"><%= employee.location_name %></td>
+              <td class="px-5 py-4 text-slate-600"><%= compact_number(employee.direct_report_count) %></td>
+              <td class="px-5 py-4">
+                <p class="max-w-40 truncate font-mono text-xs text-slate-500"><%= employee.remote_employee_id.presence || "pending" %></p>
+              </td>
+              <td class="px-5 py-4">
+                <%= status_pill(employee.status) %>
+                <p class="mt-1 text-xs text-slate-500"><%= employee.status_reason %></p>
+              </td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <div class="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
+    <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="border-b border-slate-100 px-5 py-4">
+        <h2 class="text-base font-semibold text-slate-950">Manager assignment queue</h2>
+        <p class="text-sm text-slate-500">Assign unowned employees to an existing active manager.</p>
+      </div>
+      <div class="divide-y divide-slate-100">
+        <% @directory.unassigned_employees.each do |employee| %>
+          <div class="p-5">
+            <div class="flex flex-wrap items-start justify-between gap-3">
+              <div class="min-w-0">
+                <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400"><%= employee.department_name %></p>
+                <h3 class="mt-2 text-base font-semibold text-slate-950"><%= employee.employee_name %></h3>
+                <p class="mt-1 text-sm text-slate-500"><%= employee.title.presence || "Role pending" %></p>
+              </div>
+              <%= status_pill(employee.status) %>
+            </div>
+            <div class="mt-4 flex flex-wrap gap-2">
+              <% @directory.managers.first(3).each do |manager| %>
+                <% next if manager.manager_id == employee.employee_id %>
+                <%= button_to "Assign to #{manager.manager_name}", assign_people_manager_path(employee.employee_id, manager.manager_id), method: :post, params: { assigned_by: "ops_console" }, class: "rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm hover:border-slate-300" %>
+              <% end %>
+            </div>
+          </div>
+        <% end %>
+        <% if @directory.unassigned_employees.empty? %>
+          <p class="px-5 py-5 text-sm text-slate-500">Every non-manager employee has a reporting line.</p>
+        <% end %>
+      </div>
+    </section>
+
+    <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="border-b border-slate-100 px-5 py-4">
+        <h2 class="text-base font-semibold text-slate-950">Departments</h2>
+        <p class="text-sm text-slate-500">Department manager coverage and employee counts.</p>
+      </div>
+      <div class="grid divide-y divide-slate-100 md:grid-cols-2 md:divide-x md:divide-y-0">
+        <% @directory.departments.each do |department| %>
+          <article class="p-5">
+            <div class="flex items-start justify-between gap-3">
+              <div class="min-w-0">
+                <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400"><%= department.code %></p>
+                <h3 class="mt-2 text-base font-semibold text-slate-950"><%= department.department_name %></h3>
+              </div>
+              <%= status_pill(department.status) %>
+            </div>
+            <p class="mt-3 text-sm text-slate-600"><%= department.manager_name.presence || "Manager pending" %></p>
+            <p class="mt-1 text-xs text-slate-500"><%= compact_number(department.employee_count) %> active employees</p>
+          </article>
+        <% end %>
+      </div>
+    </section>
+  </div>
+
+  <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div class="border-b border-slate-100 px-5 py-4">
+      <h2 class="text-base font-semibold text-slate-950">Snapshot issues</h2>
+      <p class="text-sm text-slate-500">Persisted issues from the latest generated directory snapshot.</p>
+    </div>
+    <div class="divide-y divide-slate-100">
+      <% @directory.snapshot_issues.each do |issue| %>
+        <div class="flex items-start justify-between gap-4 px-5 py-4">
+          <div class="min-w-0">
+            <p class="font-semibold text-slate-950"><%= issue.employee_name %></p>
+            <p class="mt-1 text-sm text-slate-500"><%= issue.reason %></p>
+          </div>
+          <%= status_pill(issue.status) %>
+        </div>
+      <% end %>
+      <% if @directory.snapshot_issues.empty? %>
+        <p class="px-5 py-5 text-sm text-slate-500">Generate a snapshot to capture directory issues.</p>
+      <% end %>
+    </div>
+  </section>
+</section>

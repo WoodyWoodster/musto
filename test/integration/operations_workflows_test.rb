@@ -248,6 +248,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       root_path,
       company_setup_path,
       workforce_path,
+      people_directory_path,
       hiring_path,
       employee_changes_path,
       performance_path,
@@ -295,6 +296,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     dashboard = DashboardQuery.new.call
     company = Company::SetupQuery.new.call
     workforce = Operations::WorkforceQuery.new.call
+    directory = People::DirectoryQuery.new.call
     hiring = Hiring::CenterQuery.new.call
     employee_changes = EmployeeChanges::CenterQuery.new.call
     performance = Performance::CenterQuery.new.call
@@ -333,6 +335,11 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_instance_of Company::SetupStepDto, company.steps.first
     assert_instance_of Company::MetricDto, company.metrics.first
     assert_instance_of Operations::WorkforceEmployeeDto, workforce.fetch(:employees).first
+    assert_instance_of People::DirectoryCenterDto, directory
+    assert_instance_of People::MetricDto, directory.metrics.first
+    assert_instance_of People::EmployeeNodeDto, directory.employees.first
+    assert_instance_of People::DepartmentNodeDto, directory.departments.first
+    assert_instance_of People::DirectoryIssueDto, directory.issues.first
     assert_instance_of Hiring::CenterDto, hiring
     assert_instance_of Hiring::MetricDto, hiring.metrics.first
     assert_instance_of Hiring::JobOpeningDto, hiring.job_openings.first
@@ -681,6 +688,77 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     step = @employer.settings.fetch("setup_steps").fetch("launch_review")
     assert_equal "ops_console", step.fetch("completed_by")
     assert_not_nil step.fetch("completed_at")
+  end
+
+  test "people directory center exposes org chart DTOs" do
+    manager, unassigned_report = create_directory_manager_pair
+
+    detail = People::DirectoryQuery.new.call
+
+    assert_instance_of People::DirectoryCenterDto, detail
+    assert_instance_of People::MetricDto, detail.metrics.first
+    assert_instance_of People::EmployeeNodeDto, detail.employees.first
+    assert_instance_of People::ManagerSpanDto, detail.managers.first
+    assert_instance_of People::DepartmentNodeDto, detail.departments.first
+    assert_instance_of People::DirectoryIssueDto, detail.issues.first
+    assert detail.managers.any? { |span| span.manager_id == manager.id }
+    assert detail.unassigned_employees.any? { |employee| employee.employee_id == unassigned_report.id }
+    assert detail.issues.any? { |issue| issue.employee_id == unassigned_report.id }
+
+    get people_directory_path
+
+    assert_response :success
+    assert_select "h1", "People directory and org chart"
+    assert_select "h2", "Manager spans"
+    assert_select "h2", "Org hygiene issues"
+    assert_select "h2", "Employee directory"
+    assert_select "h2", "Manager assignment queue"
+    assert_select "h2", "Departments"
+    assert_select "h2", "Snapshot issues"
+  end
+
+  test "assigns manager through command action" do
+    manager, unassigned_report = create_directory_manager_pair
+
+    dto = People::AssignManagerDto.from_params(employee_id: unassigned_report.id, manager_id: manager.id, assigned_by: "people_ops_admin")
+
+    assert_equal unassigned_report.id, dto.employee_id
+    assert_equal manager.id, dto.manager_id
+    assert_equal "people_ops_admin", dto.assigned_by
+
+    post assign_people_manager_path(unassigned_report.id, manager.id), params: { assigned_by: "people_ops_admin" }
+
+    assert_redirected_to people_directory_path
+    unassigned_report.reload
+    assert_equal manager, unassigned_report.manager
+    assert_equal "people_ops_admin", unassigned_report.metadata.fetch("manager_assigned_by")
+    assert_equal "people_directory", unassigned_report.metadata.fetch("manager_assignment_source")
+    assert_not_nil unassigned_report.metadata.fetch("manager_assigned_at")
+  end
+
+  test "generates people directory snapshot through command action" do
+    _manager, unassigned_report = create_directory_manager_pair
+
+    dto = People::GenerateDirectorySnapshotDto.from_params(requested_by: "people_ops_admin")
+
+    assert_equal "people_ops_admin", dto.requested_by
+
+    post generate_people_directory_snapshot_path, params: { requested_by: "people_ops_admin" }
+
+    assert_redirected_to people_directory_path
+    snapshot = @employer.reload.settings.fetch("people_directory_snapshot")
+    assert_match(/\Apeople_directory_#{@employer.id}_/, snapshot.fetch("snapshot_id"))
+    assert_equal "people_ops_admin", snapshot.fetch("requested_by")
+    assert_equal @employer.employees.active.count, snapshot.fetch("totals").fetch("employee_count")
+    assert_equal 1, snapshot.fetch("totals").fetch("manager_count")
+    assert_equal 1, snapshot.fetch("totals").fetch("unassigned_count")
+    assert snapshot.fetch("issues").any? { |issue| issue.fetch("employee_id") == unassigned_report.id }
+
+    detail = People::DirectoryQuery.new.call
+
+    assert_instance_of People::DirectorySnapshotDto, detail.snapshot
+    assert_instance_of People::DirectoryIssueDto, detail.snapshot_issues.first
+    assert_equal snapshot.fetch("snapshot_id"), detail.snapshot.snapshot_id
   end
 
   test "hiring center exposes offer pipeline DTOs" do
@@ -2225,6 +2303,36 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_redirected_to compliance_path
     assert_equal "resolved", @compliance_case.reload.status
     assert_not_nil @compliance_case.resolved_at
+  end
+
+  def create_directory_manager_pair
+    manager = @employer.employees.create!(
+      first_name: "Mara",
+      last_name: "Reed",
+      email: "mara.reed.directory@example.com",
+      department: @department,
+      work_location: @location,
+      title: "People Manager",
+      compensation_cents: 130_000_00,
+      onboarding_status: "complete",
+      metadata: { phone: "5551234500" }
+    )
+    unassigned_report = @employer.employees.create!(
+      first_name: "Jamie",
+      last_name: "Ortiz",
+      email: "jamie.ortiz.directory@example.com",
+      department: @department,
+      work_location: @location,
+      title: "Benefits Specialist",
+      compensation_cents: 88_000_00,
+      onboarding_status: "complete",
+      metadata: { phone: "5551234501" }
+    )
+
+    @department.update!(manager:)
+    @employee.update!(manager:)
+
+    [ manager, unassigned_report ]
   end
 
   def prepare_provisioning_profile(remote_id: nil)

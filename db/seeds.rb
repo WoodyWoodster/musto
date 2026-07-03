@@ -128,6 +128,12 @@ departments["RET"].update!(manager: employees.second)
 departments["PPL"].update!(manager: employees.third)
 departments["FIN"].update!(manager: employees.fourth)
 
+employees.second.update!(manager: employees.first, metadata: employees.second.metadata.to_h.merge(manager_assignment_source: "seed"))
+employees.third.update!(manager: employees.first, metadata: employees.third.metadata.to_h.merge(manager_assignment_source: "seed"))
+employees.fourth.update!(manager: employees.third, metadata: employees.fourth.metadata.to_h.merge(manager_assignment_source: "seed"))
+employees[4].update!(manager: employees.first, metadata: employees[4].metadata.to_h.merge(manager_assignment_source: "seed"))
+employees.last.update!(manager: employees.second, metadata: employees.last.metadata.to_h.merge(manager_assignment_source: "seed"))
+
 job_openings = [
   [ "RET-GM-2026", "Retail General Manager", "RET", "Philadelphia HQ", "open", "full_time", 1, 92_000_00, 118_000_00, false, Date.current.next_month.beginning_of_month + 14.days, "Own Philadelphia retail operations and manager enablement." ],
   [ "FIN-PAY-2026", "Payroll Operations Specialist", "FIN", "Remote US", "open", "full_time", 1, 82_000_00, 98_000_00, true, Date.current.next_month.beginning_of_month + 21.days, "Run payroll controls, funding review, and Vitable deduction checks." ],
