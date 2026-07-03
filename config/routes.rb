@@ -17,6 +17,7 @@ Rails.application.routes.draw do
 
   get "workforce", to: "operations#workforce"
   get "onboarding", to: "onboarding#show"
+  get "time-off", to: "time_off#show", as: :time_off
   get "payroll", to: "operations#payroll"
   get "benefits", to: "operations#benefits"
   get "benefits/reconciliation", to: "benefits_reconciliations#show", as: :benefits_reconciliation

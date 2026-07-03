@@ -5,7 +5,10 @@
       <h1 class="mt-2 text-3xl font-semibold tracking-tight text-slate-950">Risk and policy center</h1>
       <p class="mt-2 max-w-3xl text-sm leading-6 text-slate-600">Resolve compliance cases, keep documents current, and review time-off requests from the same operational queue.</p>
     </div>
-    <span class="rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm"><%= @compliance[:open_case_count] %> open cases</span>
+    <div class="flex flex-wrap gap-2">
+      <%= link_to "Time off center", time_off_path, class: "rounded-md bg-slate-950 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-slate-800" %>
+      <span class="rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm"><%= @compliance[:open_case_count] %> open cases</span>
+    </div>
   </div>
 
   <div class="grid gap-4 md:grid-cols-4">

@@ -27,6 +27,8 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     @complete_document = @employee.employee_documents.create!(title: "Form W-4", document_type: "tax", status: "complete", issued_on: Date.current)
     @policy = @employer.time_off_policies.create!(name: "PTO", annual_hours: 120)
     @time_off_request = @employee.time_off_requests.create!(time_off_policy: @policy, starts_on: Date.current + 1.day, ends_on: Date.current + 2.days, hours: 16)
+    @sick_policy = @employer.time_off_policies.create!(name: "Sick Leave", accrual_method: "state_accrual", annual_hours: 56, carryover_hours: 16)
+    @approved_time_off_request = @employee.time_off_requests.create!(time_off_policy: @sick_policy, starts_on: Date.current + 10.days, ends_on: Date.current + 10.days, hours: 8, status: "approved", reviewed_at: 1.day.ago)
     @payroll_run = @employer.payroll_runs.create!(period_start_on: Date.current.beginning_of_month, period_end_on: Date.current.end_of_month, pay_date: Date.current.end_of_month, gross_pay_cents: 9_500_00, status: "estimated")
     @payroll_run.payroll_deductions.create!(employee: @employee, enrollment: @enrollment, code: "VITABLE_BENEFITS", amount_cents: 9_900, status: "ready")
     @pending_deduction = @payroll_run.payroll_deductions.create!(employee: @employee, enrollment: @pending_enrollment, code: "VITABLE_DENTAL", amount_cents: 0, status: "waiting_on_enrollment")
@@ -75,6 +77,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       root_path,
       workforce_path,
       onboarding_path,
+      time_off_path,
       payroll_path,
       payroll_run_path(@payroll_run),
       payroll_run_benefits_export_path(@payroll_run),
@@ -97,6 +100,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     workforce = Operations::WorkforceQuery.new.call
     payroll = Operations::PayrollQuery.new.call
     onboarding = Onboarding::CommandCenterQuery.new.call
+    time_off = TimeOff::CommandCenterQuery.new.call
     benefits = Operations::BenefitsQuery.new.call
     reconciliation = Benefits::ReconciliationQuery.new.call
     compliance = Operations::ComplianceQuery.new.call
@@ -111,6 +115,10 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_instance_of Onboarding::TaskDto, onboarding.tasks.first
     assert_instance_of Onboarding::DocumentDto, onboarding.documents.first
     assert_instance_of Onboarding::LaneDto, onboarding.lanes.first
+    assert_instance_of TimeOff::CommandCenterDto, time_off
+    assert_instance_of TimeOff::RequestDto, time_off.requests.first
+    assert_instance_of TimeOff::PolicyDto, time_off.policies.first
+    assert_instance_of TimeOff::EmployeeBalanceDto, time_off.balances.first
     assert_instance_of Operations::BenefitPlanDto, benefits.fetch(:benefit_plans).first
     assert_instance_of Benefits::ReconciliationDetailDto, reconciliation
     assert_instance_of Operations::ComplianceCaseDto, compliance.fetch(:cases).first
@@ -146,6 +154,38 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal Date.current, @pending_document.issued_on
     assert_equal "ops_console", @pending_document.metadata.fetch("verified_by")
     assert_not_nil @pending_document.metadata.fetch("verified_at")
+  end
+
+  test "time off command center exposes policies balances and calendar DTOs" do
+    detail = TimeOff::CommandCenterQuery.new.call
+
+    assert_instance_of TimeOff::CommandCenterDto, detail
+    assert_instance_of TimeOff::MetricDto, detail.metrics.first
+    assert_instance_of TimeOff::PolicyDto, detail.policies.first
+    assert_instance_of TimeOff::EmployeeBalanceDto, detail.balances.first
+    assert_instance_of TimeOff::RequestDto, detail.requests.first
+    assert_instance_of TimeOff::CalendarBlockDto, detail.calendar_blocks.first
+    assert detail.pending_requests.any? { |request| request.id == @time_off_request.id }
+
+    get time_off_path
+
+    assert_response :success
+    assert_select "h1", "Time off command center"
+    assert_select "h2", "Request review"
+    assert_select "h2", "Employee balances"
+    assert_select "h2", "Policy utilization"
+    assert_select "h2", "Upcoming leave calendar"
+  end
+
+  test "approves a time off request from the time off command center" do
+    post approve_time_off_request_path(@time_off_request), params: { return_to: "time_off" }
+
+    assert_redirected_to time_off_path
+    @time_off_request.reload
+    assert_equal "approved", @time_off_request.status
+    assert_equal "time_off_command_center", @time_off_request.metadata.fetch("reviewed_from")
+    assert_equal "approved", @time_off_request.metadata.fetch("review_decision")
+    assert_not_nil @time_off_request.reviewed_at
   end
 
   test "employee profile exposes a feature-rich employee 360 DTO" do

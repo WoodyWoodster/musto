@@ -1,6 +1,6 @@
 module TimeOff
   class ReviewRequestCommand < ApplicationCommand
-    def initialize(dto:, repository: Compliance::ComplianceRepository.new)
+    def initialize(dto:, repository: TimeOffRepository.new)
       @dto = dto
       @repository = repository
     end
