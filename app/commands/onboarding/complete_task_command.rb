@@ -19,9 +19,8 @@ module Onboarding
 
     def refresh_employee_status(task)
       employee = task.employee
-      return if @repository.open_for_employee?(employee)
 
-      employee.update!(onboarding_status: "complete")
+      employee.update!(onboarding_status: @repository.ready_for_completion?(employee) ? "complete" : "in_progress")
     end
   end
 end

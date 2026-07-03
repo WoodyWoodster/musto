@@ -16,6 +16,7 @@ Rails.application.routes.draw do
   end
 
   get "workforce", to: "operations#workforce"
+  get "onboarding", to: "onboarding#show"
   get "payroll", to: "operations#payroll"
   get "benefits", to: "operations#benefits"
   get "benefits/reconciliation", to: "benefits_reconciliations#show", as: :benefits_reconciliation
@@ -25,6 +26,10 @@ Rails.application.routes.draw do
 
   resources :onboarding_tasks, only: [] do
     post :complete, on: :member
+  end
+
+  resources :employee_documents, only: [] do
+    post :verify, on: :member
   end
 
   resources :time_off_requests, only: [] do

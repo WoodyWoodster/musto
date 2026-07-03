@@ -23,6 +23,8 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     @waivable_plan = @employer.benefit_plans.create!(name: "Vision", category: "vision", monthly_premium_cents: 2_500)
     @waivable_enrollment = @employee.enrollments.create!(benefit_plan: @waivable_plan, status: "pending", effective_on: Date.current.next_month.beginning_of_month)
     @task = @employee.onboarding_tasks.create!(title: "Confirm payroll setup", category: "payroll", due_on: Date.current)
+    @pending_document = @employee.employee_documents.create!(title: "Benefits disclosure", document_type: "benefits", status: "pending", expires_on: Date.current + 30.days)
+    @complete_document = @employee.employee_documents.create!(title: "Form W-4", document_type: "tax", status: "complete", issued_on: Date.current)
     @policy = @employer.time_off_policies.create!(name: "PTO", annual_hours: 120)
     @time_off_request = @employee.time_off_requests.create!(time_off_policy: @policy, starts_on: Date.current + 1.day, ends_on: Date.current + 2.days, hours: 16)
     @payroll_run = @employer.payroll_runs.create!(period_start_on: Date.current.beginning_of_month, period_end_on: Date.current.end_of_month, pay_date: Date.current.end_of_month, gross_pay_cents: 9_500_00, status: "estimated")
@@ -72,6 +74,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     [
       root_path,
       workforce_path,
+      onboarding_path,
       payroll_path,
       payroll_run_path(@payroll_run),
       payroll_run_benefits_export_path(@payroll_run),
@@ -93,6 +96,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     dashboard = DashboardQuery.new.call
     workforce = Operations::WorkforceQuery.new.call
     payroll = Operations::PayrollQuery.new.call
+    onboarding = Onboarding::CommandCenterQuery.new.call
     benefits = Operations::BenefitsQuery.new.call
     reconciliation = Benefits::ReconciliationQuery.new.call
     compliance = Operations::ComplianceQuery.new.call
@@ -102,10 +106,46 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_instance_of Dashboard::IntegrationHealthDto, dashboard.fetch(:integration_health)
     assert_instance_of Operations::WorkforceEmployeeDto, workforce.fetch(:employees).first
     assert_instance_of Operations::PayrollRunDto, payroll.fetch(:payroll_runs).first
+    assert_instance_of Onboarding::CommandCenterDto, onboarding
+    assert_instance_of Onboarding::EmployeeReadinessDto, onboarding.readiness.first
+    assert_instance_of Onboarding::TaskDto, onboarding.tasks.first
+    assert_instance_of Onboarding::DocumentDto, onboarding.documents.first
+    assert_instance_of Onboarding::LaneDto, onboarding.lanes.first
     assert_instance_of Operations::BenefitPlanDto, benefits.fetch(:benefit_plans).first
     assert_instance_of Benefits::ReconciliationDetailDto, reconciliation
     assert_instance_of Operations::ComplianceCaseDto, compliance.fetch(:cases).first
     assert_instance_of Operations::IntegrationConnectionDto, integrations.fetch(:connections).first
+  end
+
+  test "onboarding command center exposes readiness and review DTOs" do
+    detail = Onboarding::CommandCenterQuery.new.call
+
+    assert_instance_of Onboarding::CommandCenterDto, detail
+    assert_instance_of Onboarding::CommandMetricDto, detail.metrics.first
+    assert_instance_of Onboarding::EmployeeReadinessDto, detail.readiness.first
+    assert_instance_of Onboarding::TaskDto, detail.tasks.first
+    assert_instance_of Onboarding::DocumentDto, detail.documents.first
+    assert detail.attention_documents.any? { |document| document.id == @pending_document.id }
+
+    get onboarding_path
+
+    assert_response :success
+    assert_select "h1", "Onboarding command center"
+    assert_select "h2", "Readiness lanes"
+    assert_select "h2", "Employee readiness"
+    assert_select "h2", "Task queue"
+    assert_select "h2", "Document review"
+  end
+
+  test "verifies an employee document through the command action" do
+    post verify_employee_document_path(@pending_document)
+
+    assert_redirected_to onboarding_path
+    @pending_document.reload
+    assert_equal "complete", @pending_document.status
+    assert_equal Date.current, @pending_document.issued_on
+    assert_equal "ops_console", @pending_document.metadata.fetch("verified_by")
+    assert_not_nil @pending_document.metadata.fetch("verified_at")
   end
 
   test "employee profile exposes a feature-rich employee 360 DTO" do
@@ -335,7 +375,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
 
     assert_redirected_to workforce_path
     assert_equal "complete", @task.reload.status
-    assert_equal "complete", @employee.reload.onboarding_status
+    assert_equal "in_progress", @employee.reload.onboarding_status
   end
 
   test "finalizes a payroll run through the command action" do

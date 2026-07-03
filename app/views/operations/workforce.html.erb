@@ -5,7 +5,8 @@
       <h1 class="mt-2 text-3xl font-semibold tracking-tight text-slate-950">People operations</h1>
       <p class="mt-2 max-w-3xl text-sm leading-6 text-slate-600">Roster intelligence, onboarding progress, documents, departments, and locations for <%= @workforce[:employer]&.name || "your employer portfolio" %>.</p>
     </div>
-    <div class="flex gap-2">
+    <div class="flex flex-wrap gap-2">
+      <%= link_to "Onboarding center", onboarding_path, class: "rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-800" %>
       <span class="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm"><%= @workforce[:employees].count %> employees</span>
       <span class="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm"><%= @workforce[:open_onboarding_count] %> open tasks</span>
     </div>

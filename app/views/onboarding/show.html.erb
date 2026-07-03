@@ -1,0 +1,204 @@
+<section class="space-y-7">
+  <div class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div class="grid xl:grid-cols-[1.35fr_0.65fr]">
+      <div class="p-6 lg:p-8">
+        <div class="flex flex-wrap items-center gap-2">
+          <%= status_pill("in_progress") %>
+          <%= status_pill(@onboarding.attention_documents.any? ? "needs_review" : "ready") %>
+        </div>
+        <h1 class="mt-5 text-4xl font-semibold tracking-tight text-slate-950">Onboarding command center</h1>
+        <p class="mt-3 max-w-3xl text-base leading-7 text-slate-600">
+          Employee readiness, task ownership, payroll blockers, document review, and benefits handoff for <%= @onboarding.employer&.name || "your employer portfolio" %>.
+        </p>
+        <div class="mt-6 flex flex-wrap gap-3">
+          <%= link_to "Workforce", workforce_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
+          <%= link_to "Benefits", benefits_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
+          <%= link_to "Payroll", payroll_path, class: "rounded-md bg-slate-950 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-slate-800" %>
+        </div>
+      </div>
+
+      <aside class="border-t border-slate-200 bg-slate-950 p-6 text-white xl:border-l xl:border-t-0 xl:p-8">
+        <p class="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-300">Readiness posture</p>
+        <p class="mt-6 text-5xl font-semibold tracking-tight"><%= @onboarding.ready_employees.count %>/<%= @onboarding.readiness.count %></p>
+        <p class="mt-2 text-sm leading-6 text-slate-300">employees clear for payroll and benefits operations</p>
+        <div class="mt-6 grid grid-cols-2 gap-3">
+          <div class="rounded-md bg-white/10 p-4">
+            <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Blocked</p>
+            <p class="mt-2 text-2xl font-semibold"><%= @onboarding.blocked_employees.count %></p>
+          </div>
+          <div class="rounded-md bg-white/10 p-4">
+            <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Docs</p>
+            <p class="mt-2 text-2xl font-semibold"><%= @onboarding.attention_documents.count %></p>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+    <% @onboarding.metrics.each do |metric| %>
+      <article class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <div class="flex items-center justify-between gap-3">
+          <p class="text-sm font-medium text-slate-500"><%= metric.label %></p>
+          <span class="h-2.5 w-2.5 shrink-0 rounded-full <%= metric.accent %>"></span>
+        </div>
+        <p class="mt-4 text-3xl font-semibold tracking-tight text-slate-950"><%= compact_number(metric.value) %></p>
+        <div class="mt-2 flex flex-wrap items-center gap-2">
+          <%= status_pill(metric.status) %>
+          <p class="text-sm text-slate-500"><%= metric.hint %></p>
+        </div>
+      </article>
+    <% end %>
+  </div>
+
+  <section class="space-y-4">
+    <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+      <div>
+        <h2 class="text-lg font-semibold text-slate-950">Readiness lanes</h2>
+        <p class="text-sm text-slate-500">Owner-level queue health across people, benefits, and payroll setup.</p>
+      </div>
+      <span class="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200"><%= @onboarding.tasks.count %> total tasks</span>
+    </div>
+
+    <div class="grid gap-4 lg:grid-cols-3">
+      <% @onboarding.lanes.each do |lane| %>
+        <article class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+          <div class="flex items-center justify-between gap-4">
+            <div>
+              <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400"><%= lane.owner.to_s.humanize %></p>
+              <h3 class="mt-2 text-base font-semibold text-slate-950"><%= lane.label %></h3>
+            </div>
+            <span class="h-3 w-3 rounded-full <%= lane.accent %>"></span>
+          </div>
+          <div class="mt-5 h-2 overflow-hidden rounded-full bg-slate-100">
+            <div class="h-full rounded-full <%= lane.accent %>" style="width: <%= lane.completion_rate %>%"></div>
+          </div>
+          <div class="mt-4 flex items-center justify-between gap-3">
+            <p class="text-sm text-slate-500"><%= lane.completion_rate %>% complete</p>
+            <%= status_pill(lane.status) %>
+          </div>
+          <dl class="mt-5 grid grid-cols-3 gap-2 text-center">
+            <div class="rounded-md bg-slate-50 px-2 py-3">
+              <dt class="text-xs text-slate-500">Total</dt>
+              <dd class="mt-1 text-lg font-semibold text-slate-950"><%= lane.total_count %></dd>
+            </div>
+            <div class="rounded-md bg-slate-50 px-2 py-3">
+              <dt class="text-xs text-slate-500">Open</dt>
+              <dd class="mt-1 text-lg font-semibold text-slate-950"><%= lane.open_count %></dd>
+            </div>
+            <div class="rounded-md bg-slate-50 px-2 py-3">
+              <dt class="text-xs text-slate-500">Late</dt>
+              <dd class="mt-1 text-lg font-semibold text-slate-950"><%= lane.overdue_count %></dd>
+            </div>
+          </dl>
+        </article>
+      <% end %>
+    </div>
+  </section>
+
+  <section class="rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div class="flex flex-col gap-2 border-b border-slate-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+      <div>
+        <h2 class="text-base font-semibold text-slate-950">Employee readiness</h2>
+        <p class="text-sm text-slate-500">Per-employee operating state before benefits and payroll exports.</p>
+      </div>
+      <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700"><%= @onboarding.readiness.count %> employees</span>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="min-w-full divide-y divide-slate-100 text-sm">
+        <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <tr>
+            <th class="px-5 py-3">Employee</th>
+            <th class="px-5 py-3">Team</th>
+            <th class="px-5 py-3">Readiness</th>
+            <th class="px-5 py-3">Tasks</th>
+            <th class="px-5 py-3">Documents</th>
+            <th class="px-5 py-3">Benefits</th>
+            <th class="px-5 py-3">Status</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          <% @onboarding.readiness.each do |employee| %>
+            <tr class="hover:bg-slate-50">
+              <td class="px-5 py-4">
+                <%= link_to employee.full_name, employee_path(employee.id), class: "font-semibold text-slate-950 hover:text-cyan-700" %>
+                <p class="text-xs text-slate-500"><%= employee.title.presence || "Role pending" %></p>
+              </td>
+              <td class="px-5 py-4 text-slate-600">
+                <%= employee.department_name || "Unassigned" %>
+                <p class="text-xs text-slate-500"><%= employee.work_location_name || "No location" %></p>
+              </td>
+              <td class="px-5 py-4">
+                <div class="flex min-w-32 items-center gap-3">
+                  <div class="h-2 flex-1 overflow-hidden rounded-full bg-slate-100">
+                    <div class="h-full rounded-full bg-slate-950" style="width: <%= employee.readiness_percent %>%"></div>
+                  </div>
+                  <span class="text-xs font-semibold text-slate-600"><%= employee.readiness_percent %>%</span>
+                </div>
+              </td>
+              <td class="px-5 py-4 text-slate-600"><%= employee.open_task_count %> open</td>
+              <td class="px-5 py-4 text-slate-600"><%= employee.pending_document_count %> review</td>
+              <td class="px-5 py-4 text-slate-600"><%= employee.accepted_enrollment_count %> accepted</td>
+              <td class="px-5 py-4"><%= status_pill(employee.status) %></td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <div class="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
+    <section class="rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="border-b border-slate-100 px-5 py-4">
+        <h2 class="text-base font-semibold text-slate-950">Task queue</h2>
+        <p class="text-sm text-slate-500">Open and recently completed tasks by owner lane.</p>
+      </div>
+      <div class="divide-y divide-slate-100">
+        <% @onboarding.tasks.first(12).each do |task| %>
+          <div class="grid gap-4 px-5 py-4 sm:grid-cols-[1fr_auto] sm:items-center">
+            <div>
+              <div class="flex flex-wrap items-center gap-2">
+                <p class="font-semibold text-slate-950"><%= task.title %></p>
+                <%= status_pill(task.overdue? ? "blocked" : task.status) %>
+              </div>
+              <p class="mt-1 text-sm text-slate-500"><%= task.employee_name %> · <%= task.owner.humanize %> · due <%= task.due_on.strftime("%b %-d") %></p>
+            </div>
+            <% if task.complete? %>
+              <%= status_pill(task.status) %>
+            <% else %>
+              <%= button_to "Complete", complete_onboarding_task_path(task.id), method: :post, params: { return_to: "onboarding" }, class: "rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-800" %>
+            <% end %>
+          </div>
+        <% end %>
+      </div>
+    </section>
+
+    <section class="rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="border-b border-slate-100 px-5 py-4">
+        <h2 class="text-base font-semibold text-slate-950">Document review</h2>
+        <p class="text-sm text-slate-500">Documents that are pending, expired, or approaching renewal.</p>
+      </div>
+      <div class="divide-y divide-slate-100">
+        <% @onboarding.documents.first(12).each do |document| %>
+          <div class="grid gap-4 px-5 py-4 sm:grid-cols-[1fr_auto] sm:items-center">
+            <div>
+              <div class="flex flex-wrap items-center gap-2">
+                <p class="font-semibold text-slate-950"><%= document.title %></p>
+                <%= status_pill(document.attention_status) %>
+              </div>
+              <p class="mt-1 text-sm text-slate-500">
+                <%= document.employee_name %> · <%= document.document_type.humanize %> ·
+                <%= document.expires_on&.strftime("expires %b %-d, %Y") || "no expiry" %>
+              </p>
+            </div>
+            <% if document.complete? %>
+              <%= status_pill(document.status) %>
+            <% else %>
+              <%= button_to "Verify", verify_employee_document_path(document.id), method: :post, class: "rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-800" %>
+            <% end %>
+          </div>
+        <% end %>
+      </div>
+    </section>
+  </div>
+</section>

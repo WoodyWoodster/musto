@@ -15,7 +15,7 @@
         <div class="mt-6 grid gap-3 sm:grid-cols-3">
           <a href="#benefits" class="rounded-md bg-slate-950 px-4 py-3 text-center text-sm font-semibold text-white shadow-sm hover:bg-slate-800">Benefits</a>
           <a href="#payroll" class="rounded-md border border-slate-200 bg-white px-4 py-3 text-center text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300">Payroll</a>
-          <a href="#attention" class="rounded-md border border-slate-200 bg-white px-4 py-3 text-center text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300">Attention queue</a>
+          <%= link_to "Onboarding", onboarding_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-center text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
         </div>
       </div>
 
@@ -168,9 +168,12 @@
 
   <div id="attention" class="grid gap-6 xl:grid-cols-[1fr_1fr]">
     <section class="rounded-lg border border-slate-200 bg-white shadow-sm">
-      <div class="border-b border-slate-100 px-5 py-4">
-        <h2 class="text-base font-semibold text-slate-950">Onboarding and documents</h2>
-        <p class="text-sm text-slate-500">Tasks and document exceptions that can block payroll or benefits readiness.</p>
+      <div class="flex flex-col gap-3 border-b border-slate-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 class="text-base font-semibold text-slate-950">Onboarding and documents</h2>
+          <p class="text-sm text-slate-500">Tasks and document exceptions that can block payroll or benefits readiness.</p>
+        </div>
+        <%= link_to "Command center", onboarding_path, class: "rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:border-slate-300" %>
       </div>
       <div class="divide-y divide-slate-100">
         <% @employee.onboarding_tasks.each do |task| %>
@@ -192,7 +195,11 @@
               <p class="font-semibold text-slate-950"><%= document.title %></p>
               <p class="mt-1 text-sm text-slate-500"><%= document.document_type.humanize %> · <%= document.expires_on&.strftime("expires %b %-d, %Y") || "no expiry" %></p>
             </div>
-            <%= status_pill(document.status) %>
+            <% if document.status == "complete" %>
+              <%= status_pill(document.status) %>
+            <% else %>
+              <%= button_to "Verify", verify_employee_document_path(document.id), method: :post, class: "rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-800" %>
+            <% end %>
           </div>
         <% end %>
       </div>
