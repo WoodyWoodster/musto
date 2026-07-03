@@ -651,6 +651,26 @@ sick.save!
 end
 
 [
+  [ employees.first, pto, "monthly_accrual", Date.current.beginning_of_month, Date.current.end_of_month, 13.33, "approved", "system", 2.days.ago ],
+  [ employees.second, pto, "monthly_accrual", Date.current.beginning_of_month, Date.current.end_of_month, 13.33, "pending", "system", nil ],
+  [ employees.third, pto, "monthly_accrual", Date.current.beginning_of_month, Date.current.end_of_month, 13.33, "approved", "system", 1.day.ago ],
+  [ employees.fourth, sick, "monthly_accrual", Date.current.beginning_of_month, Date.current.end_of_month, 4.67, "approved", "system", 1.day.ago ],
+  [ employees.last, pto, "carryover", Date.current.beginning_of_year, Date.current.beginning_of_year, 24, "approved", "import", 3.days.ago ]
+].each do |employee, policy, accrual_type, period_start_on, period_end_on, hours, status, source, approved_at|
+  accrual = employee.time_off_accruals.find_or_initialize_by(time_off_policy: policy, period_start_on:, accrual_type:)
+  accrual.assign_attributes(
+    hours:,
+    period_end_on:,
+    effective_on: period_end_on,
+    source:,
+    status:,
+    approved_at:,
+    metadata: { source: "seeded_pto_ledger", generated_by: "seed_data" }
+  )
+  accrual.save!
+end
+
+[
   [ employees.second, departments.fetch("RET"), locations.fetch("Philadelphia HQ"), "Retail floor lead", "published", 3, 8, 16, 30, 3_850, "Morning floor coverage" ],
   [ employees.last, departments.fetch("RET"), locations.fetch("Denver Roastery"), "Cafe associate", "published", 4, 7, 15, 30, 2_650, "Cafe open and service" ],
   [ employees.first, departments.fetch("OPS"), locations.fetch("Philadelphia HQ"), "Operations close", "draft", 5, 12, 20, 30, 6_350, "Close payroll exception queue" ],

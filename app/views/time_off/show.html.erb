@@ -11,6 +11,7 @@
           Review PTO requests, monitor policy utilization, forecast coverage gaps, and keep payroll-impacting leave decisions current for <%= @time_off.employer&.name || "your employer portfolio" %>.
         </p>
         <div class="mt-6 flex flex-wrap gap-3">
+          <%= link_to "PTO ledger", time_off_accruals_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
           <%= link_to "Compliance", compliance_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
           <%= link_to "Workforce", workforce_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
           <%= link_to "Payroll", payroll_path, class: "rounded-md bg-slate-950 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-slate-800" %>

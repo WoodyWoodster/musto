@@ -22,6 +22,7 @@ class Employer < ApplicationRecord
   has_many :enrollments, through: :employees
   has_many :time_off_policies, dependent: :destroy
   has_many :time_off_requests, through: :employees
+  has_many :time_off_accruals, through: :employees
   has_many :work_shifts, dependent: :destroy
   has_many :shift_swap_requests, through: :work_shifts
   has_many :onboarding_tasks, through: :employees

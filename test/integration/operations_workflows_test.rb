@@ -111,6 +111,8 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     @time_off_request = @employee.time_off_requests.create!(time_off_policy: @policy, starts_on: Date.current + 1.day, ends_on: Date.current + 2.days, hours: 16)
     @sick_policy = @employer.time_off_policies.create!(name: "Sick Leave", accrual_method: "state_accrual", annual_hours: 56, carryover_hours: 16)
     @approved_time_off_request = @employee.time_off_requests.create!(time_off_policy: @sick_policy, starts_on: Date.current + 10.days, ends_on: Date.current + 10.days, hours: 8, status: "approved", reviewed_at: 1.day.ago)
+    @time_off_accrual = @employee.time_off_accruals.create!(time_off_policy: @policy, accrual_type: "monthly_accrual", hours: 10, period_start_on: Date.current.beginning_of_month, period_end_on: Date.current.end_of_month, effective_on: Date.current.end_of_month, status: "pending", source: "system")
+    @approved_time_off_accrual = @employee.time_off_accruals.create!(time_off_policy: @sick_policy, accrual_type: "carryover", hours: 16, period_start_on: Date.current.beginning_of_month, period_end_on: Date.current.end_of_month, effective_on: Date.current.end_of_month, status: "approved", source: "import", approved_at: 1.day.ago)
     @published_shift = @employer.work_shifts.create!(employee: @employee, department: @department, work_location: @location, role: "People ops coverage", status: "published", starts_at: (Date.current + 2.days).in_time_zone.change(hour: 9), ends_at: (Date.current + 2.days).in_time_zone.change(hour: 17), break_minutes: 30, hourly_rate_cents: 4_500, published_at: 1.day.ago)
     @draft_shift = @employer.work_shifts.create!(employee: @employee, department: @department, work_location: @location, role: "Payroll close support", status: "draft", starts_at: (Date.current + 3.days).in_time_zone.change(hour: 10), ends_at: (Date.current + 3.days).in_time_zone.change(hour: 18), break_minutes: 30, hourly_rate_cents: 4_500)
     @open_shift = @employer.work_shifts.create!(department: @department, work_location: @location, role: "Open benefits desk", status: "draft", starts_at: (Date.current + 4.days).in_time_zone.change(hour: 8), ends_at: (Date.current + 4.days).in_time_zone.change(hour: 16), break_minutes: 30, hourly_rate_cents: 3_800)
@@ -257,6 +259,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       onboarding_path,
       documents_path,
       time_off_path,
+      time_off_accruals_path,
       scheduling_path,
       timesheets_path,
       expenses_path,
@@ -309,6 +312,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     onboarding = Onboarding::CommandCenterQuery.new.call
     documents = Documents::CenterQuery.new.call
     time_off = TimeOff::CommandCenterQuery.new.call
+    pto_ledger = TimeOff::AccrualLedgerQuery.new.call
     scheduling = Scheduling::CenterQuery.new.call
     timesheets = TimeTracking::CenterQuery.new.call
     expenses = Expenses::CenterQuery.new.call
@@ -396,6 +400,11 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_instance_of TimeOff::RequestDto, time_off.requests.first
     assert_instance_of TimeOff::PolicyDto, time_off.policies.first
     assert_instance_of TimeOff::EmployeeBalanceDto, time_off.balances.first
+    assert_instance_of TimeOff::AccrualCenterDto, pto_ledger
+    assert_instance_of TimeOff::AccrualMetricDto, pto_ledger.metrics.first
+    assert_instance_of TimeOff::AccrualBalanceDto, pto_ledger.balances.first
+    assert_instance_of TimeOff::AccrualLineDto, pto_ledger.accruals.first
+    assert_instance_of TimeOff::AccrualIssueDto, pto_ledger.issues.first
     assert_instance_of Scheduling::CenterDto, scheduling
     assert_instance_of Scheduling::MetricDto, scheduling.metrics.first
     assert_instance_of Scheduling::ShiftDto, scheduling.shifts.first
@@ -1199,6 +1208,85 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal "time_off_command_center", @time_off_request.metadata.fetch("reviewed_from")
     assert_equal "approved", @time_off_request.metadata.fetch("review_decision")
     assert_not_nil @time_off_request.reviewed_at
+  end
+
+  test "PTO accrual ledger exposes balances and packet DTOs" do
+    detail = TimeOff::AccrualLedgerQuery.new.call
+
+    assert_instance_of TimeOff::AccrualCenterDto, detail
+    assert_instance_of TimeOff::AccrualMetricDto, detail.metrics.first
+    assert_instance_of TimeOff::AccrualBalanceDto, detail.balances.first
+    assert_instance_of TimeOff::AccrualLineDto, detail.accruals.first
+    assert_instance_of TimeOff::AccrualIssueDto, detail.issues.first
+    assert detail.pending_accruals.any? { |accrual| accrual.id == @time_off_accrual.id }
+
+    get time_off_accruals_path
+
+    assert_response :success
+    assert_select "h1", "PTO accrual and payroll ledger"
+    assert_select "h2", "Employee PTO balances"
+    assert_select "h2", "Payroll readiness issues"
+    assert_select "h2", "Accrual ledger"
+    assert_select "h2", "Payroll packet lines"
+    assert_select "h2", "Packet holdbacks"
+  end
+
+  test "generates monthly PTO accruals through command action" do
+    dto = TimeOff::GenerateAccrualRunDto.from_params(period_start_on: Date.current.beginning_of_month.iso8601, requested_by: "payroll_admin")
+
+    assert_equal Date.current.beginning_of_month, dto.period_start_on
+    assert_equal "payroll_admin", dto.requested_by
+
+    assert_difference -> { TimeOffAccrual.count }, 1 do
+      post generate_time_off_accruals_path, params: { period_start_on: Date.current.beginning_of_month.iso8601, requested_by: "payroll_admin" }
+    end
+
+    assert_redirected_to time_off_accruals_path
+    generated = @employee.time_off_accruals.find_by!(time_off_policy: @sick_policy, accrual_type: "monthly_accrual", period_start_on: Date.current.beginning_of_month)
+    assert_equal "pending", generated.status
+    assert_equal (@sick_policy.annual_hours / 12).round(2), generated.hours
+    assert_equal "payroll_admin", generated.metadata.fetch("requested_by")
+  end
+
+  test "approves PTO accrual through command action" do
+    dto = TimeOff::ApproveAccrualDto.from_params(id: @time_off_accrual.id, approved_by: "payroll_admin")
+
+    assert_equal @time_off_accrual.id, dto.accrual_id
+    assert_equal "payroll_admin", dto.approved_by
+
+    post approve_time_off_accrual_path(@time_off_accrual), params: { approved_by: "payroll_admin" }
+
+    assert_redirected_to time_off_accruals_path
+    @time_off_accrual.reload
+    assert_equal "approved", @time_off_accrual.status
+    assert_equal "payroll_admin", @time_off_accrual.metadata.fetch("approved_by")
+    assert_equal "pto_accrual_ledger", @time_off_accrual.metadata.fetch("approved_from")
+    assert_not_nil @time_off_accrual.approved_at
+  end
+
+  test "generates PTO payroll packet with lines and holdbacks" do
+    dto = TimeOff::GenerateAccrualPayrollPacketDto.from_params(requested_by: "payroll_admin")
+
+    assert_equal "payroll_admin", dto.requested_by
+
+    post generate_time_off_accrual_payroll_packet_path, params: { requested_by: "payroll_admin" }
+
+    assert_redirected_to time_off_accruals_path
+    packet = @employer.reload.settings.fetch("pto_payroll_packet")
+    assert_match(/\Apto_payroll_#{@employer.id}_#{@payroll_run.id}_/, packet.fetch("packet_id"))
+    assert_equal "payroll_admin", packet.fetch("requested_by")
+    assert_equal 2, packet.fetch("totals").fetch("line_count")
+    assert_equal 2, packet.fetch("totals").fetch("holdback_count")
+    assert_equal @approved_time_off_accrual.hours, packet.fetch("totals").fetch("accrual_hours").to_d
+    assert_equal @approved_time_off_request.hours, packet.fetch("totals").fetch("usage_hours").to_d
+    assert packet.fetch("lines").any? { |line| line.fetch("line_type") == "accrual_credit" && line.fetch("employee_id") == @employee.id }
+    assert packet.fetch("lines").any? { |line| line.fetch("line_type") == "pto_usage" && line.fetch("employee_id") == @employee.id }
+    assert packet.fetch("holdbacks").any? { |holdback| holdback.fetch("reason_code") == "pending_accrual" }
+
+    detail = TimeOff::AccrualLedgerQuery.new.call
+    assert_instance_of TimeOff::AccrualPacketDto, detail.packet
+    assert_instance_of TimeOff::AccrualPacketLineDto, detail.packet_lines.first
+    assert_instance_of TimeOff::AccrualIssueDto, detail.packet_holdbacks.first
   end
 
   test "scheduling center exposes shifts swaps and forecast DTOs" do

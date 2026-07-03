@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_03_231500) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_03_233000) do
   create_table "api_request_logs", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.integer "duration_ms"
@@ -817,6 +817,28 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_03_231500) do
     t.index ["status", "work_date"], name: "index_time_entries_on_status_and_work_date"
   end
 
+  create_table "time_off_accruals", force: :cascade do |t|
+    t.string "accrual_type", null: false
+    t.datetime "approved_at"
+    t.datetime "created_at", null: false
+    t.date "effective_on", null: false
+    t.integer "employee_id", null: false
+    t.decimal "hours", precision: 8, scale: 2, default: "0.0", null: false
+    t.json "metadata", default: {}, null: false
+    t.integer "payroll_run_id"
+    t.date "period_end_on", null: false
+    t.date "period_start_on", null: false
+    t.string "source", default: "system", null: false
+    t.string "status", default: "pending", null: false
+    t.integer "time_off_policy_id", null: false
+    t.datetime "updated_at", null: false
+    t.index ["employee_id", "time_off_policy_id", "period_start_on", "accrual_type"], name: "idx_time_off_accruals_unique_period_type", unique: true
+    t.index ["employee_id"], name: "index_time_off_accruals_on_employee_id"
+    t.index ["payroll_run_id"], name: "index_time_off_accruals_on_payroll_run_id"
+    t.index ["status", "effective_on"], name: "index_time_off_accruals_on_status_and_effective_on"
+    t.index ["time_off_policy_id"], name: "index_time_off_accruals_on_time_off_policy_id"
+  end
+
   create_table "time_off_policies", force: :cascade do |t|
     t.string "accrual_method", default: "annual_grant", null: false
     t.decimal "annual_hours", precision: 8, scale: 2, default: "0.0", null: false
@@ -1020,6 +1042,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_03_231500) do
   add_foreign_key "shift_swap_requests", "work_shifts"
   add_foreign_key "sync_runs", "integration_connections"
   add_foreign_key "time_entries", "employees"
+  add_foreign_key "time_off_accruals", "employees"
+  add_foreign_key "time_off_accruals", "payroll_runs"
+  add_foreign_key "time_off_accruals", "time_off_policies"
   add_foreign_key "time_off_policies", "employers"
   add_foreign_key "time_off_requests", "employees"
   add_foreign_key "time_off_requests", "time_off_policies"
