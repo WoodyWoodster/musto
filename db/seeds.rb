@@ -273,12 +273,27 @@ end
 
 employees.each_with_index do |employee, index|
   [
-    [ "Form I-9", "identity", index == 4 ? "pending" : "complete", nil ],
-    [ "W-4", "tax", "complete", nil ],
-    [ "Benefits disclosure", "benefits", index == 1 ? "pending" : "complete", Date.current + 45.days ]
-  ].each do |title, document_type, status, expires_on|
+    [ "Form I-9", "identity", index == 4 ? "requested" : "complete", nil, index == 4 ? 4.days.ago : 30.days.ago, index == 4 ? nil : 26.days.ago, "employee_portal" ],
+    [ "W-4", "tax", "complete", nil, 30.days.ago, 25.days.ago, "employee_portal" ],
+    [ "Direct deposit authorization", "payroll", index == 2 ? "requested" : "complete", nil, index == 2 ? 2.days.ago : 18.days.ago, index == 2 ? nil : 17.days.ago, "payroll_console" ],
+    [ "Benefits disclosure", "benefits", index == 1 ? "pending" : "complete", index == 3 ? Date.current + 25.days : Date.current + 180.days, index == 1 ? 5.days.ago : 20.days.ago, index == 1 ? nil : 19.days.ago, "vitable_embed" ],
+    [ "Handbook acknowledgment", "policy", index == 3 ? "requested" : "complete", Date.current.end_of_year, index == 3 ? 1.day.ago : 14.days.ago, index == 3 ? nil : 13.days.ago, "employee_portal" ]
+  ].each do |title, document_type, status, expires_on, requested_at, verified_at, source|
     document = employee.employee_documents.find_or_initialize_by(title:)
-    document.assign_attributes(document_type:, status:, issued_on: Date.current - 20.days, expires_on:)
+    document.assign_attributes(
+      document_type:,
+      status:,
+      issued_on: status == "complete" ? Date.current - 20.days : nil,
+      expires_on:,
+      requested_at:,
+      verified_at:,
+      source:,
+      metadata: {
+        source: "seeded_document_vault",
+        retention_policy: document_type == "identity" ? "i9_retention" : "employee_record",
+        vitable_surface: document_type == "benefits"
+      }
+    )
     document.save!
   end
 end

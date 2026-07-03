@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_03_180000) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_03_183000) do
   create_table "api_request_logs", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.integer "duration_ms"
@@ -169,12 +169,18 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_03_180000) do
     t.date "expires_on"
     t.date "issued_on"
     t.json "metadata", default: {}, null: false
+    t.datetime "requested_at"
+    t.string "source", default: "employee_portal", null: false
     t.string "status", default: "pending", null: false
     t.string "title", null: false
     t.datetime "updated_at", null: false
+    t.datetime "verified_at"
     t.index ["employee_id", "document_type"], name: "index_employee_documents_on_employee_id_and_document_type"
     t.index ["employee_id"], name: "index_employee_documents_on_employee_id"
+    t.index ["source"], name: "index_employee_documents_on_source"
     t.index ["status", "expires_on"], name: "index_employee_documents_on_status_and_expires_on"
+    t.index ["status", "requested_at"], name: "index_employee_documents_on_status_and_requested_at"
+    t.index ["status", "verified_at"], name: "index_employee_documents_on_status_and_verified_at"
   end
 
   create_table "employee_expenses", force: :cascade do |t|

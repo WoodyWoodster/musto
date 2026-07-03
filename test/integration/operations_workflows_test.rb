@@ -38,8 +38,9 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     @dependent = @employee.dependents.create!(first_name: "Harper", last_name: "Ng", relationship: "spouse", date_of_birth: Date.current - 30.years, enrollment_status: "enrolled", eligibility_status: "eligible")
     @dependent_holdback = @employee.dependents.create!(first_name: "Rowan", last_name: "Ng", relationship: "child", date_of_birth: Date.current - 8.years, enrollment_status: "pending", eligibility_status: "needs_review")
     @task = @employee.onboarding_tasks.create!(title: "Confirm payroll setup", category: "payroll", due_on: Date.current)
-    @pending_document = @employee.employee_documents.create!(title: "Benefits disclosure", document_type: "benefits", status: "pending", expires_on: Date.current + 30.days)
-    @complete_document = @employee.employee_documents.create!(title: "Form W-4", document_type: "tax", status: "complete", issued_on: Date.current)
+    @pending_document = @employee.employee_documents.create!(title: "Benefits disclosure", document_type: "benefits", status: "pending", expires_on: Date.current + 30.days, requested_at: 2.days.ago)
+    @complete_document = @employee.employee_documents.create!(title: "W-4", document_type: "tax", status: "complete", issued_on: Date.current, verified_at: 1.day.ago)
+    @expiring_document = @employee.employee_documents.create!(title: "Handbook acknowledgment", document_type: "policy", status: "complete", issued_on: Date.current - 1.year, expires_on: Date.current + 10.days, verified_at: 1.year.ago)
     @policy = @employer.time_off_policies.create!(name: "PTO", annual_hours: 120)
     @time_off_request = @employee.time_off_requests.create!(time_off_policy: @policy, starts_on: Date.current + 1.day, ends_on: Date.current + 2.days, hours: 16)
     @sick_policy = @employer.time_off_policies.create!(name: "Sick Leave", accrual_method: "state_accrual", annual_hours: 56, carryover_hours: 16)
@@ -166,6 +167,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       workforce_path,
       lifecycle_path,
       onboarding_path,
+      documents_path,
       time_off_path,
       timesheets_path,
       expenses_path,
@@ -200,6 +202,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     lifecycle = Lifecycle::CommandCenterQuery.new.call
     payroll = Operations::PayrollQuery.new.call
     onboarding = Onboarding::CommandCenterQuery.new.call
+    documents = Documents::CenterQuery.new.call
     time_off = TimeOff::CommandCenterQuery.new.call
     timesheets = TimeTracking::CenterQuery.new.call
     expenses = Expenses::CenterQuery.new.call
@@ -231,6 +234,12 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_instance_of Onboarding::TaskDto, onboarding.tasks.first
     assert_instance_of Onboarding::DocumentDto, onboarding.documents.first
     assert_instance_of Onboarding::LaneDto, onboarding.lanes.first
+    assert_instance_of Documents::CenterDto, documents
+    assert_instance_of Documents::MetricDto, documents.metrics.first
+    assert_instance_of Documents::DocumentDto, documents.documents.first
+    assert_instance_of Documents::EmployeeCoverageDto, documents.employees.first
+    assert_instance_of Documents::RequirementDto, documents.requirements.first
+    assert_instance_of Documents::ExceptionDto, documents.exceptions.first
     assert_instance_of TimeOff::CommandCenterDto, time_off
     assert_instance_of TimeOff::RequestDto, time_off.requests.first
     assert_instance_of TimeOff::PolicyDto, time_off.policies.first
@@ -501,6 +510,57 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal Date.current, @pending_document.issued_on
     assert_equal "ops_console", @pending_document.metadata.fetch("verified_by")
     assert_not_nil @pending_document.metadata.fetch("verified_at")
+    assert_not_nil @pending_document.verified_at
+  end
+
+  test "document vault exposes coverage DTOs" do
+    detail = Documents::CenterQuery.new.call
+
+    assert_instance_of Documents::CenterDto, detail
+    assert_instance_of Documents::MetricDto, detail.metrics.first
+    assert_instance_of Documents::DocumentDto, detail.documents.first
+    assert_instance_of Documents::EmployeeCoverageDto, detail.employees.first
+    assert_instance_of Documents::RequirementDto, detail.requirements.first
+    assert_instance_of Documents::ExceptionDto, detail.exceptions.first
+    assert detail.attention_documents.any? { |document| document.id == @pending_document.id }
+
+    get documents_path
+
+    assert_response :success
+    assert_select "h1", "Employee document vault"
+    assert_select "h2", "Document exceptions"
+    assert_select "h2", "Employee coverage"
+    assert_select "h2", "Required document matrix"
+    assert_select "h2", "Document ledger"
+    assert_select "h2", "Request batch ledger"
+  end
+
+  test "generates employee document requests through command action" do
+    post request_document_batch_path
+
+    assert_redirected_to documents_path
+    batch = @employer.reload.settings.fetch("document_request_batch")
+    assert_match(/\Adocument_requests_#{@employer.id}_/, batch.fetch("batch_id"))
+    assert_equal "ops_console", batch.fetch("requested_by")
+    assert batch.fetch("totals").fetch("request_count").positive?
+    assert batch.fetch("totals").fetch("employee_count").positive?
+    assert @employee.employee_documents.where(title: "Form I-9", status: "requested").exists?
+
+    detail = Documents::CenterQuery.new.call
+    assert_instance_of Documents::BatchDto, detail.latest_batch
+    assert_instance_of Documents::BatchLineDto, detail.batch_lines.first
+    assert_instance_of Documents::BatchHoldbackDto, detail.batch_holdbacks.first
+  end
+
+  test "verifies an employee document from the document vault" do
+    post verify_employee_document_path(@pending_document), params: { return_to: "documents", reviewed_by: "document_admin" }
+
+    assert_redirected_to documents_path
+    @pending_document.reload
+    assert_equal "complete", @pending_document.status
+    assert_equal "document_admin", @pending_document.metadata.fetch("verified_by")
+    assert_equal "document_vault", @pending_document.metadata.fetch("verification_source")
+    assert_not_nil @pending_document.verified_at
   end
 
   test "time off command center exposes policies balances and calendar DTOs" do

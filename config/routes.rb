@@ -22,6 +22,8 @@ Rails.application.routes.draw do
   get "company/setup", to: "company_setup#show", as: :company_setup
   post "company/setup/:step_key/complete", to: "company_setup#complete_step", as: :complete_company_setup_step
   get "onboarding", to: "onboarding#show"
+  get "documents", to: "employee_documents#show", as: :documents
+  post "documents/request_batch", to: "employee_documents#request_batch", as: :request_document_batch
   get "time-off", to: "time_off#show", as: :time_off
   get "timesheets", to: "timesheets#show"
   post "timesheets/time_entries/:id/approve", to: "timesheets#approve_entry", as: :approve_time_entry

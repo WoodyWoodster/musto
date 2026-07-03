@@ -1,0 +1,298 @@
+<section class="space-y-7">
+  <div class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div class="grid xl:grid-cols-[1.25fr_0.75fr]">
+      <div class="p-6 lg:p-8">
+        <div class="flex flex-wrap items-center gap-2">
+          <%= status_pill(@documents.exceptions.any? { |issue| issue.status != "ready" } ? "needs_review" : "ready") %>
+          <span class="rounded-full bg-cyan-50 px-3 py-1 text-xs font-semibold text-cyan-800 ring-1 ring-inset ring-cyan-200">Employee vault</span>
+          <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700 ring-1 ring-inset ring-slate-200">Audit trail</span>
+        </div>
+
+        <h1 class="mt-5 text-4xl font-semibold tracking-tight text-slate-950">Employee document vault</h1>
+        <p class="mt-3 max-w-3xl text-base leading-7 text-slate-600">
+          Collect, verify, and renew employment, payroll, tax, benefits, and policy documents for <%= @documents.employer&.name || "your employer portfolio" %>.
+        </p>
+
+        <div class="mt-6 flex flex-wrap gap-3">
+          <%= link_to "Onboarding", onboarding_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
+          <%= link_to "Compliance", compliance_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
+          <%= link_to "Payroll", payroll_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
+          <%= button_to "Generate request batch", request_document_batch_path, method: :post, params: { requested_by: "ops_console" }, class: "rounded-md bg-slate-950 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-slate-800" %>
+        </div>
+      </div>
+
+      <aside class="border-t border-slate-200 bg-slate-950 p-6 text-white xl:border-l xl:border-t-0 xl:p-8">
+        <p class="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-300">Latest request batch</p>
+        <% if @documents.latest_batch.present? %>
+          <p class="mt-6 break-all font-mono text-sm font-semibold"><%= @documents.latest_batch.batch_id %></p>
+          <p class="mt-3 text-sm text-slate-300">Generated <%= time_ago_in_words(@documents.latest_batch.generated_at) %> ago by <%= @documents.latest_batch.requested_by %></p>
+          <div class="mt-6 grid grid-cols-3 gap-3">
+            <div class="rounded-md bg-white/10 p-4">
+              <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Requests</p>
+              <p class="mt-2 text-2xl font-semibold"><%= compact_number(@documents.latest_batch.request_count) %></p>
+            </div>
+            <div class="rounded-md bg-white/10 p-4">
+              <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">People</p>
+              <p class="mt-2 text-2xl font-semibold"><%= compact_number(@documents.latest_batch.employee_count) %></p>
+            </div>
+            <div class="rounded-md bg-white/10 p-4">
+              <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Clear</p>
+              <p class="mt-2 text-2xl font-semibold"><%= compact_number(@documents.latest_batch.holdback_count) %></p>
+            </div>
+          </div>
+        <% else %>
+          <p class="mt-6 text-3xl font-semibold tracking-tight">No batch</p>
+          <p class="mt-2 text-sm leading-6 text-slate-300">Generate employee document requests after reviewing coverage gaps.</p>
+        <% end %>
+      </aside>
+    </div>
+  </div>
+
+  <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+    <% @documents.metrics.each do |metric| %>
+      <article class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <div class="flex items-center justify-between gap-3">
+          <p class="text-sm font-medium text-slate-500"><%= metric.label %></p>
+          <span class="h-2.5 w-2.5 shrink-0 rounded-full <%= metric.accent %>"></span>
+        </div>
+        <p class="mt-4 text-3xl font-semibold tracking-tight text-slate-950">
+          <%= metric.format == "percent" ? "#{metric.value}%" : compact_number(metric.value) %>
+        </p>
+        <div class="mt-2 flex flex-wrap items-center gap-2">
+          <%= status_pill(metric.status) %>
+          <p class="text-sm text-slate-500"><%= metric.hint %></p>
+        </div>
+      </article>
+    <% end %>
+  </div>
+
+  <div class="grid gap-6 xl:grid-cols-[0.92fr_1.08fr]">
+    <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="border-b border-slate-100 px-5 py-4">
+        <h2 class="text-base font-semibold text-slate-950">Document exceptions</h2>
+        <p class="text-sm text-slate-500">Coverage gaps, expirations, and employee follow-up queues.</p>
+      </div>
+      <div class="divide-y divide-slate-100">
+        <% @documents.exceptions.each do |issue| %>
+          <div class="p-5">
+            <div class="flex flex-wrap items-start justify-between gap-3">
+              <div class="min-w-0">
+                <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400"><%= issue.owner %> · <%= issue.severity %></p>
+                <h3 class="mt-2 text-base font-semibold text-slate-950"><%= issue.title %></h3>
+              </div>
+              <%= status_pill(issue.status) %>
+            </div>
+            <p class="mt-3 text-sm leading-6 text-slate-600"><%= issue.detail %></p>
+            <div class="mt-4 flex items-center justify-between gap-3">
+              <span class="rounded-md bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700"><%= compact_number(issue.count) %> records</span>
+              <%= link_to "Open workflow", issue.action_path, class: "text-sm font-semibold text-cyan-700 hover:text-cyan-900" %>
+            </div>
+          </div>
+        <% end %>
+      </div>
+    </section>
+
+    <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="border-b border-slate-100 px-5 py-4">
+        <h2 class="text-base font-semibold text-slate-950">Employee coverage</h2>
+        <p class="text-sm text-slate-500">Required document completion by employee.</p>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-slate-100 text-sm">
+          <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <tr>
+              <th class="px-5 py-3">Employee</th>
+              <th class="px-5 py-3">Coverage</th>
+              <th class="px-5 py-3">Missing</th>
+              <th class="px-5 py-3">Status</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            <% @documents.employees.each do |employee| %>
+              <tr class="hover:bg-slate-50">
+                <td class="px-5 py-4">
+                  <%= link_to employee.employee_name, employee_path(employee.employee_id), class: "font-semibold text-slate-950 hover:text-cyan-700" %>
+                  <p class="mt-1 text-xs text-slate-500"><%= employee.department_name || "Unassigned" %> · <%= employee.location_name || "No location" %></p>
+                </td>
+                <td class="px-5 py-4">
+                  <div class="flex min-w-36 items-center gap-3">
+                    <div class="h-2 flex-1 overflow-hidden rounded-full bg-slate-100">
+                      <div class="h-full rounded-full bg-slate-950" style="width: <%= employee.coverage_percent %>%"></div>
+                    </div>
+                    <span class="text-xs font-semibold text-slate-600"><%= employee.coverage_percent %>%</span>
+                  </div>
+                  <p class="mt-1 text-xs text-slate-500"><%= employee.complete_count %>/<%= employee.required_count %> complete</p>
+                </td>
+                <td class="px-5 py-4 text-slate-600">
+                  <% if employee.missing_titles.any? %>
+                    <%= employee.missing_titles.first(2).join(", ") %><%= employee.missing_titles.count > 2 ? " +" + (employee.missing_titles.count - 2).to_s : "" %>
+                  <% else %>
+                    None
+                  <% end %>
+                </td>
+                <td class="px-5 py-4"><%= status_pill(employee.status) %></td>
+              </tr>
+            <% end %>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div class="border-b border-slate-100 px-5 py-4">
+      <h2 class="text-base font-semibold text-slate-950">Required document matrix</h2>
+      <p class="text-sm text-slate-500">Employment document rules that feed payroll, benefits, compliance, and Vitable handoffs.</p>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="min-w-full divide-y divide-slate-100 text-sm">
+        <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <tr>
+            <th class="px-5 py-3">Requirement</th>
+            <th class="px-5 py-3">Owner</th>
+            <th class="px-5 py-3">Cadence</th>
+            <th class="px-5 py-3">Coverage</th>
+            <th class="px-5 py-3">Gaps</th>
+            <th class="px-5 py-3">Status</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          <% @documents.requirements.each do |requirement| %>
+            <tr class="hover:bg-slate-50">
+              <td class="px-5 py-4">
+                <p class="font-semibold text-slate-950"><%= requirement.title %></p>
+                <p class="mt-1 text-xs text-slate-500"><%= requirement.document_type.humanize %> · <%= requirement.blocking_surface %></p>
+              </td>
+              <td class="px-5 py-4 text-slate-600"><%= requirement.owner %></td>
+              <td class="px-5 py-4 text-slate-600"><%= requirement.cadence %></td>
+              <td class="px-5 py-4 font-semibold text-slate-950"><%= compact_number(requirement.coverage_count) %></td>
+              <td class="px-5 py-4 text-slate-600"><%= compact_number(requirement.missing_count) %> missing · <%= compact_number(requirement.expiring_count) %> expiring</td>
+              <td class="px-5 py-4"><%= status_pill(requirement.status) %></td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div class="border-b border-slate-100 px-5 py-4">
+      <h2 class="text-base font-semibold text-slate-950">Document ledger</h2>
+      <p class="text-sm text-slate-500">Employee documents with request, verification, expiry, and source state.</p>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="min-w-full divide-y divide-slate-100 text-sm">
+        <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <tr>
+            <th class="px-5 py-3">Employee</th>
+            <th class="px-5 py-3">Document</th>
+            <th class="px-5 py-3">Requested</th>
+            <th class="px-5 py-3">Verified</th>
+            <th class="px-5 py-3">Expires</th>
+            <th class="px-5 py-3">Status</th>
+            <th class="px-5 py-3"></th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          <% @documents.documents.each do |document| %>
+            <tr class="hover:bg-slate-50">
+              <td class="px-5 py-4">
+                <%= link_to document.employee_name, employee_path(document.employee_id), class: "font-semibold text-slate-950 hover:text-cyan-700" %>
+                <p class="mt-1 text-xs text-slate-500"><%= document.department_name || "Unassigned" %></p>
+              </td>
+              <td class="px-5 py-4">
+                <p class="font-semibold text-slate-950"><%= document.title %></p>
+                <p class="mt-1 text-xs text-slate-500"><%= document.document_type.humanize %> · <%= document.source.humanize %></p>
+              </td>
+              <td class="px-5 py-4 text-slate-600"><%= document.requested_at&.strftime("%b %-d, %Y") || "Not requested" %></td>
+              <td class="px-5 py-4 text-slate-600"><%= document.verified_at&.strftime("%b %-d, %Y") || document.issued_on&.strftime("%b %-d, %Y") || "Not verified" %></td>
+              <td class="px-5 py-4 text-slate-600"><%= document.expires_on&.strftime("%b %-d, %Y") || "No expiry" %></td>
+              <td class="px-5 py-4"><%= status_pill(document.attention_status == "ready" ? document.status : document.attention_status) %></td>
+              <td class="px-5 py-4 text-right">
+                <% if document.complete? %>
+                  <%= status_pill(document.status) %>
+                <% else %>
+                  <%= button_to "Verify", verify_employee_document_path(document.id), method: :post, params: { return_to: "documents", reviewed_by: "ops_console" }, class: "rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-800" %>
+                <% end %>
+              </td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div class="border-b border-slate-100 px-5 py-4">
+      <h2 class="text-base font-semibold text-slate-950">Request batch ledger</h2>
+      <p class="text-sm text-slate-500">Documents requested from employees and records already clear in the latest batch.</p>
+    </div>
+    <% if @documents.latest_batch.present? %>
+      <div class="grid divide-y divide-slate-100 lg:grid-cols-[1fr_0.9fr] lg:divide-x lg:divide-y-0">
+        <div class="min-w-0">
+          <div class="border-b border-slate-100 px-5 py-3">
+            <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Requested documents</p>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-slate-100 text-sm">
+              <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th class="px-5 py-3">Employee</th>
+                  <th class="px-5 py-3">Document</th>
+                  <th class="px-5 py-3">Requested</th>
+                  <th class="px-5 py-3">Status</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100">
+                <% @documents.batch_lines.each do |line| %>
+                  <tr class="hover:bg-slate-50">
+                    <td class="px-5 py-4 font-semibold text-slate-950"><%= line.employee_name %></td>
+                    <td class="px-5 py-4 text-slate-600"><%= line.title %></td>
+                    <td class="px-5 py-4 text-slate-600"><%= line.requested_at.strftime("%b %-d, %Y") %></td>
+                    <td class="px-5 py-4"><%= status_pill(line.status) %></td>
+                  </tr>
+                <% end %>
+                <% if @documents.batch_lines.empty? %>
+                  <tr>
+                    <td colspan="4" class="px-5 py-5 text-sm text-slate-600">No employee document requests were generated.</td>
+                  </tr>
+                <% end %>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="min-w-0">
+          <div class="border-b border-slate-100 px-5 py-3">
+            <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Already clear</p>
+          </div>
+          <div class="divide-y divide-slate-100">
+            <% @documents.batch_holdbacks.each do |holdback| %>
+              <div class="p-5">
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                  <div class="min-w-0">
+                    <p class="font-semibold text-slate-950"><%= holdback.employee_name %></p>
+                    <p class="mt-1 text-sm text-slate-500"><%= holdback.title %></p>
+                  </div>
+                  <%= status_pill(holdback.status) %>
+                </div>
+                <p class="mt-3 text-sm leading-6 text-slate-600"><%= holdback.reason %></p>
+              </div>
+            <% end %>
+            <% if @documents.batch_holdbacks.empty? %>
+              <div class="p-5">
+                <p class="font-semibold text-slate-950">No clear records</p>
+                <p class="mt-2 text-sm leading-6 text-slate-600">Every required document was requested in the latest batch.</p>
+              </div>
+            <% end %>
+          </div>
+        </div>
+      </div>
+    <% else %>
+      <div class="p-5">
+        <p class="font-semibold text-slate-950">No generated document request batch</p>
+        <p class="mt-2 text-sm leading-6 text-slate-600">The next generated batch will show employee requests and already-clear records here.</p>
+      </div>
+    <% end %>
+  </section>
+</section>
