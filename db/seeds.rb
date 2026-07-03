@@ -374,6 +374,57 @@ end
   goal.save!
 end
 
+annual_training = employer.training_programs.find_or_initialize_by(title: "Annual compliance essentials")
+annual_training.assign_attributes(
+  category: "compliance",
+  description: "Required handbook, harassment prevention, workplace safety, and payroll policy attestations.",
+  audience: "all_employees",
+  cadence: "annual",
+  status: "active",
+  launch_on: Date.current - 10.days,
+  due_on: Date.current + 11.days,
+  launched_at: 10.days.ago,
+  metadata: { source: "seeded_training_program", owner: "people_ops" }
+)
+annual_training.save!
+
+benefits_training = employer.training_programs.find_or_initialize_by(title: "Benefits policy attestation")
+benefits_training.assign_attributes(
+  category: "benefits",
+  description: "Employee attestation for plan eligibility, dependent documentation, and payroll deduction changes.",
+  audience: "benefits_eligible",
+  cadence: "annual",
+  status: "draft",
+  launch_on: Date.current + 5.days,
+  due_on: Date.current + 28.days,
+  metadata: { source: "seeded_training_program", owner: "benefits_ops" }
+)
+benefits_training.save!
+
+[
+  [ employees.first, "complete", Date.current + 11.days, 5.days.ago, 98, "TRN-#{annual_training.id}-#{employees.first.id}-seed" ],
+  [ employees.second, "in_progress", Date.current + 11.days, nil, nil, nil ],
+  [ employees.third, "complete", Date.current + 11.days, 4.days.ago, 94, nil ],
+  [ employees.fourth, "assigned", Date.current + 11.days, nil, nil, nil ],
+  [ employees[4], "overdue", Date.current - 2.days, nil, nil, nil ],
+  [ employees.last, "complete", Date.current + 11.days, 2.days.ago, 100, "TRN-#{annual_training.id}-#{employees.last.id}-seed" ]
+].each do |employee, status, due_on, completed_at, score, certificate_id|
+  assignment = annual_training.training_assignments.find_or_initialize_by(employee:)
+  assignment.assign_attributes(
+    status:,
+    due_on:,
+    started_at: status.in?([ "in_progress", "complete", "overdue" ]) ? 7.days.ago : nil,
+    completed_at:,
+    score:,
+    certificate_id:,
+    metadata: { source: "seeded_training_assignment", delivery_channel: "employee_portal" }
+  )
+  assignment.save!
+end
+
+annual_training.refresh_counts!
+benefits_training.refresh_counts!
+
 plans = [
   [ "Vitable Direct Primary Care", "direct_primary_care", "Vitable", 9_900 ],
   [ "Minimum Essential Coverage", "minimum_essential_coverage", "Vitable", 14_900 ],

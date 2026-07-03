@@ -12,6 +12,8 @@ class Employer < ApplicationRecord
   has_many :open_enrollment_campaigns, dependent: :destroy
   has_many :performance_cycles, dependent: :destroy
   has_many :performance_reviews, through: :performance_cycles
+  has_many :training_programs, dependent: :destroy
+  has_many :training_assignments, through: :training_programs
   has_many :payroll_schedules, dependent: :destroy
   has_many :payroll_runs, dependent: :destroy
   has_many :employer_bank_accounts, dependent: :destroy

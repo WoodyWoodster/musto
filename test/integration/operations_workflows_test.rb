@@ -95,6 +95,12 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     @manager_review = @performance_cycle.performance_reviews.create!(employee: @employee, reviewer: @employee, status: "manager_review", rating: 4, due_on: Date.current + 7.days, strengths: "Strong operating cadence", growth_areas: "Delegate recurring reporting")
     @holdback_review = @draft_performance_cycle.performance_reviews.create!(employee: @employee, reviewer: @employee, status: "self_review", due_on: Date.current + 21.days)
     @at_risk_goal = @employee.employee_goals.create!(performance_cycle: @performance_cycle, title: "Build payroll audit coverage", description: "Create backup coverage for payroll exception review.", status: "at_risk", progress_percent: 35, due_on: Date.current + 10.days, owner: "manager", metric: "Audit backup assigned")
+    @training_program = @employer.training_programs.create!(title: "Annual compliance essentials", category: "compliance", status: "active", due_on: Date.current + 14.days, launched_at: 2.days.ago, description: "Required annual compliance program.")
+    @draft_training_program = @employer.training_programs.create!(title: "Benefits policy attestation", category: "benefits", status: "draft", due_on: Date.current + 28.days, description: "Benefits eligibility and deduction attestation.")
+    @completed_training_assignment = @training_program.training_assignments.create!(employee: @employee, status: "complete", due_on: Date.current + 14.days, completed_at: 1.day.ago, score: 98, certificate_id: "TRN-#{@training_program.id}-#{@employee.id}")
+    @open_training_assignment = @draft_training_program.training_assignments.create!(employee: @employee, status: "assigned", due_on: Date.current + 28.days)
+    @training_program.refresh_counts!
+    @draft_training_program.refresh_counts!
     @job_opening = @employer.job_openings.create!(title: "Payroll Implementation Lead", code: "PAY-LEAD", department: @department, work_location: @location, compensation_min_cents: 98_000_00, compensation_max_cents: 128_000_00, target_start_on: Date.current + 21.days)
     @offerable_candidate = @job_opening.candidates.create!(first_name: "Nia", last_name: "Okafor", email: "nia.candidate@example.com", source: "referral", stage: "screening", score: 91, applied_on: Date.current - 5.days, target_start_on: Date.current + 21.days, compensation_cents: 118_000_00)
     @accepted_candidate = @job_opening.candidates.create!(first_name: "Miles", last_name: "Sato", email: "miles.candidate@example.com", source: "direct", stage: "accepted", score: 95, applied_on: Date.current - 12.days, target_start_on: Date.current + 28.days, compensation_cents: 122_000_00, offer_sent_at: 2.days.ago, accepted_at: 1.day.ago)
@@ -230,6 +236,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       hiring_path,
       employee_changes_path,
       performance_path,
+      training_path,
       lifecycle_path,
       onboarding_path,
       documents_path,
@@ -270,6 +277,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     hiring = Hiring::CenterQuery.new.call
     employee_changes = EmployeeChanges::CenterQuery.new.call
     performance = Performance::CenterQuery.new.call
+    training = Training::CenterQuery.new.call
     lifecycle = Lifecycle::CommandCenterQuery.new.call
     payroll = Operations::PayrollQuery.new.call
     payroll_calendar = PayrollCalendar::CenterQuery.new.call
@@ -315,6 +323,11 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_instance_of Performance::ReviewDto, performance.reviews.first
     assert_instance_of Performance::GoalDto, performance.goals.first
     assert_instance_of Performance::IssueDto, performance.issues.first
+    assert_instance_of Training::CenterDto, training
+    assert_instance_of Training::MetricDto, training.metrics.first
+    assert_instance_of Training::ProgramDto, training.programs.first
+    assert_instance_of Training::AssignmentDto, training.assignments.first
+    assert_instance_of Training::IssueDto, training.issues.first
     assert_instance_of Lifecycle::CenterDto, lifecycle
     assert_instance_of Lifecycle::MetricDto, lifecycle.metrics.first
     assert_instance_of Lifecycle::EventDto, lifecycle.events.first
@@ -744,6 +757,68 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_instance_of Performance::CalibrationBatchDto, detail.latest_batch
     assert_instance_of Performance::CalibrationLineDto, detail.calibration_lines.first
     assert_instance_of Performance::CalibrationHoldbackDto, detail.calibration_holdbacks.first
+  end
+
+  test "training center exposes program and assignment DTOs" do
+    detail = Training::CenterQuery.new.call
+
+    assert_instance_of Training::CenterDto, detail
+    assert_instance_of Training::MetricDto, detail.metrics.first
+    assert_instance_of Training::ProgramDto, detail.programs.first
+    assert_instance_of Training::AssignmentDto, detail.assignments.first
+    assert_instance_of Training::IssueDto, detail.issues.first
+    assert detail.certificate_ready_assignments.any? { |assignment| assignment.id == @completed_training_assignment.id }
+    assert detail.completable_assignments.any? { |assignment| assignment.id == @open_training_assignment.id }
+
+    get training_path
+
+    assert_response :success
+    assert_select "h1", "Compliance training center"
+    assert_select "h2", "Training portfolio"
+    assert_select "h2", "Training issues"
+    assert_select "h2", "Assignment roster"
+    assert_select "h2", "Audit packet ledger"
+  end
+
+  test "launches draft training program through command action" do
+    post launch_training_program_path, params: { requested_by: "people_ops_admin" }
+
+    assert_redirected_to training_path
+    @draft_training_program.reload
+    assert_equal "active", @draft_training_program.status
+    assert_equal "people_ops_admin", @draft_training_program.metadata.fetch("launched_by")
+    assert_not_nil @draft_training_program.launched_at
+    assert @draft_training_program.training_assignments.where(employee: @employee).exists?
+  end
+
+  test "completes training assignment through command action" do
+    post complete_training_assignment_path(@open_training_assignment), params: { completed_by: "training_admin", score: 96 }
+
+    assert_redirected_to training_path
+    @open_training_assignment.reload
+    assert_equal "complete", @open_training_assignment.status
+    assert_equal 96, @open_training_assignment.score
+    assert_equal "training_admin", @open_training_assignment.metadata.fetch("completed_by")
+    assert_not_nil @open_training_assignment.completed_at
+    assert_not_nil @open_training_assignment.certificate_id
+  end
+
+  test "generates training audit packet through command action" do
+    post generate_training_audit_packet_path, params: { requested_by: "people_ops_admin" }
+
+    assert_redirected_to training_path
+    batch = @employer.reload.settings.fetch("training_audit_packet")
+    assert_match(/\Atraining_audit_#{@employer.id}_/, batch.fetch("batch_id"))
+    assert_equal "people_ops_admin", batch.fetch("requested_by")
+    assert_equal 1, batch.fetch("totals").fetch("assignment_count")
+    assert_equal 1, batch.fetch("totals").fetch("employee_count")
+    assert_equal 1, batch.fetch("totals").fetch("holdback_count")
+    assert_equal @completed_training_assignment.id, batch.fetch("assignments").first.fetch("assignment_id")
+
+    detail = Training::CenterQuery.new.call
+    assert_instance_of Training::AuditPacketDto, detail.latest_packet
+    assert_instance_of Training::AuditLineDto, detail.audit_lines.first
+    assert_instance_of Training::AuditHoldbackDto, detail.audit_holdbacks.first
   end
 
   test "lifecycle command center exposes employee change DTOs" do

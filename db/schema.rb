@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_03_210000) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_03_213000) do
   create_table "api_request_logs", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.integer "duration_ms"
@@ -756,6 +756,48 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_03_210000) do
     t.index ["time_off_policy_id"], name: "index_time_off_requests_on_time_off_policy_id"
   end
 
+  create_table "training_assignments", force: :cascade do |t|
+    t.string "certificate_id"
+    t.datetime "completed_at"
+    t.datetime "created_at", null: false
+    t.date "due_on", null: false
+    t.integer "employee_id", null: false
+    t.json "metadata", default: {}, null: false
+    t.integer "score"
+    t.datetime "started_at"
+    t.string "status", default: "assigned", null: false
+    t.integer "training_program_id", null: false
+    t.datetime "updated_at", null: false
+    t.index ["certificate_id"], name: "index_training_assignments_on_certificate_id"
+    t.index ["employee_id"], name: "index_training_assignments_on_employee_id"
+    t.index ["status", "due_on"], name: "index_training_assignments_on_status_and_due_on"
+    t.index ["training_program_id", "employee_id"], name: "index_training_assignments_on_program_and_employee", unique: true
+    t.index ["training_program_id"], name: "index_training_assignments_on_training_program_id"
+  end
+
+  create_table "training_programs", force: :cascade do |t|
+    t.string "audience", default: "all_employees", null: false
+    t.string "cadence", default: "annual", null: false
+    t.string "category", default: "compliance", null: false
+    t.datetime "closed_at"
+    t.integer "completed_count", default: 0, null: false
+    t.datetime "created_at", null: false
+    t.text "description"
+    t.date "due_on", null: false
+    t.integer "employer_id", null: false
+    t.date "launch_on"
+    t.datetime "launched_at"
+    t.json "metadata", default: {}, null: false
+    t.integer "overdue_count", default: 0, null: false
+    t.integer "required_count", default: 0, null: false
+    t.string "status", default: "draft", null: false
+    t.string "title", null: false
+    t.datetime "updated_at", null: false
+    t.index ["category", "due_on"], name: "index_training_programs_on_category_and_due_on"
+    t.index ["employer_id", "status"], name: "index_training_programs_on_employer_id_and_status"
+    t.index ["employer_id"], name: "index_training_programs_on_employer_id"
+  end
+
   create_table "webhook_events", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.text "error_message"
@@ -852,6 +894,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_03_210000) do
   add_foreign_key "time_off_policies", "employers"
   add_foreign_key "time_off_requests", "employees"
   add_foreign_key "time_off_requests", "time_off_policies"
+  add_foreign_key "training_assignments", "employees"
+  add_foreign_key "training_assignments", "training_programs"
+  add_foreign_key "training_programs", "employers"
   add_foreign_key "webhook_events", "integration_connections"
   add_foreign_key "work_locations", "employers"
 end

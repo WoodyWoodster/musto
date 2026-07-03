@@ -33,6 +33,10 @@ Rails.application.routes.draw do
   post "performance/reviews/:id/calibrate", to: "performance#calibrate_review", as: :calibrate_performance_review
   post "performance/goals/:id/complete", to: "performance#complete_goal", as: :complete_employee_goal
   post "performance/calibration_packet", to: "performance#generate_packet", as: :generate_performance_calibration_packet
+  get "training", to: "training#show"
+  post "training/programs/launch", to: "training#launch_program", as: :launch_training_program
+  post "training/assignments/:id/complete", to: "training#complete_assignment", as: :complete_training_assignment
+  post "training/audit_packet", to: "training#generate_packet", as: :generate_training_audit_packet
   get "onboarding", to: "onboarding#show"
   get "documents", to: "employee_documents#show", as: :documents
   post "documents/request_batch", to: "employee_documents#request_batch", as: :request_document_batch
