@@ -436,13 +436,29 @@ annual_training.refresh_counts!
 benefits_training.refresh_counts!
 
 plans = [
-  [ "Vitable Direct Primary Care", "direct_primary_care", "Vitable", 9_900 ],
-  [ "Minimum Essential Coverage", "minimum_essential_coverage", "Vitable", 14_900 ],
-  [ "Dental + Vision", "dental_vision", "Vitable", 7_500 ],
-  [ "ICHRA Marketplace", "ichra", "Vitable", 28_500 ]
-].to_h do |name, category, carrier, monthly_premium_cents|
+  [ "Vitable Direct Primary Care", "direct_primary_care", "Vitable", 9_900, 3_900, 6_000, "published", "empl_atlas_dpc" ],
+  [ "Minimum Essential Coverage", "minimum_essential_coverage", "Vitable", 14_900, 5_900, 9_000, "published", "empl_atlas_mec" ],
+  [ "Dental + Vision", "dental_vision", "Vitable", 7_500, 2_500, 5_000, "published", "empl_atlas_dental_vision" ],
+  [ "ICHRA Marketplace", "ichra", "Vitable", 28_500, 8_500, 20_000, "draft", nil ]
+].to_h do |name, category, carrier, monthly_premium_cents, employee_contribution_cents, employer_contribution_cents, review_status, vitable_id|
   plan = employer.benefit_plans.find_or_initialize_by(name:)
-  plan.assign_attributes(category:, carrier:, status: "available", monthly_premium_cents:)
+  plan.assign_attributes(
+    category:,
+    carrier:,
+    status: "available",
+    monthly_premium_cents:,
+    employee_contribution_cents:,
+    employer_contribution_cents:,
+    contribution_strategy: "fixed_employer_contribution",
+    eligibility_rule: category == "ichra" ? "benefits_eligible_remote" : "active_full_time",
+    plan_year: Date.current.year + 1,
+    effective_on: Date.current.next_year.beginning_of_year,
+    expires_on: Date.current.next_year.end_of_year,
+    review_status:,
+    published_at: review_status == "published" ? 1.week.ago : nil,
+    vitable_id:,
+    metadata: { source: "seeded_plan_catalog", catalog_owner: "benefits_ops" }
+  )
   plan.save!
   [ category, plan ]
 end

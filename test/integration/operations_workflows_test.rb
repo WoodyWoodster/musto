@@ -274,6 +274,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       payroll_run_path(@payroll_run),
       payroll_run_benefits_export_path(@payroll_run),
       benefits_path,
+      benefits_plan_admin_path,
       benefits_open_enrollment_path,
       benefits_eligibility_path,
       benefits_reconciliation_path,
@@ -320,6 +321,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     taxes = Taxes::CenterQuery.new.call
     reports = Reports::CenterQuery.new.call
     benefits = Operations::BenefitsQuery.new.call
+    plan_admin = Benefits::PlanAdministrationQuery.new.call
     open_enrollment = OpenEnrollment::CenterQuery.new.call
     eligibility = Benefits::EligibilityQuery.new.call
     reconciliation = Benefits::ReconciliationQuery.new.call
@@ -446,6 +448,10 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_instance_of Reports::MetricDto, reports.metrics.first
     assert_instance_of Reports::ReportCardDto, reports.report_cards.first
     assert_instance_of Operations::BenefitPlanDto, benefits.fetch(:benefit_plans).first
+    assert_instance_of Benefits::PlanAdministrationCenterDto, plan_admin
+    assert_instance_of Benefits::PlanAdminMetricDto, plan_admin.metrics.first
+    assert_instance_of Benefits::PlanDesignDto, plan_admin.plans.first
+    assert_instance_of Benefits::PlanReadinessIssueDto, plan_admin.issues.first
     assert_instance_of OpenEnrollment::CenterDto, open_enrollment
     assert_instance_of OpenEnrollment::MetricDto, open_enrollment.metrics.first
     assert_instance_of OpenEnrollment::CampaignDto, open_enrollment.campaign
@@ -1577,6 +1583,71 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_instance_of PayStatements::BatchLineDto, detail.batch_lines.first
   end
 
+  test "benefit plan administration exposes plan catalog DTOs" do
+    detail = Benefits::PlanAdministrationQuery.new.call
+
+    assert_instance_of Benefits::PlanAdministrationCenterDto, detail
+    assert_instance_of Benefits::PlanAdminMetricDto, detail.metrics.first
+    assert_instance_of Benefits::PlanDesignDto, detail.plans.first
+    assert_instance_of Benefits::PlanReadinessIssueDto, detail.issues.first
+    assert detail.plans.any? { |plan| plan.id == @plan.id }
+    assert detail.issues.any? { |issue| issue.plan_id == @plan.id }
+
+    get benefits_plan_admin_path
+
+    assert_response :success
+    assert_select "h1", "Benefit plan administration"
+    assert_select "h2", "Plan design catalog"
+    assert_select "h2", "Readiness issues"
+    assert_select "h2", "Catalog packet lines"
+    assert_select "h2", "Packet holdbacks"
+  end
+
+  test "publishes a ready benefit plan through command action" do
+    prepare_publishable_plan(@plan)
+    dto = Benefits::PublishPlanDto.from_params(id: @plan.id, published_by: "benefits_admin")
+
+    assert_equal @plan.id, dto.plan_id
+    assert_equal "benefits_admin", dto.published_by
+
+    post publish_benefit_plan_path(@plan), params: { published_by: "benefits_admin" }
+
+    assert_redirected_to benefits_plan_admin_path
+    @plan.reload
+    assert_equal "published", @plan.review_status
+    assert_equal "available", @plan.status
+    assert_equal "benefits_admin", @plan.metadata.fetch("published_by")
+    assert_equal "benefit_plan_administration", @plan.metadata.fetch("published_from")
+    assert_not_nil @plan.published_at
+  end
+
+  test "generates benefit plan catalog packet with lines and holdbacks" do
+    prepare_publishable_plan(@plan, review_status: "published")
+    prepare_publishable_plan(@pending_plan, employee_contribution_cents: 2_000, employer_contribution_cents: 2_500)
+
+    dto = Benefits::GeneratePlanCatalogPacketDto.from_params(requested_by: "benefits_admin")
+
+    assert_equal "benefits_admin", dto.requested_by
+
+    post generate_benefit_plan_catalog_packet_path, params: { requested_by: "benefits_admin" }
+
+    assert_redirected_to benefits_plan_admin_path
+    packet = @employer.reload.settings.fetch("benefit_plan_catalog_packet")
+    assert_match(/\Abenefit_plan_catalog_#{@employer.id}_/, packet.fetch("packet_id"))
+    assert_equal "benefits_admin", packet.fetch("requested_by")
+    assert_equal 3, packet.fetch("totals").fetch("plan_count")
+    assert_equal 1, packet.fetch("totals").fetch("ready_count")
+    assert_equal 2, packet.fetch("totals").fetch("holdback_count")
+    assert_equal @plan.id, packet.fetch("plans").first.fetch("plan_id")
+    assert packet.fetch("holdbacks").any? { |holdback| holdback.fetch("plan_id") == @pending_plan.id && holdback.fetch("reason_code") == "unpublished_plan" }
+
+    detail = Benefits::PlanAdministrationQuery.new.call
+
+    assert_instance_of Benefits::PlanCatalogPacketDto, detail.packet
+    assert_instance_of Benefits::PlanCatalogLineDto, detail.packet_lines.first
+    assert_instance_of Benefits::PlanReadinessIssueDto, detail.packet_holdbacks.first
+  end
+
   test "open enrollment center exposes campaign DTOs" do
     detail = OpenEnrollment::CenterQuery.new.call
 
@@ -2333,6 +2404,23 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     @employee.update!(manager:)
 
     [ manager, unassigned_report ]
+  end
+
+  def prepare_publishable_plan(plan, employee_contribution_cents: 3_900, employer_contribution_cents: nil, review_status: "draft")
+    employer_contribution_cents ||= plan.monthly_premium_cents - employee_contribution_cents
+    plan.update!(
+      carrier: "Vitable",
+      plan_year: Date.current.year + 1,
+      effective_on: Date.current.next_year.beginning_of_year,
+      expires_on: Date.current.next_year.end_of_year,
+      employee_contribution_cents:,
+      employer_contribution_cents:,
+      contribution_strategy: "fixed_employer_contribution",
+      eligibility_rule: "active_full_time",
+      review_status:,
+      published_at: review_status == "published" ? 1.hour.ago : nil,
+      vitable_id: "bpln_ops_#{plan.id}"
+    )
   end
 
   def prepare_provisioning_profile(remote_id: nil)

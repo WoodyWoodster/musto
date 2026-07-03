@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_03_230000) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_03_231500) do
   create_table "api_request_logs", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.integer "duration_ms"
@@ -80,18 +80,29 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_03_230000) do
   create_table "benefit_plans", force: :cascade do |t|
     t.string "carrier"
     t.string "category", null: false
+    t.string "contribution_strategy", default: "fixed_employer_contribution", null: false
     t.datetime "created_at", null: false
+    t.date "effective_on"
+    t.string "eligibility_rule", default: "active_full_time", null: false
+    t.integer "employee_contribution_cents", default: 0, null: false
+    t.integer "employer_contribution_cents", default: 0, null: false
     t.integer "employer_id", null: false
+    t.date "expires_on"
     t.json "metadata", default: {}, null: false
     t.integer "monthly_premium_cents", default: 0, null: false
     t.string "name", null: false
+    t.integer "plan_year"
+    t.datetime "published_at"
+    t.string "review_status", default: "draft", null: false
     t.string "status", default: "available", null: false
     t.datetime "updated_at", null: false
     t.string "vitable_id"
     t.index ["employer_id", "category"], name: "index_benefit_plans_on_employer_id_and_category"
+    t.index ["employer_id", "plan_year"], name: "index_benefit_plans_on_employer_id_and_plan_year"
     t.index ["employer_id", "status"], name: "index_benefit_plans_on_employer_id_and_status"
     t.index ["employer_id", "vitable_id"], name: "index_benefit_plans_on_employer_id_and_vitable_id", unique: true
     t.index ["employer_id"], name: "index_benefit_plans_on_employer_id"
+    t.index ["review_status"], name: "index_benefit_plans_on_review_status"
   end
 
   create_table "candidates", force: :cascade do |t|
