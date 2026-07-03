@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_03_190000) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_03_193000) do
   create_table "api_request_logs", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.integer "duration_ms"
@@ -388,6 +388,41 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_03_190000) do
     t.index ["employee_id"], name: "index_onboarding_tasks_on_employee_id"
   end
 
+  create_table "open_enrollment_campaigns", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.integer "employer_id", null: false
+    t.date "ends_on", null: false
+    t.datetime "launched_at"
+    t.json "metadata", default: {}, null: false
+    t.string "name", null: false
+    t.integer "plan_year", null: false
+    t.datetime "reminders_sent_at"
+    t.date "starts_on", null: false
+    t.string "status", default: "draft", null: false
+    t.datetime "updated_at", null: false
+    t.index ["employer_id", "plan_year"], name: "index_open_enrollment_campaigns_on_employer_id_and_plan_year", unique: true
+    t.index ["employer_id"], name: "index_open_enrollment_campaigns_on_employer_id"
+    t.index ["status", "starts_on"], name: "index_open_enrollment_campaigns_on_status_and_starts_on"
+  end
+
+  create_table "open_enrollment_invitations", force: :cascade do |t|
+    t.datetime "completed_at"
+    t.datetime "created_at", null: false
+    t.date "due_on", null: false
+    t.integer "employee_id", null: false
+    t.datetime "last_reminded_at"
+    t.json "metadata", default: {}, null: false
+    t.integer "open_enrollment_campaign_id", null: false
+    t.datetime "opened_at"
+    t.datetime "sent_at"
+    t.string "status", default: "not_sent", null: false
+    t.datetime "updated_at", null: false
+    t.index ["employee_id"], name: "index_open_enrollment_invitations_on_employee_id"
+    t.index ["open_enrollment_campaign_id", "employee_id"], name: "idx_open_enrollment_invites_on_campaign_employee", unique: true
+    t.index ["open_enrollment_campaign_id"], name: "idx_on_open_enrollment_campaign_id_33c3f56dd0"
+    t.index ["status", "due_on"], name: "index_open_enrollment_invitations_on_status_and_due_on"
+  end
+
   create_table "organizations", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.string "external_id"
@@ -612,6 +647,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_03_190000) do
   add_foreign_key "enrollments", "employees"
   add_foreign_key "integration_connections", "organizations"
   add_foreign_key "onboarding_tasks", "employees"
+  add_foreign_key "open_enrollment_campaigns", "employers"
+  add_foreign_key "open_enrollment_invitations", "employees"
+  add_foreign_key "open_enrollment_invitations", "open_enrollment_campaigns"
   add_foreign_key "pay_statements", "employees"
   add_foreign_key "pay_statements", "payroll_runs"
   add_foreign_key "payroll_adjustments", "employees"

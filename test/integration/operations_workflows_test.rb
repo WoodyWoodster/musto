@@ -37,6 +37,8 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     @waivable_enrollment = @employee.enrollments.create!(benefit_plan: @waivable_plan, status: "pending", effective_on: Date.current.next_month.beginning_of_month)
     @dependent = @employee.dependents.create!(first_name: "Harper", last_name: "Ng", relationship: "spouse", date_of_birth: Date.current - 30.years, enrollment_status: "enrolled", eligibility_status: "eligible")
     @dependent_holdback = @employee.dependents.create!(first_name: "Rowan", last_name: "Ng", relationship: "child", date_of_birth: Date.current - 8.years, enrollment_status: "pending", eligibility_status: "needs_review")
+    @open_enrollment_campaign = @employer.open_enrollment_campaigns.create!(name: "#{Date.current.year + 1} Open Enrollment", plan_year: Date.current.year + 1, starts_on: Date.current.next_month.beginning_of_month, ends_on: Date.current.next_month.beginning_of_month + 21.days, status: "active", launched_at: 1.day.ago)
+    @open_enrollment_invitation = @open_enrollment_campaign.open_enrollment_invitations.create!(employee: @employee, status: "not_sent", due_on: @open_enrollment_campaign.ends_on)
     @task = @employee.onboarding_tasks.create!(title: "Confirm payroll setup", category: "payroll", due_on: Date.current)
     @pending_document = @employee.employee_documents.create!(title: "Benefits disclosure", document_type: "benefits", status: "pending", expires_on: Date.current + 30.days, requested_at: 2.days.ago)
     @complete_document = @employee.employee_documents.create!(title: "W-4", document_type: "tax", status: "complete", issued_on: Date.current, verified_at: 1.day.ago)
@@ -185,6 +187,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       payroll_run_path(@payroll_run),
       payroll_run_benefits_export_path(@payroll_run),
       benefits_path,
+      benefits_open_enrollment_path,
       benefits_eligibility_path,
       benefits_reconciliation_path,
       enrollment_path(@pending_enrollment),
@@ -218,6 +221,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     taxes = Taxes::CenterQuery.new.call
     reports = Reports::CenterQuery.new.call
     benefits = Operations::BenefitsQuery.new.call
+    open_enrollment = OpenEnrollment::CenterQuery.new.call
     eligibility = Benefits::EligibilityQuery.new.call
     reconciliation = Benefits::ReconciliationQuery.new.call
     compliance = Operations::ComplianceQuery.new.call
@@ -293,6 +297,12 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_instance_of Reports::MetricDto, reports.metrics.first
     assert_instance_of Reports::ReportCardDto, reports.report_cards.first
     assert_instance_of Operations::BenefitPlanDto, benefits.fetch(:benefit_plans).first
+    assert_instance_of OpenEnrollment::CenterDto, open_enrollment
+    assert_instance_of OpenEnrollment::MetricDto, open_enrollment.metrics.first
+    assert_instance_of OpenEnrollment::CampaignDto, open_enrollment.campaign
+    assert_instance_of OpenEnrollment::InvitationDto, open_enrollment.invitations.first
+    assert_instance_of OpenEnrollment::PlanReadinessDto, open_enrollment.plans.first
+    assert_instance_of OpenEnrollment::IssueDto, open_enrollment.issues.first
     assert_instance_of Benefits::EligibilityCenterDto, eligibility
     assert_instance_of Benefits::EligibilityMetricDto, eligibility.metrics.first
     assert_instance_of Benefits::EligibilityMemberDto, eligibility.members.first
@@ -807,6 +817,77 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     detail = PayStatements::CenterQuery.new.call
     assert_instance_of PayStatements::BatchDto, detail.latest_batch
     assert_instance_of PayStatements::BatchLineDto, detail.batch_lines.first
+  end
+
+  test "open enrollment center exposes campaign DTOs" do
+    detail = OpenEnrollment::CenterQuery.new.call
+
+    assert_instance_of OpenEnrollment::CenterDto, detail
+    assert_instance_of OpenEnrollment::MetricDto, detail.metrics.first
+    assert_instance_of OpenEnrollment::CampaignDto, detail.campaign
+    assert_instance_of OpenEnrollment::InvitationDto, detail.invitations.first
+    assert_instance_of OpenEnrollment::PlanReadinessDto, detail.plans.first
+    assert_instance_of OpenEnrollment::IssueDto, detail.issues.first
+    assert detail.pending_invitations.any? { |invitation| invitation.id == @open_enrollment_invitation.id }
+
+    get benefits_open_enrollment_path
+
+    assert_response :success
+    assert_select "h1", "Open enrollment command center"
+    assert_select "h2", "Enrollment blockers"
+    assert_select "h2", "Plan readiness"
+    assert_select "h2", "Employee election queue"
+    assert_select "h2", "Open enrollment batch ledger"
+  end
+
+  test "launches open enrollment invitations through command action" do
+    post launch_open_enrollment_path
+
+    assert_redirected_to benefits_open_enrollment_path
+    @open_enrollment_campaign.reload
+    @open_enrollment_invitation.reload
+    assert_equal "active", @open_enrollment_campaign.status
+    assert_equal "sent", @open_enrollment_invitation.status
+    assert_equal "ops_console", @open_enrollment_invitation.metadata.fetch("sent_by")
+    batch = @open_enrollment_campaign.metadata.fetch("open_enrollment_batch")
+    assert_match(/\Aopen_enrollment_launch_#{@employer.id}_/, batch.fetch("batch_id"))
+    assert_equal 1, batch.fetch("totals").fetch("sent_count")
+
+    follow_redirect!
+
+    assert_response :success
+    assert_includes response.body, batch.fetch("batch_id")
+    assert_select "p", "Sent"
+
+    detail = OpenEnrollment::CenterQuery.new.call
+    assert_instance_of OpenEnrollment::BatchDto, detail.latest_batch
+    assert_instance_of OpenEnrollment::BatchLineDto, detail.batch_lines.first
+  end
+
+  test "sends open enrollment reminders through command action" do
+    @open_enrollment_invitation.update!(status: "sent", sent_at: 1.day.ago)
+
+    post send_open_enrollment_reminders_path
+
+    assert_redirected_to benefits_open_enrollment_path
+    @open_enrollment_campaign.reload
+    @open_enrollment_invitation.reload
+    assert_equal "reminded", @open_enrollment_invitation.status
+    assert_equal "ops_console", @open_enrollment_invitation.metadata.fetch("last_reminded_by")
+    assert_not_nil @open_enrollment_invitation.last_reminded_at
+    batch = @open_enrollment_campaign.metadata.fetch("open_enrollment_batch")
+    assert_match(/\Aopen_enrollment_reminder_#{@employer.id}_/, batch.fetch("batch_id"))
+    assert_equal 1, batch.fetch("totals").fetch("reminder_count")
+
+    follow_redirect!
+
+    assert_response :success
+    assert_includes response.body, batch.fetch("batch_id")
+    assert_select "p", "Reminders"
+
+    detail = OpenEnrollment::CenterQuery.new.call
+    assert_instance_of OpenEnrollment::BatchDto, detail.latest_batch
+    assert_instance_of OpenEnrollment::BatchLineDto, detail.batch_lines.first
   end
 
   test "benefits billing center exposes invoice reconciliation DTOs" do

@@ -194,6 +194,39 @@ end
   dependent.save!
 end
 
+open_enrollment_campaign = employer.open_enrollment_campaigns.find_or_initialize_by(plan_year: Date.current.year + 1)
+open_enrollment_campaign.assign_attributes(
+  name: "#{Date.current.year + 1} Open Enrollment",
+  starts_on: Date.current.next_month.beginning_of_month,
+  ends_on: Date.current.next_month.beginning_of_month + 21.days,
+  status: "active",
+  launched_at: 2.days.ago,
+  reminders_sent_at: 1.day.ago,
+  metadata: { source: "seeded_open_enrollment", channel: "employee_portal" }
+)
+open_enrollment_campaign.save!
+
+[
+  [ employees.first, "completed", 3.days.ago, 2.days.ago, nil ],
+  [ employees.second, "sent", 2.days.ago, nil, nil ],
+  [ employees.third, "opened", 2.days.ago, 1.day.ago, nil ],
+  [ employees.fourth, "reminded", 2.days.ago, 1.day.ago, 1.day.ago ],
+  [ employees[4], "blocked", 2.days.ago, nil, 1.day.ago ],
+  [ employees.last, "waived", 3.days.ago, 2.days.ago, nil ]
+].each do |employee, status, sent_at, opened_at, last_reminded_at|
+  invitation = open_enrollment_campaign.open_enrollment_invitations.find_or_initialize_by(employee:)
+  invitation.assign_attributes(
+    status:,
+    due_on: open_enrollment_campaign.ends_on,
+    sent_at:,
+    opened_at:,
+    completed_at: status.in?([ "completed", "waived" ]) ? 1.day.ago : nil,
+    last_reminded_at:,
+    metadata: { source: "seeded_open_enrollment", reminder_count: last_reminded_at.present? ? 1 : 0 }
+  )
+  invitation.save!
+end
+
 [
   [
     employees.second,

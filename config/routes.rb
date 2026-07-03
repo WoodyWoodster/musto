@@ -49,6 +49,9 @@ Rails.application.routes.draw do
   post "pay-statements/batch", to: "pay_statements#generate_batch", as: :generate_pay_statement_batch
   post "pay-statements/:id/deliver", to: "pay_statements#deliver_statement", as: :deliver_pay_statement
   get "benefits", to: "operations#benefits"
+  get "benefits/open-enrollment", to: "open_enrollment#show", as: :benefits_open_enrollment
+  post "benefits/open-enrollment/launch", to: "open_enrollment#launch", as: :launch_open_enrollment
+  post "benefits/open-enrollment/reminders", to: "open_enrollment#send_reminders", as: :send_open_enrollment_reminders
   get "benefits/billing", to: "benefits_billing#show", as: :benefits_billing
   post "benefits/billing/packet", to: "benefits_billing#generate_packet", as: :generate_benefit_billing_packet
   post "benefits/billing/invoices/:id/approve", to: "benefits_billing#approve_invoice", as: :approve_benefit_invoice
