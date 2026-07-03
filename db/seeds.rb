@@ -340,6 +340,35 @@ end
 end
 
 [
+  [ employees.first, "generated", nil, nil ],
+  [ employees.fourth, "delivered", 1.day.ago, nil ],
+  [ employees.last, "viewed", 2.days.ago, 1.day.ago ]
+].each do |employee, status, delivered_at, viewed_at|
+  gross_pay_cents = employee.compensation_cents / 24
+  adjustment_cents = current_run.payroll_adjustments.where(employee:).sum(:amount_cents)
+  deduction_cents = current_run.payroll_deductions.where(employee:).sum(:amount_cents)
+  tax_cents = (gross_pay_cents * 0.18).round
+  statement = current_run.pay_statements.find_or_initialize_by(employee:)
+  statement.assign_attributes(
+    statement_number: "PS-#{current_run.id}-#{employee.id}",
+    period_start_on: current_run.period_start_on,
+    period_end_on: current_run.period_end_on,
+    pay_date: current_run.pay_date,
+    gross_pay_cents:,
+    adjustment_cents:,
+    deduction_cents:,
+    tax_cents:,
+    net_pay_cents: gross_pay_cents + adjustment_cents - deduction_cents - tax_cents,
+    status:,
+    delivery_method: "employee_portal",
+    delivered_at:,
+    viewed_at:,
+    metadata: { source: "seeded_pay_statement" }
+  )
+  statement.save!
+end
+
+[
   [ employees.third, Date.current - 2.days, "Amtrak", "travel", "Open enrollment onsite travel", 184_00, "submitted", "uploaded", true, "employee_paid" ],
   [ employees.first, Date.current - 3.days, "Staples", "supplies", "Operations supplies for benefits launch", 86_00, "approved", "verified", true, "employee_paid" ],
   [ employees.second, Date.current - 1.day, "High Street Cafe", "meals", "Team lunch missing receipt", 145_00, "submitted", "missing", true, "employee_paid" ],

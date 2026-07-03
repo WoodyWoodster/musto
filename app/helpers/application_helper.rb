@@ -15,7 +15,7 @@ module ApplicationHelper
   def status_pill(status)
     normalized = status.to_s
     palette = case normalized
-    when "active", "available", "accepted", "approved", "complete", "processed", "succeeded", "finalized", "ready", "connected", "verified", "paid", "eligible", "enrolled", "synced", "funded"
+    when "active", "available", "accepted", "approved", "complete", "processed", "succeeded", "finalized", "ready", "connected", "verified", "paid", "eligible", "enrolled", "synced", "funded", "delivered", "viewed"
       "bg-emerald-50 text-emerald-700 ring-emerald-200"
     when "pending", "requested", "received", "onboarding", "estimated", "open", "running", "in_progress", "scheduled", "remote_pending", "sync_queued", "prenote_sent"
       "bg-cyan-50 text-cyan-700 ring-cyan-200"

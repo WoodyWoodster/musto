@@ -11,6 +11,7 @@
     <div class="flex flex-wrap items-center gap-2">
       <%= status_pill(@payroll_run.status) %>
       <%= link_to "Direct deposit funding", payroll_funding_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm hover:border-emerald-300 hover:text-emerald-800" %>
+      <%= link_to "Pay statements", pay_statements_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm hover:border-purple-300 hover:text-purple-800" %>
       <%= link_to "Benefits export", payroll_run_benefits_export_path(@payroll_run.id), class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm hover:border-indigo-300 hover:text-indigo-800" %>
       <% unless @payroll_run.finalized? %>
         <%= button_to "Finalize run", finalize_payroll_run_path(@payroll_run.id), method: :post, class: "rounded-md bg-slate-950 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-slate-800" %>

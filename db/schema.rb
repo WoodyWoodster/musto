@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_03_170001) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_03_180000) do
   create_table "api_request_logs", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.integer "duration_ms"
@@ -345,6 +345,34 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_03_170001) do
     t.index ["status"], name: "index_organizations_on_status"
   end
 
+  create_table "pay_statements", force: :cascade do |t|
+    t.integer "adjustment_cents", default: 0, null: false
+    t.datetime "created_at", null: false
+    t.integer "deduction_cents", default: 0, null: false
+    t.datetime "delivered_at"
+    t.string "delivery_method", default: "employee_portal", null: false
+    t.integer "employee_id", null: false
+    t.integer "gross_pay_cents", default: 0, null: false
+    t.json "metadata", default: {}, null: false
+    t.integer "net_pay_cents", default: 0, null: false
+    t.date "pay_date", null: false
+    t.integer "payroll_run_id", null: false
+    t.date "period_end_on", null: false
+    t.date "period_start_on", null: false
+    t.string "statement_number", null: false
+    t.string "status", default: "generated", null: false
+    t.integer "tax_cents", default: 0, null: false
+    t.datetime "updated_at", null: false
+    t.datetime "viewed_at"
+    t.index ["employee_id", "pay_date"], name: "index_pay_statements_on_employee_id_and_pay_date"
+    t.index ["employee_id"], name: "index_pay_statements_on_employee_id"
+    t.index ["payroll_run_id", "employee_id"], name: "index_pay_statements_on_payroll_run_id_and_employee_id", unique: true
+    t.index ["payroll_run_id", "status"], name: "index_pay_statements_on_payroll_run_id_and_status"
+    t.index ["payroll_run_id"], name: "index_pay_statements_on_payroll_run_id"
+    t.index ["statement_number"], name: "index_pay_statements_on_statement_number", unique: true
+    t.index ["status"], name: "index_pay_statements_on_status"
+  end
+
   create_table "payroll_adjustments", force: :cascade do |t|
     t.string "adjustment_type", null: false
     t.integer "amount_cents", default: 0, null: false
@@ -525,6 +553,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_03_170001) do
   add_foreign_key "enrollments", "employees"
   add_foreign_key "integration_connections", "organizations"
   add_foreign_key "onboarding_tasks", "employees"
+  add_foreign_key "pay_statements", "employees"
+  add_foreign_key "pay_statements", "payroll_runs"
   add_foreign_key "payroll_adjustments", "employees"
   add_foreign_key "payroll_adjustments", "payroll_runs"
   add_foreign_key "payroll_deductions", "employees"

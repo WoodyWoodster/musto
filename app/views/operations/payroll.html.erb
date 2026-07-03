@@ -10,6 +10,7 @@
         <%= link_to "Open run workspace", payroll_run_path(@payroll[:current_run].id), class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm hover:border-slate-300" %>
         <%= link_to "Review expenses", expenses_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm hover:border-slate-300" %>
         <%= link_to "Funding workspace", payroll_funding_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm hover:border-slate-300" %>
+        <%= link_to "Pay statements", pay_statements_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm hover:border-slate-300" %>
         <%= button_to "Finalize current run", finalize_payroll_run_path(@payroll[:current_run].id), method: :post, class: "rounded-md bg-slate-950 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-slate-800" %>
       </div>
     <% end %>

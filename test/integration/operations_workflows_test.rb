@@ -49,6 +49,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     @pending_deduction = @payroll_run.payroll_deductions.create!(employee: @employee, enrollment: @pending_enrollment, code: "VITABLE_DENTAL", amount_cents: 0, status: "waiting_on_enrollment")
     @waivable_deduction = @payroll_run.payroll_deductions.create!(employee: @employee, enrollment: @waivable_enrollment, code: "VITABLE_VISION", amount_cents: 0, status: "waiting_on_enrollment")
     @payroll_adjustment = @payroll_run.payroll_adjustments.create!(employee: @employee, adjustment_type: "bonus", description: "Quarterly performance bonus", amount_cents: 1_500_00, taxable: true)
+    @pay_statement = @payroll_run.pay_statements.create!(employee: @employee, statement_number: "PS-#{@payroll_run.id}-#{@employee.id}", period_start_on: @payroll_run.period_start_on, period_end_on: @payroll_run.period_end_on, pay_date: @payroll_run.pay_date, gross_pay_cents: 4_791_66, adjustment_cents: @payroll_adjustment.amount_cents, deduction_cents: 9_900, tax_cents: 86_250, net_pay_cents: 5_345_16)
     @expense = @employee.employee_expenses.create!(incurred_on: Date.current - 2.days, merchant: "Amtrak", category: "travel", description: "Benefits implementation travel", amount_cents: 184_00, status: "submitted", receipt_status: "uploaded")
     @approved_expense = @employee.employee_expenses.create!(incurred_on: Date.current - 3.days, merchant: "Staples", category: "supplies", description: "Operations supplies", amount_cents: 86_00, status: "approved", receipt_status: "verified", approved_at: 1.day.ago)
     @blocked_expense = @employee.employee_expenses.create!(incurred_on: Date.current - 1.day, merchant: "Cafe", category: "meals", description: "Team lunch missing receipt", amount_cents: 145_00, status: "submitted", receipt_status: "missing")
@@ -172,6 +173,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       compensation_path,
       taxes_path,
       payroll_funding_path,
+      pay_statements_path,
       reports_path,
       payroll_path,
       payroll_run_path(@payroll_run),
@@ -202,6 +204,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     timesheets = TimeTracking::CenterQuery.new.call
     expenses = Expenses::CenterQuery.new.call
     funding = PayrollFunding::CenterQuery.new.call
+    statements = PayStatements::CenterQuery.new.call
     contractors = Contractors::CenterQuery.new.call
     compensation = Compensation::CenterQuery.new.call
     taxes = Taxes::CenterQuery.new.call
@@ -247,6 +250,11 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_instance_of PayrollFunding::EmployeeAccountDto, funding.employee_accounts.first
     assert_instance_of PayrollFunding::RunFundingDto, funding.payroll_run
     assert_instance_of PayrollFunding::FundingIssueDto, funding.funding_issues.first
+    assert_instance_of PayStatements::CenterDto, statements
+    assert_instance_of PayStatements::MetricDto, statements.metrics.first
+    assert_instance_of PayStatements::StatementDto, statements.statements.first
+    assert_instance_of PayStatements::PayrollRunDto, statements.payroll_run
+    assert_instance_of PayStatements::DeliveryIssueDto, statements.delivery_issues.first
     assert_instance_of Contractors::CenterDto, contractors
     assert_instance_of Contractors::MetricDto, contractors.metrics.first
     assert_instance_of Contractors::ContractorDto, contractors.contractors.first
@@ -682,6 +690,53 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
 
     detail = PayrollFunding::CenterQuery.new.call
     assert_instance_of PayrollFunding::BatchCreditDto, detail.batch_credits.first
+  end
+
+  test "pay statements center exposes employee document DTOs" do
+    detail = PayStatements::CenterQuery.new.call
+
+    assert_instance_of PayStatements::CenterDto, detail
+    assert_instance_of PayStatements::MetricDto, detail.metrics.first
+    assert_instance_of PayStatements::StatementDto, detail.statements.first
+    assert_instance_of PayStatements::PayrollRunDto, detail.payroll_run
+    assert_instance_of PayStatements::DeliveryIssueDto, detail.delivery_issues.first
+    assert detail.deliverable_statements.any? { |statement| statement.id == @pay_statement.id }
+
+    get pay_statements_path
+
+    assert_response :success
+    assert_select "h1", "Pay statements and employee documents"
+    assert_select "h2", "Delivery queue"
+    assert_select "h2", "Statement delivery issues"
+    assert_select "h2", "Statement ledger"
+    assert_select "h2", "Statement batch ledger"
+  end
+
+  test "delivers a generated pay statement through command action" do
+    post deliver_pay_statement_path(@pay_statement), params: { delivered_by: "ops_console" }
+
+    assert_redirected_to pay_statements_path
+    @pay_statement.reload
+    assert_equal "delivered", @pay_statement.status
+    assert_equal "ops_console", @pay_statement.metadata.fetch("delivered_by")
+    assert_not_nil @pay_statement.delivered_at
+  end
+
+  test "generates a pay statement batch through command action" do
+    post generate_pay_statement_batch_path
+
+    assert_redirected_to pay_statements_path
+    batch = @employer.reload.settings.fetch("pay_statement_batch")
+    assert_match(/\Apay_statements_#{@employer.id}_#{@payroll_run.id}_/, batch.fetch("batch_id"))
+    assert_equal "ops_console", batch.fetch("requested_by")
+    assert_equal 1, batch.fetch("totals").fetch("statement_count")
+    assert_equal 1, batch.fetch("totals").fetch("employee_count")
+    assert_equal 0, batch.fetch("totals").fetch("holdback_count")
+    assert_equal @employee.full_name, batch.fetch("statements").first.fetch("employee_name")
+
+    detail = PayStatements::CenterQuery.new.call
+    assert_instance_of PayStatements::BatchDto, detail.latest_batch
+    assert_instance_of PayStatements::BatchLineDto, detail.batch_lines.first
   end
 
   test "contractor payments center exposes contractor payment DTOs" do

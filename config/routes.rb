@@ -43,6 +43,9 @@ Rails.application.routes.draw do
   get "payroll/funding", to: "payroll_funding#show", as: :payroll_funding
   post "payroll/funding/employee_bank_accounts/:id/verify", to: "payroll_funding#verify_employee_account", as: :verify_employee_bank_account
   post "payroll/funding/batch", to: "payroll_funding#generate_batch", as: :generate_payroll_funding_batch
+  get "pay-statements", to: "pay_statements#show", as: :pay_statements
+  post "pay-statements/batch", to: "pay_statements#generate_batch", as: :generate_pay_statement_batch
+  post "pay-statements/:id/deliver", to: "pay_statements#deliver_statement", as: :deliver_pay_statement
   get "benefits", to: "operations#benefits"
   get "benefits/eligibility", to: "benefits_eligibility#show", as: :benefits_eligibility
   post "benefits/eligibility/batch", to: "benefits_eligibility#generate_batch", as: :generate_benefits_eligibility_batch

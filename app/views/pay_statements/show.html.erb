@@ -1,0 +1,256 @@
+<section class="space-y-7">
+  <div class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div class="grid xl:grid-cols-[1.25fr_0.75fr]">
+      <div class="p-6 lg:p-8">
+        <div class="flex flex-wrap items-center gap-2">
+          <%= status_pill(@statements.delivery_issues.any? { |issue| issue.status != "ready" } ? "needs_review" : "ready") %>
+          <span class="rounded-full bg-purple-50 px-3 py-1 text-xs font-semibold text-purple-800 ring-1 ring-inset ring-purple-200">Pay statements</span>
+          <span class="rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-800 ring-1 ring-inset ring-indigo-200">Employee documents</span>
+        </div>
+
+        <h1 class="mt-5 text-4xl font-semibold tracking-tight text-slate-950">Pay statements and employee documents</h1>
+        <p class="mt-3 max-w-3xl text-base leading-7 text-slate-600">
+          Generate employee wage statements, deliver pay documents to employee portals, and audit statement batches for <%= @statements.employer&.name || "your employer portfolio" %>.
+        </p>
+
+        <div class="mt-6 flex flex-wrap gap-3">
+          <%= link_to "Payroll", payroll_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
+          <% if @statements.payroll_run.present? %>
+            <%= link_to "Open current run", payroll_run_path(@statements.payroll_run.id), class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
+          <% end %>
+          <%= link_to "Funding", payroll_funding_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
+          <%= button_to "Generate statement batch", generate_pay_statement_batch_path, method: :post, params: { requested_by: "ops_console" }, class: "rounded-md bg-slate-950 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-slate-800" %>
+        </div>
+      </div>
+
+      <aside class="border-t border-slate-200 bg-slate-950 p-6 text-white xl:border-l xl:border-t-0 xl:p-8">
+        <p class="text-xs font-semibold uppercase tracking-[0.2em] text-purple-300">Latest statement batch</p>
+        <% if @statements.latest_batch.present? %>
+          <p class="mt-6 break-all font-mono text-sm font-semibold"><%= @statements.latest_batch.batch_id %></p>
+          <p class="mt-3 text-sm text-slate-300">Generated <%= time_ago_in_words(@statements.latest_batch.generated_at) %> ago by <%= @statements.latest_batch.requested_by %></p>
+          <div class="mt-6 grid grid-cols-2 gap-3">
+            <div class="rounded-md bg-white/10 p-4">
+              <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Statements</p>
+              <p class="mt-2 text-2xl font-semibold"><%= compact_number(@statements.latest_batch.statement_count) %></p>
+            </div>
+            <div class="rounded-md bg-white/10 p-4">
+              <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Holdbacks</p>
+              <p class="mt-2 text-2xl font-semibold"><%= compact_number(@statements.latest_batch.holdback_count) %></p>
+            </div>
+          </div>
+          <div class="mt-5 rounded-md bg-white/10 p-4">
+            <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Net pay documented</p>
+            <p class="mt-2 text-2xl font-semibold"><%= money_cents(@statements.latest_batch.net_pay_cents) %></p>
+          </div>
+        <% else %>
+          <p class="mt-6 text-3xl font-semibold tracking-tight">No batch</p>
+          <p class="mt-2 text-sm leading-6 text-slate-300">Generate pay statements after the payroll run has employee pay lines.</p>
+        <% end %>
+      </aside>
+    </div>
+  </div>
+
+  <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+    <% @statements.metrics.each do |metric| %>
+      <article class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <div class="flex items-center justify-between gap-3">
+          <p class="text-sm font-medium text-slate-500"><%= metric.label %></p>
+          <span class="h-2.5 w-2.5 shrink-0 rounded-full <%= metric.accent %>"></span>
+        </div>
+        <p class="mt-4 text-3xl font-semibold tracking-tight text-slate-950"><%= metric.format == "money" ? money_cents(metric.value) : compact_number(metric.value) %></p>
+        <div class="mt-2 flex flex-wrap items-center gap-2">
+          <%= status_pill(metric.status) %>
+          <p class="text-sm text-slate-500"><%= metric.hint %></p>
+        </div>
+      </article>
+    <% end %>
+  </div>
+
+  <div class="grid gap-6 xl:grid-cols-[1fr_1fr]">
+    <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="border-b border-slate-100 px-5 py-4">
+        <h2 class="text-base font-semibold text-slate-950">Delivery queue</h2>
+        <p class="text-sm text-slate-500">Generated wage statements waiting for employee portal delivery.</p>
+      </div>
+      <div class="divide-y divide-slate-100">
+        <% @statements.statements.first(10).each do |statement| %>
+          <div class="px-5 py-4">
+            <div class="flex flex-wrap items-start justify-between gap-4">
+              <div class="min-w-0">
+                <div class="flex flex-wrap items-center gap-2">
+                  <%= link_to statement.employee_name, employee_path(statement.employee_id), class: "font-semibold text-slate-950 hover:text-cyan-700" %>
+                  <%= status_pill(statement.status) %>
+                  <span class="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700"><%= statement.delivery_method.humanize %></span>
+                </div>
+                <p class="mt-1 text-sm text-slate-500"><%= statement.department_name %> · <%= statement.location_name %> · <%= statement.statement_number %></p>
+                <p class="mt-2 text-sm leading-6 text-slate-600">
+                  <%= statement.period_start_on.strftime("%b %-d") %> - <%= statement.period_end_on.strftime("%b %-d, %Y") %> · Pay date <%= statement.pay_date.strftime("%b %-d, %Y") %>
+                </p>
+              </div>
+              <p class="text-right text-lg font-semibold text-slate-950"><%= money_cents(statement.net_pay_cents) %></p>
+            </div>
+            <% if statement.generated? %>
+              <div class="mt-4 flex flex-wrap gap-2">
+                <%= button_to "Deliver", deliver_pay_statement_path(statement.id), method: :post, params: { delivered_by: "ops_console" }, class: "rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700" %>
+              </div>
+            <% end %>
+          </div>
+        <% end %>
+
+        <% if @statements.statements.empty? %>
+          <div class="p-5">
+            <p class="font-semibold text-slate-950">No pay statements</p>
+            <p class="mt-2 text-sm leading-6 text-slate-600">Generated, delivered, and viewed pay documents will appear here once a statement batch is created.</p>
+          </div>
+        <% end %>
+      </div>
+    </section>
+
+    <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="border-b border-slate-100 px-5 py-4">
+        <h2 class="text-base font-semibold text-slate-950">Statement delivery issues</h2>
+        <p class="text-sm text-slate-500">Generation, delivery, and voided statement work remaining.</p>
+      </div>
+      <div class="divide-y divide-slate-100">
+        <% @statements.delivery_issues.each do |issue| %>
+          <div class="p-5">
+            <div class="flex flex-wrap items-start justify-between gap-3">
+              <div class="min-w-0">
+                <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400"><%= issue.owner %> · <%= issue.severity %></p>
+                <h3 class="mt-2 text-base font-semibold text-slate-950"><%= issue.title %></h3>
+              </div>
+              <%= status_pill(issue.status) %>
+            </div>
+            <p class="mt-3 text-sm leading-6 text-slate-600"><%= issue.detail %></p>
+            <div class="mt-4 grid grid-cols-2 gap-2 text-center">
+              <div class="rounded-md bg-slate-50 px-2 py-3">
+                <p class="text-xs text-slate-500">Count</p>
+                <p class="mt-1 text-lg font-semibold text-slate-950"><%= compact_number(issue.count) %></p>
+              </div>
+              <div class="rounded-md bg-slate-50 px-2 py-3">
+                <p class="text-xs text-slate-500">Net pay</p>
+                <p class="mt-1 text-lg font-semibold text-slate-950"><%= money_cents(issue.amount_cents) %></p>
+              </div>
+            </div>
+            <%= link_to "Open workflow", issue.action_path, class: "mt-4 inline-flex text-sm font-semibold text-cyan-700 hover:text-cyan-900" %>
+          </div>
+        <% end %>
+      </div>
+    </section>
+  </div>
+
+  <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div class="border-b border-slate-100 px-5 py-4">
+      <h2 class="text-base font-semibold text-slate-950">Statement ledger</h2>
+      <p class="text-sm text-slate-500">Employee wage statements with gross pay, deductions, taxes, net pay, and delivery state.</p>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="min-w-full divide-y divide-slate-100 text-sm">
+        <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <tr>
+            <th class="px-5 py-3">Employee</th>
+            <th class="px-5 py-3">Statement</th>
+            <th class="px-5 py-3">Gross</th>
+            <th class="px-5 py-3">Deductions</th>
+            <th class="px-5 py-3">Taxes</th>
+            <th class="px-5 py-3">Net</th>
+            <th class="px-5 py-3">Status</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          <% @statements.statements.each do |statement| %>
+            <tr class="hover:bg-slate-50">
+              <td class="px-5 py-4">
+                <%= link_to statement.employee_name, employee_path(statement.employee_id), class: "font-semibold text-slate-950 hover:text-cyan-700" %>
+                <p class="mt-1 text-xs text-slate-500"><%= statement.department_name %></p>
+              </td>
+              <td class="px-5 py-4">
+                <p class="font-mono text-xs font-semibold text-slate-700"><%= statement.statement_number %></p>
+                <p class="mt-1 text-xs text-slate-500"><%= statement.pay_date.strftime("%b %-d, %Y") %></p>
+              </td>
+              <td class="px-5 py-4 text-slate-600"><%= money_cents(statement.gross_pay_cents) %></td>
+              <td class="px-5 py-4 text-slate-600"><%= money_cents(statement.deduction_cents) %></td>
+              <td class="px-5 py-4 text-slate-600"><%= money_cents(statement.tax_cents) %></td>
+              <td class="px-5 py-4 font-semibold text-slate-950"><%= money_cents(statement.net_pay_cents) %></td>
+              <td class="px-5 py-4"><%= status_pill(statement.status) %></td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div class="border-b border-slate-100 px-5 py-4">
+      <h2 class="text-base font-semibold text-slate-950">Statement batch ledger</h2>
+      <p class="text-sm text-slate-500">Generated pay statement lines and holdbacks from the latest batch.</p>
+    </div>
+    <% if @statements.latest_batch.present? %>
+      <div class="grid divide-y divide-slate-100 lg:grid-cols-[1fr_0.9fr] lg:divide-x lg:divide-y-0">
+        <div class="min-w-0">
+          <div class="border-b border-slate-100 px-5 py-3">
+            <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Generated statements</p>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-slate-100 text-sm">
+              <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th class="px-5 py-3">Employee</th>
+                  <th class="px-5 py-3">Statement</th>
+                  <th class="px-5 py-3">Net</th>
+                  <th class="px-5 py-3">Status</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100">
+                <% @statements.batch_lines.each do |line| %>
+                  <tr class="hover:bg-slate-50">
+                    <td class="px-5 py-4 font-semibold text-slate-950"><%= line.employee_name %></td>
+                    <td class="px-5 py-4 font-mono text-xs text-slate-500"><%= line.statement_number %></td>
+                    <td class="px-5 py-4 font-semibold text-slate-950"><%= money_cents(line.net_pay_cents) %></td>
+                    <td class="px-5 py-4"><%= status_pill(line.status) %></td>
+                  </tr>
+                <% end %>
+                <% if @statements.batch_lines.empty? %>
+                  <tr>
+                    <td colspan="4" class="px-5 py-5 text-sm text-slate-600">No statement lines were generated.</td>
+                  </tr>
+                <% end %>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="min-w-0">
+          <div class="border-b border-slate-100 px-5 py-3">
+            <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Holdbacks</p>
+          </div>
+          <div class="divide-y divide-slate-100">
+            <% @statements.batch_holdbacks.each do |holdback| %>
+              <div class="p-5">
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                  <div class="min-w-0">
+                    <p class="font-semibold text-slate-950"><%= holdback.employee_name %></p>
+                    <p class="mt-1 text-sm text-slate-500"><%= money_cents(holdback.amount_cents) %> held out of statement generation</p>
+                  </div>
+                  <%= status_pill(holdback.status) %>
+                </div>
+                <p class="mt-3 text-sm leading-6 text-slate-600"><%= holdback.reason %></p>
+              </div>
+            <% end %>
+            <% if @statements.batch_holdbacks.empty? %>
+              <div class="p-5">
+                <p class="font-semibold text-slate-950">No holdbacks</p>
+                <p class="mt-2 text-sm leading-6 text-slate-600">All current payroll lines were included in the latest statement batch.</p>
+              </div>
+            <% end %>
+          </div>
+        </div>
+      </div>
+    <% else %>
+      <div class="p-5">
+        <p class="font-semibold text-slate-950">No generated statement batch</p>
+        <p class="mt-2 text-sm leading-6 text-slate-600">The next generated batch will show statement lines and delivery holdbacks here.</p>
+      </div>
+    <% end %>
+  </section>
+</section>
