@@ -81,6 +81,10 @@ Rails.application.routes.draw do
   post "payroll/deductions/:id/approve", to: "payroll_deductions#approve", as: :approve_employee_deduction
   post "payroll/deductions/:id/pause", to: "payroll_deductions#pause", as: :pause_employee_deduction
   post "payroll/deductions/packet", to: "payroll_deductions#generate_packet", as: :generate_employee_deductions_packet
+  get "payroll/garnishments", to: "payroll_garnishments#show", as: :payroll_garnishments
+  post "payroll/garnishments/packet", to: "payroll_garnishments#generate_packet", as: :generate_garnishment_remittance_packet
+  post "payroll/garnishments/:id/approve", to: "payroll_garnishments#approve", as: :approve_garnishment_order
+  post "payroll/garnishments/:id/pause", to: "payroll_garnishments#pause", as: :pause_garnishment_order
   get "payroll/calendar", to: "payroll_calendar#show", as: :payroll_calendar
   post "payroll/calendar/checklist", to: "payroll_calendar#generate_checklist", as: :generate_payroll_calendar_checklist
   post "payroll/calendar/approval_steps/:id/complete", to: "payroll_calendar#complete_step", as: :complete_payroll_approval_step

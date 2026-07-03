@@ -19,6 +19,7 @@
         <div class="mt-6 flex flex-wrap gap-3">
           <%= button_to "Generate deduction packet", generate_employee_deductions_packet_path, method: :post, params: { requested_by: "ops_console" }, class: "rounded-md bg-slate-950 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-slate-800" %>
           <%= link_to "Payroll readiness", payroll_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
+          <%= link_to "Garnishment remittance", payroll_garnishments_path, class: "rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800 shadow-sm hover:border-rose-300" %>
           <%= link_to "Funding workspace", payroll_funding_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
           <%= link_to "Reports", reports_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
         </div>

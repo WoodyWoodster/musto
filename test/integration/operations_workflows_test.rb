@@ -150,7 +150,8 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     @payroll_run.payroll_deductions.create!(employee: @employee, enrollment: @enrollment, code: "VITABLE_BENEFITS", amount_cents: 9_900, status: "ready")
     @pending_deduction = @payroll_run.payroll_deductions.create!(employee: @employee, enrollment: @pending_enrollment, code: "VITABLE_DENTAL", amount_cents: 0, status: "waiting_on_enrollment")
     @waivable_deduction = @payroll_run.payroll_deductions.create!(employee: @employee, enrollment: @waivable_enrollment, code: "VITABLE_VISION", amount_cents: 0, status: "waiting_on_enrollment")
-    @active_employee_deduction = @employer.employee_deductions.create!(employee: @employee, title: "Child support order", deduction_type: "child_support", status: "active", calculation_method: "fixed_amount", amount_cents: 225_00, priority: 10, agency_name: "County Domestic Relations", case_number: "DR-1001", starts_on: Date.current - 1.month, approved_at: 1.week.ago)
+    @active_employee_deduction = @employer.employee_deductions.create!(employee: @employee, title: "Child support order", deduction_type: "child_support", status: "active", calculation_method: "fixed_amount", amount_cents: 225_00, priority: 10, agency_name: "County Domestic Relations", case_number: "DR-1001", starts_on: Date.current - 1.month, approved_at: 1.week.ago, metadata: { service_state: "CO", remittance_method: "state_disbursement_unit" })
+    @blocked_garnishment_order = @employer.employee_deductions.create!(employee: @employee, title: "Tax levy order", deduction_type: "tax_levy", status: "blocked", calculation_method: "court_order", amount_cents: 150_00, current_balance_cents: 900_00, priority: 5, agency_name: "State Revenue Department", case_number: "LEVY-1001", starts_on: Date.current - 2.weeks, metadata: { service_state: "CO", remittance_method: "agency_ach" })
     @pending_employee_deduction = @employer.employee_deductions.create!(employee: @employee, title: "Equipment repayment", deduction_type: "equipment", status: "pending", calculation_method: "remaining_balance", amount_cents: 75_00, current_balance_cents: 300_00, priority: 60, agency_name: "Ops Employer", case_number: "EQ-22", starts_on: Date.current + 5.days)
     @pausable_employee_deduction = @employer.employee_deductions.create!(employee: @employee, title: "Retirement deferral", deduction_type: "retirement", status: "active", calculation_method: "percent_gross", amount_cents: 0, percent_basis_points: 500, max_per_paycheck_cents: 350_00, priority: 30, pre_tax: true, agency_name: "Musto Retirement", case_number: "RET-01", starts_on: Date.current - 2.months, approved_at: 2.weeks.ago)
     @payroll_adjustment = @payroll_run.payroll_adjustments.create!(employee: @employee, adjustment_type: "bonus", description: "Quarterly performance bonus", amount_cents: 1_500_00, taxable: true)
@@ -382,6 +383,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       payroll_path,
       payroll_run_path(@payroll_run),
       payroll_run_benefits_export_path(@payroll_run),
+      payroll_garnishments_path,
       benefits_path,
       benefits_plan_admin_path,
       benefits_open_enrollment_path,
@@ -417,6 +419,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     lifecycle = Lifecycle::CommandCenterQuery.new.call
     payroll = Operations::PayrollQuery.new.call
     deductions = Deductions::CenterQuery.new.call
+    garnishments = Garnishments::CenterQuery.new.call
     payroll_calendar = PayrollCalendar::CenterQuery.new.call
     onboarding = Onboarding::CommandCenterQuery.new.call
     documents = Documents::CenterQuery.new.call
@@ -491,6 +494,10 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_instance_of Deductions::PayrollRunDto, deductions.payroll_run
     assert_instance_of Deductions::DeductionDto, deductions.deductions.first
     assert_instance_of Deductions::IssueDto, deductions.issues.first
+    assert_instance_of Garnishments::CenterDto, garnishments
+    assert_instance_of Garnishments::MetricDto, garnishments.metrics.first
+    assert_instance_of Garnishments::OrderDto, garnishments.orders.first
+    assert_instance_of Garnishments::IssueDto, garnishments.issues.first
     assert_instance_of Operations::PayrollRunDto, payroll.fetch(:payroll_runs).first
     assert_instance_of PayrollCalendar::CenterDto, payroll_calendar
     assert_instance_of PayrollCalendar::MetricDto, payroll_calendar.metrics.first
@@ -1682,7 +1689,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal "payroll_admin", batch.fetch("requested_by")
     assert_equal 2, batch.fetch("totals").fetch("line_count")
     assert_equal 1, batch.fetch("totals").fetch("employee_count")
-    assert_equal 1, batch.fetch("totals").fetch("holdback_count")
+    assert_equal 2, batch.fetch("totals").fetch("holdback_count")
     assert batch.fetch("totals").fetch("total_cents").positive?
     assert @payroll_run.payroll_deductions.exists?(code: "EMPLOYEE_DEDUCTION_#{@active_employee_deduction.id}")
 
@@ -1690,6 +1697,70 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_instance_of Deductions::PacketDto, detail.latest_packet
     assert_instance_of Deductions::PacketLineDto, detail.packet_lines.first
     assert_instance_of Deductions::PacketHoldbackDto, detail.packet_holdbacks.first
+  end
+
+  test "garnishment compliance center exposes legal order DTOs" do
+    detail = Garnishments::CenterQuery.new.call
+
+    assert_instance_of Garnishments::CenterDto, detail
+    assert_instance_of Garnishments::MetricDto, detail.metrics.first
+    assert_instance_of Garnishments::OrderDto, detail.orders.first
+    assert_instance_of Garnishments::IssueDto, detail.issues.first
+    assert detail.orders.any? { |order| order.id == @active_employee_deduction.id }
+    assert detail.orders.any? { |order| order.id == @blocked_garnishment_order.id }
+
+    get payroll_garnishments_path
+
+    assert_response :success
+    assert_select "h1", "Garnishment compliance"
+    assert_select "h2", "Legal order blockers"
+    assert_select "h2", "Disposable earnings review"
+    assert_select "h2", "Garnishment order roster"
+    assert_select "h2", "Remittance packet lines"
+    assert_select "h2", "Agency remittance summary"
+    assert_select "h2", "Packet holdbacks"
+  end
+
+  test "approves a blocked garnishment order through command action" do
+    post approve_garnishment_order_path(@blocked_garnishment_order), params: { approved_by: "payroll_admin" }
+
+    assert_redirected_to payroll_garnishments_path
+    @blocked_garnishment_order.reload
+    assert_equal "active", @blocked_garnishment_order.status
+    assert_equal "payroll_admin", @blocked_garnishment_order.metadata.fetch("approved_by")
+    assert_not_nil @blocked_garnishment_order.approved_at
+  end
+
+  test "pauses an active garnishment order through command action" do
+    post pause_garnishment_order_path(@active_employee_deduction), params: { paused_by: "payroll_admin", reason: "Release order received" }
+
+    assert_redirected_to payroll_garnishments_path
+    @active_employee_deduction.reload
+    assert_equal "paused", @active_employee_deduction.status
+    assert_equal "payroll_admin", @active_employee_deduction.metadata.fetch("paused_by")
+    assert_equal "Release order received", @active_employee_deduction.metadata.fetch("paused_reason")
+    assert_not_nil @active_employee_deduction.paused_at
+  end
+
+  test "generates garnishment remittance packet through command action" do
+    post generate_garnishment_remittance_packet_path, params: { requested_by: "payroll_admin" }
+
+    assert_redirected_to payroll_garnishments_path
+    packet = @employer.reload.settings.fetch("garnishment_remittance_packet")
+    assert_match(/\Agarnishments_#{@employer.id}_#{@payroll_run.id}_/, packet.fetch("packet_id"))
+    assert_equal "payroll_admin", packet.fetch("requested_by")
+    assert_equal 2, packet.fetch("totals").fetch("order_count")
+    assert_equal 1, packet.fetch("totals").fetch("remittance_count")
+    assert_equal 1, packet.fetch("totals").fetch("agency_count")
+    assert_equal 1, packet.fetch("totals").fetch("holdback_count")
+    assert_equal @active_employee_deduction.amount_cents, packet.fetch("totals").fetch("total_withheld_cents")
+    assert @payroll_run.payroll_deductions.exists?(code: "EMPLOYEE_DEDUCTION_#{@active_employee_deduction.id}")
+
+    detail = Garnishments::CenterQuery.new.call
+    assert_instance_of Garnishments::PacketDto, detail.latest_packet
+    assert_instance_of Garnishments::PacketLineDto, detail.packet_lines.first
+    assert_instance_of Garnishments::AgencySummaryDto, detail.agency_summaries.first
+    assert_instance_of Garnishments::IssueDto, detail.packet_holdbacks.first
   end
 
   test "payroll calendar center exposes approval control DTOs" do

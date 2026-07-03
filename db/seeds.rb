@@ -940,6 +940,7 @@ end
 
 [
   [ employees.second, "Child support order", "child_support", "active", "fixed_amount", 325_00, nil, nil, nil, 10, false, "PA Domestic Relations", "DR-2026-1048", Date.current - 2.months, nil ],
+  [ employees.third, "Creditor garnishment order", "creditor_garnishment", "active", "percent_gross", 0, 700, 300_00, 2_400_00, 15, false, "Allegheny County Court", "CV-2026-4041", Date.current - 20.days, nil ],
   [ employees.third, "Transit commuter benefit", "benefit", "active", "fixed_amount", 120_00, nil, nil, nil, 40, true, "Musto Benefits", "TRN-COMMUTE", Date.current - 1.month, nil ],
   [ employees.fourth, "401k employee deferral", "retirement", "active", "percent_gross", 0, 500, 650_00, nil, 30, true, "Musto Retirement", "RET-DEFERRAL", Date.current - 3.months, nil ],
   [ employees[4], "Tax levy order", "tax_levy", "blocked", "court_order", 450_00, nil, 500_00, 4_800_00, 5, false, "Colorado Department of Revenue", "LEVY-8812", Date.current - 10.days, nil ],
@@ -963,7 +964,13 @@ end
     ends_on:,
     approved_at: status == "active" ? 2.weeks.ago : nil,
     paused_at: status == "paused" ? 3.days.ago : nil,
-    metadata: { source: "seeded_employee_deduction", payroll_review_owner: "payroll_ops" }
+    metadata: {
+      source: "seeded_employee_deduction",
+      payroll_review_owner: "payroll_ops",
+      service_state: employee.work_location&.state || "Federal",
+      remittance_method: deduction_type == "child_support" ? "state_disbursement_unit" : "agency_ach",
+      order_received_on: (starts_on - 7.days).iso8601
+    }
   )
   deduction.save!
 end

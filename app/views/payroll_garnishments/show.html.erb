@@ -1,0 +1,289 @@
+<% current_run = @garnishments.payroll_run %>
+<% latest_packet = @garnishments.latest_packet %>
+
+<section class="space-y-7">
+  <div class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div class="grid xl:grid-cols-[1.18fr_0.82fr]">
+      <div class="p-6 lg:p-8">
+        <div class="flex flex-wrap items-center gap-2">
+          <%= status_pill(latest_packet&.status || "pending") %>
+          <span class="rounded-full bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-800 ring-1 ring-inset ring-rose-200">Legal withholding</span>
+          <span class="rounded-full bg-cyan-50 px-3 py-1 text-xs font-semibold text-cyan-800 ring-1 ring-inset ring-cyan-200">Agency remittance</span>
+        </div>
+
+        <h1 class="mt-5 text-4xl font-semibold tracking-tight text-slate-950">Garnishment compliance</h1>
+        <p class="mt-3 max-w-3xl text-base leading-7 text-slate-600">
+          Manage child support, tax levy, and creditor garnishment orders from legal intake through payroll withholding, disposable earnings review, and agency remittance packets.
+        </p>
+
+        <div class="mt-6 flex flex-wrap gap-3">
+          <%= button_to "Generate remittance packet", generate_garnishment_remittance_packet_path, method: :post, params: { requested_by: "payroll_ops" }, class: "rounded-md bg-slate-950 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-slate-800" %>
+          <%= link_to "Deductions center", payroll_deductions_center_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
+          <%= link_to "Payroll run", current_run ? payroll_run_path(current_run.id) : payroll_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
+          <%= link_to "Compliance", compliance_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
+        </div>
+      </div>
+
+      <aside class="border-t border-slate-200 bg-slate-950 p-6 text-white xl:border-l xl:border-t-0 xl:p-8">
+        <p class="text-xs font-semibold uppercase tracking-[0.2em] text-rose-300">Remittance packet</p>
+        <% if latest_packet.present? %>
+          <div class="mt-6 flex flex-wrap items-center gap-2">
+            <%= status_pill(latest_packet.status) %>
+            <span class="rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-slate-200 ring-1 ring-inset ring-white/10">Pay date <%= latest_packet.pay_date.strftime("%b %-d") %></span>
+          </div>
+          <p class="mt-4 break-all font-mono text-sm font-semibold"><%= latest_packet.packet_id %></p>
+          <p class="mt-3 text-sm leading-6 text-slate-300">Generated <%= time_ago_in_words(latest_packet.generated_at) %> ago by <%= latest_packet.requested_by %>.</p>
+          <div class="mt-6 grid grid-cols-2 gap-3">
+            <div class="rounded-md bg-white/10 p-4">
+              <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Remit</p>
+              <p class="mt-2 text-2xl font-semibold"><%= money_cents(latest_packet.total_withheld_cents) %></p>
+            </div>
+            <div class="rounded-md bg-white/10 p-4">
+              <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Agencies</p>
+              <p class="mt-2 text-2xl font-semibold"><%= compact_number(latest_packet.agency_count) %></p>
+            </div>
+          </div>
+          <div class="mt-5 rounded-md bg-white/10 p-4">
+            <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Holdbacks</p>
+            <p class="mt-2 text-lg font-semibold"><%= compact_number(latest_packet.holdback_count) %> legal order blockers</p>
+          </div>
+        <% else %>
+          <p class="mt-6 text-3xl font-semibold tracking-tight">No packet</p>
+          <p class="mt-2 text-sm leading-6 text-slate-300">Generate a packet after legal order review to create payroll withholding lines and agency remittance totals.</p>
+        <% end %>
+      </aside>
+    </div>
+  </div>
+
+  <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+    <% @garnishments.metrics.each do |metric| %>
+      <article class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <div class="flex items-center justify-between gap-3">
+          <p class="text-sm font-medium text-slate-500"><%= metric.label %></p>
+          <span class="h-2.5 w-2.5 shrink-0 rounded-full <%= metric.accent %>"></span>
+        </div>
+        <p class="mt-4 text-3xl font-semibold tracking-tight text-slate-950"><%= metric.format == "money" ? money_cents(metric.value) : compact_number(metric.value) %></p>
+        <div class="mt-2 flex flex-wrap items-center gap-2">
+          <%= status_pill(metric.status) %>
+          <p class="text-sm text-slate-500"><%= metric.hint %></p>
+        </div>
+      </article>
+    <% end %>
+  </div>
+
+  <div class="grid gap-6 xl:grid-cols-[1.03fr_0.97fr]">
+    <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="border-b border-slate-100 px-5 py-4">
+        <h2 class="text-base font-semibold text-slate-950">Legal order blockers</h2>
+        <p class="text-sm text-slate-500">Missing agency data, inactive orders, disposable earnings cap risks, and payroll-run gaps.</p>
+      </div>
+      <div class="divide-y divide-slate-100">
+        <% if @garnishments.issues.any? %>
+          <% @garnishments.issues.each do |issue| %>
+            <div class="p-5">
+              <div class="flex flex-wrap items-start justify-between gap-3">
+                <div class="min-w-0">
+                  <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400"><%= issue.deduction_type.humanize %> · <%= issue.agency_name.presence || "Agency pending" %></p>
+                  <h3 class="mt-2 text-base font-semibold text-slate-950"><%= issue.title %></h3>
+                </div>
+                <%= status_pill(issue.status) %>
+              </div>
+              <p class="mt-3 text-sm leading-6 text-slate-600"><%= issue.employee_name %>: <%= issue.reason %></p>
+              <div class="mt-4 flex flex-wrap items-center gap-2">
+                <span class="rounded-md bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-600"><%= money_cents(issue.amount_cents) %></span>
+                <% if issue.case_number.present? %>
+                  <span class="rounded-md bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-600"><%= issue.case_number %></span>
+                <% end %>
+              </div>
+            </div>
+          <% end %>
+        <% else %>
+          <div class="p-5">
+            <%= status_pill("ready") %>
+            <p class="mt-3 text-sm leading-6 text-slate-600">All garnishment orders are ready for the current payroll run.</p>
+          </div>
+        <% end %>
+      </div>
+    </section>
+
+    <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="border-b border-slate-100 px-5 py-4">
+        <h2 class="text-base font-semibold text-slate-950">Disposable earnings review</h2>
+        <p class="text-sm text-slate-500">Modeled withholding against estimated disposable earnings for the selected payroll run.</p>
+      </div>
+      <div class="divide-y divide-slate-100">
+        <% @garnishments.orders.each do |order| %>
+          <% width = order.disposable_earnings_cents.zero? ? 0 : ((order.estimated_amount_cents.to_f / order.disposable_earnings_cents) * 100).round.clamp(0, 100) %>
+          <div class="p-5">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p class="font-semibold text-slate-950"><%= order.employee_name %></p>
+                <p class="mt-1 text-sm text-slate-500"><%= order.agency_name.presence || "Agency pending" %></p>
+              </div>
+              <p class="text-sm font-semibold text-slate-950"><%= money_cents(order.estimated_amount_cents) %></p>
+            </div>
+            <div class="mt-4 h-2 overflow-hidden rounded-full bg-slate-100">
+              <div class="h-full rounded-full <%= width > 50 ? "bg-rose-500" : "bg-emerald-500" %>" style="width: <%= width %>%"></div>
+            </div>
+            <p class="mt-3 text-xs font-semibold text-slate-500"><%= width %>% of disposable earnings · <%= money_cents(order.disposable_earnings_cents) %> modeled disposable</p>
+          </div>
+        <% end %>
+      </div>
+    </section>
+  </div>
+
+  <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div class="flex flex-col gap-2 border-b border-slate-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+      <div>
+        <h2 class="text-base font-semibold text-slate-950">Garnishment order roster</h2>
+        <p class="text-sm text-slate-500">Agency details, case metadata, payroll priority, remittance method, and operator actions.</p>
+      </div>
+      <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700"><%= compact_number(@garnishments.orders.count) %> orders</span>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="min-w-full divide-y divide-slate-100 text-sm">
+        <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <tr>
+            <th class="px-5 py-3">Employee</th>
+            <th class="px-5 py-3">Legal order</th>
+            <th class="px-5 py-3">Calculation</th>
+            <th class="px-5 py-3">Agency handling</th>
+            <th class="px-5 py-3">Readiness</th>
+            <th class="px-5 py-3">Action</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          <% @garnishments.orders.each do |order| %>
+            <tr class="hover:bg-slate-50">
+              <td class="px-5 py-4">
+                <%= link_to order.employee_name, employee_path(order.employee_id), class: "font-semibold text-slate-950 hover:text-cyan-700" %>
+                <p class="mt-1 text-xs text-slate-500"><%= order.employee_title.presence || "Role pending" %> · <%= order.department_name || "Unassigned" %></p>
+              </td>
+              <td class="px-5 py-4">
+                <div class="flex flex-wrap items-center gap-2">
+                  <p class="font-semibold text-slate-950"><%= order.title %></p>
+                  <%= status_pill(order.status) %>
+                </div>
+                <p class="mt-1 text-xs text-slate-500"><%= order.deduction_type.humanize %> · priority <%= order.priority %></p>
+                <p class="mt-1 text-xs text-slate-500"><%= order.case_number.presence || "Case pending" %></p>
+              </td>
+              <td class="px-5 py-4 text-slate-600">
+                <% if order.calculation_method == "percent_gross" %>
+                  <%= order.percent_basis_points.to_i / 100.0 %>% gross
+                <% elsif order.current_balance_cents.to_i.positive? %>
+                  <%= money_cents(order.amount_cents) %> · balance <%= money_cents(order.current_balance_cents) %>
+                <% else %>
+                  <%= money_cents(order.amount_cents) %>
+                <% end %>
+                <p class="mt-1 text-xs text-slate-500">Modeled <%= money_cents(order.estimated_amount_cents) %></p>
+              </td>
+              <td class="px-5 py-4 text-slate-600">
+                <p class="font-semibold text-slate-950"><%= order.agency_name.presence || "Agency pending" %></p>
+                <p class="mt-1 text-xs text-slate-500"><%= order.service_state %> · <%= order.remittance_method.humanize %></p>
+              </td>
+              <td class="px-5 py-4">
+                <%= status_pill(order.readiness_status) %>
+                <p class="mt-1 max-w-56 text-xs text-slate-500"><%= order.readiness_reason %></p>
+              </td>
+              <td class="px-5 py-4">
+                <div class="flex flex-wrap gap-2">
+                  <% if order.approvable? %>
+                    <%= button_to "Approve", approve_garnishment_order_path(order.id), method: :post, params: { approved_by: "payroll_ops" }, class: "rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700" %>
+                  <% end %>
+                  <% if order.pausable? %>
+                    <%= button_to "Pause", pause_garnishment_order_path(order.id), method: :post, params: { paused_by: "payroll_ops", reason: "Paused from garnishment compliance center" }, class: "rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:border-slate-300" %>
+                  <% end %>
+                  <% unless order.approvable? || order.pausable? %>
+                    <span class="text-xs font-semibold text-slate-400">No action</span>
+                  <% end %>
+                </div>
+              </td>
+            </tr>
+          <% end %>
+          <% if @garnishments.orders.empty? %>
+            <tr>
+              <td colspan="6" class="px-5 py-5 text-sm text-slate-600">No garnishment orders exist yet.</td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <div class="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+    <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="border-b border-slate-100 px-5 py-4">
+        <h2 class="text-base font-semibold text-slate-950">Remittance packet lines</h2>
+        <p class="text-sm text-slate-500">Withholding lines created for the latest agency remittance packet.</p>
+      </div>
+      <div class="divide-y divide-slate-100">
+        <% if @garnishments.packet_lines.any? %>
+          <% @garnishments.packet_lines.each do |line| %>
+            <div class="grid gap-4 px-5 py-4 md:grid-cols-[1fr_auto] md:items-center">
+              <div class="min-w-0">
+                <div class="flex flex-wrap items-center gap-2">
+                  <p class="font-semibold text-slate-950"><%= line.employee_name %></p>
+                  <%= status_pill(line.status) %>
+                </div>
+                <p class="mt-1 text-sm text-slate-500"><%= line.agency_name %> · <%= line.case_number %> · due <%= line.due_on.strftime("%b %-d") %></p>
+              </div>
+              <p class="text-sm font-semibold text-slate-950"><%= money_cents(line.amount_cents) %></p>
+            </div>
+          <% end %>
+        <% else %>
+          <div class="p-5 text-sm leading-6 text-slate-600">No remittance packet lines have been generated yet.</div>
+        <% end %>
+      </div>
+    </section>
+
+    <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="border-b border-slate-100 px-5 py-4">
+        <h2 class="text-base font-semibold text-slate-950">Agency remittance summary</h2>
+        <p class="text-sm text-slate-500">Grouped totals by receiving agency and remittance method.</p>
+      </div>
+      <div class="divide-y divide-slate-100">
+        <% if @garnishments.agency_summaries.any? %>
+          <% @garnishments.agency_summaries.each do |agency| %>
+            <div class="p-5">
+              <div class="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p class="font-semibold text-slate-950"><%= agency.agency_name %></p>
+                  <p class="mt-1 text-sm text-slate-500"><%= agency.service_state %> · <%= agency.remittance_method.humanize %></p>
+                </div>
+                <p class="text-sm font-semibold text-slate-950"><%= money_cents(agency.amount_cents) %></p>
+              </div>
+              <p class="mt-3 text-sm text-slate-500"><%= compact_number(agency.line_count) %> lines across <%= compact_number(agency.employee_count) %> employees</p>
+            </div>
+          <% end %>
+        <% else %>
+          <div class="p-5 text-sm leading-6 text-slate-600">Agency totals appear after a remittance packet is generated.</div>
+        <% end %>
+      </div>
+    </section>
+  </div>
+
+  <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div class="border-b border-slate-100 px-5 py-4">
+      <h2 class="text-base font-semibold text-slate-950">Packet holdbacks</h2>
+      <p class="text-sm text-slate-500">Legal orders excluded from the latest packet at generation time.</p>
+    </div>
+    <div class="divide-y divide-slate-100">
+      <% if @garnishments.packet_holdbacks.any? %>
+        <% @garnishments.packet_holdbacks.each do |holdback| %>
+          <div class="p-5">
+            <div class="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p class="font-semibold text-slate-950"><%= holdback.employee_name %></p>
+                <p class="mt-1 text-sm text-slate-500"><%= holdback.title %> · <%= holdback.agency_name.presence || "Agency pending" %></p>
+              </div>
+              <%= status_pill(holdback.status) %>
+            </div>
+            <p class="mt-3 text-sm leading-6 text-slate-600"><%= holdback.reason %></p>
+          </div>
+        <% end %>
+      <% else %>
+        <div class="p-5 text-sm leading-6 text-slate-600">No packet holdbacks have been captured yet.</div>
+      <% end %>
+    </div>
+  </section>
+</section>
