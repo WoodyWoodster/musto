@@ -112,6 +112,9 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     @payroll_run.payroll_deductions.create!(employee: @employee, enrollment: @enrollment, code: "VITABLE_BENEFITS", amount_cents: 9_900, status: "ready")
     @pending_deduction = @payroll_run.payroll_deductions.create!(employee: @employee, enrollment: @pending_enrollment, code: "VITABLE_DENTAL", amount_cents: 0, status: "waiting_on_enrollment")
     @waivable_deduction = @payroll_run.payroll_deductions.create!(employee: @employee, enrollment: @waivable_enrollment, code: "VITABLE_VISION", amount_cents: 0, status: "waiting_on_enrollment")
+    @active_employee_deduction = @employer.employee_deductions.create!(employee: @employee, title: "Child support order", deduction_type: "child_support", status: "active", calculation_method: "fixed_amount", amount_cents: 225_00, priority: 10, agency_name: "County Domestic Relations", case_number: "DR-1001", starts_on: Date.current - 1.month, approved_at: 1.week.ago)
+    @pending_employee_deduction = @employer.employee_deductions.create!(employee: @employee, title: "Equipment repayment", deduction_type: "equipment", status: "pending", calculation_method: "remaining_balance", amount_cents: 75_00, current_balance_cents: 300_00, priority: 60, agency_name: "Ops Employer", case_number: "EQ-22", starts_on: Date.current + 5.days)
+    @pausable_employee_deduction = @employer.employee_deductions.create!(employee: @employee, title: "Retirement deferral", deduction_type: "retirement", status: "active", calculation_method: "percent_gross", amount_cents: 0, percent_basis_points: 500, max_per_paycheck_cents: 350_00, priority: 30, pre_tax: true, agency_name: "Musto Retirement", case_number: "RET-01", starts_on: Date.current - 2.months, approved_at: 2.weeks.ago)
     @payroll_adjustment = @payroll_run.payroll_adjustments.create!(employee: @employee, adjustment_type: "bonus", description: "Quarterly performance bonus", amount_cents: 1_500_00, taxable: true)
     @pay_statement = @payroll_run.pay_statements.create!(employee: @employee, statement_number: "PS-#{@payroll_run.id}-#{@employee.id}", period_start_on: @payroll_run.period_start_on, period_end_on: @payroll_run.period_end_on, pay_date: @payroll_run.pay_date, gross_pay_cents: 4_791_66, adjustment_cents: @payroll_adjustment.amount_cents, deduction_cents: 9_900, tax_cents: 86_250, net_pay_cents: 5_345_16)
     @payroll_schedule = @employer.payroll_schedules.create!(name: "Primary payroll schedule", cadence: "biweekly", period_anchor_on: @payroll_run.period_start_on, next_period_start_on: @payroll_run.period_start_on, next_period_end_on: @payroll_run.period_end_on, next_pay_date: @payroll_run.pay_date, approval_deadline_at: @payroll_run.pay_date.in_time_zone.change(hour: 12) - 2.days, funding_deadline_at: @payroll_run.pay_date.in_time_zone.change(hour: 14) - 1.day)
@@ -246,6 +249,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       contractors_path,
       compensation_path,
       taxes_path,
+      payroll_deductions_center_path,
       payroll_calendar_path,
       payroll_funding_path,
       pay_statements_path,
@@ -280,6 +284,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     training = Training::CenterQuery.new.call
     lifecycle = Lifecycle::CommandCenterQuery.new.call
     payroll = Operations::PayrollQuery.new.call
+    deductions = Deductions::CenterQuery.new.call
     payroll_calendar = PayrollCalendar::CenterQuery.new.call
     onboarding = Onboarding::CommandCenterQuery.new.call
     documents = Documents::CenterQuery.new.call
@@ -332,6 +337,11 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_instance_of Lifecycle::MetricDto, lifecycle.metrics.first
     assert_instance_of Lifecycle::EventDto, lifecycle.events.first
     assert_instance_of Lifecycle::ImpactItemDto, lifecycle.impact_items.first
+    assert_instance_of Deductions::CenterDto, deductions
+    assert_instance_of Deductions::MetricDto, deductions.metrics.first
+    assert_instance_of Deductions::PayrollRunDto, deductions.payroll_run
+    assert_instance_of Deductions::DeductionDto, deductions.deductions.first
+    assert_instance_of Deductions::IssueDto, deductions.issues.first
     assert_instance_of Operations::PayrollRunDto, payroll.fetch(:payroll_runs).first
     assert_instance_of PayrollCalendar::CenterDto, payroll_calendar
     assert_instance_of PayrollCalendar::MetricDto, payroll_calendar.metrics.first
@@ -1080,6 +1090,67 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_instance_of Expenses::BatchDto, detail.latest_batch
     assert_instance_of Expenses::BatchLineDto, detail.batch_lines.first
     assert_instance_of Expenses::BatchHoldbackDto, detail.batch_holdbacks.first
+  end
+
+  test "payroll deductions center exposes recurring order DTOs" do
+    detail = Deductions::CenterQuery.new.call
+
+    assert_instance_of Deductions::CenterDto, detail
+    assert_instance_of Deductions::MetricDto, detail.metrics.first
+    assert_instance_of Deductions::PayrollRunDto, detail.payroll_run
+    assert_instance_of Deductions::DeductionDto, detail.deductions.first
+    assert_instance_of Deductions::IssueDto, detail.issues.first
+    assert detail.active_deductions.any? { |deduction| deduction.id == @active_employee_deduction.id }
+    assert detail.approvable_deductions.any? { |deduction| deduction.id == @pending_employee_deduction.id }
+
+    get payroll_deductions_center_path
+
+    assert_response :success
+    assert_select "h1", "Payroll deductions and garnishments"
+    assert_select "h2", "Deduction issues"
+    assert_select "h2", "Order mix"
+    assert_select "h2", "Deduction roster"
+    assert_select "h2", "Deduction packet ledger"
+  end
+
+  test "approves a pending employee deduction through command action" do
+    post approve_employee_deduction_path(@pending_employee_deduction), params: { approved_by: "payroll_admin" }
+
+    assert_redirected_to payroll_deductions_center_path
+    @pending_employee_deduction.reload
+    assert_equal "active", @pending_employee_deduction.status
+    assert_equal "payroll_admin", @pending_employee_deduction.metadata.fetch("approved_by")
+    assert_not_nil @pending_employee_deduction.approved_at
+  end
+
+  test "pauses an active employee deduction through command action" do
+    post pause_employee_deduction_path(@pausable_employee_deduction), params: { paused_by: "payroll_admin", reason: "Employee requested plan change" }
+
+    assert_redirected_to payroll_deductions_center_path
+    @pausable_employee_deduction.reload
+    assert_equal "paused", @pausable_employee_deduction.status
+    assert_equal "payroll_admin", @pausable_employee_deduction.metadata.fetch("paused_by")
+    assert_equal "Employee requested plan change", @pausable_employee_deduction.metadata.fetch("paused_reason")
+    assert_not_nil @pausable_employee_deduction.paused_at
+  end
+
+  test "generates employee deduction payroll packet through command action" do
+    post generate_employee_deductions_packet_path, params: { requested_by: "payroll_admin" }
+
+    assert_redirected_to payroll_deductions_center_path
+    batch = @employer.reload.settings.fetch("employee_deductions_packet")
+    assert_match(/\Aemployee_deductions_#{@employer.id}_#{@payroll_run.id}_/, batch.fetch("batch_id"))
+    assert_equal "payroll_admin", batch.fetch("requested_by")
+    assert_equal 2, batch.fetch("totals").fetch("line_count")
+    assert_equal 1, batch.fetch("totals").fetch("employee_count")
+    assert_equal 1, batch.fetch("totals").fetch("holdback_count")
+    assert batch.fetch("totals").fetch("total_cents").positive?
+    assert @payroll_run.payroll_deductions.exists?(code: "EMPLOYEE_DEDUCTION_#{@active_employee_deduction.id}")
+
+    detail = Deductions::CenterQuery.new.call
+    assert_instance_of Deductions::PacketDto, detail.latest_packet
+    assert_instance_of Deductions::PacketLineDto, detail.packet_lines.first
+    assert_instance_of Deductions::PacketHoldbackDto, detail.packet_holdbacks.first
   end
 
   test "payroll calendar center exposes approval control DTOs" do

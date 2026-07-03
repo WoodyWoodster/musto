@@ -16,6 +16,7 @@ class Employer < ApplicationRecord
   has_many :training_assignments, through: :training_programs
   has_many :payroll_schedules, dependent: :destroy
   has_many :payroll_runs, dependent: :destroy
+  has_many :employee_deductions, dependent: :destroy
   has_many :employer_bank_accounts, dependent: :destroy
   has_many :enrollments, through: :employees
   has_many :time_off_policies, dependent: :destroy

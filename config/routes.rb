@@ -58,6 +58,10 @@ Rails.application.routes.draw do
   get "taxes", to: "taxes#show"
   post "taxes/packet", to: "taxes#generate_packet", as: :generate_tax_filing_packet
   get "payroll", to: "operations#payroll"
+  get "payroll/deductions", to: "payroll_deductions#show", as: :payroll_deductions_center
+  post "payroll/deductions/:id/approve", to: "payroll_deductions#approve", as: :approve_employee_deduction
+  post "payroll/deductions/:id/pause", to: "payroll_deductions#pause", as: :pause_employee_deduction
+  post "payroll/deductions/packet", to: "payroll_deductions#generate_packet", as: :generate_employee_deductions_packet
   get "payroll/calendar", to: "payroll_calendar#show", as: :payroll_calendar
   post "payroll/calendar/checklist", to: "payroll_calendar#generate_checklist", as: :generate_payroll_calendar_checklist
   post "payroll/calendar/approval_steps/:id/complete", to: "payroll_calendar#complete_step", as: :complete_payroll_approval_step

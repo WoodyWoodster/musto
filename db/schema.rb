@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_03_213000) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_03_220000) do
   create_table "api_request_logs", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.integer "duration_ms"
@@ -255,6 +255,37 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_03_213000) do
     t.index ["employee_id"], name: "index_employee_change_requests_on_employee_id"
     t.index ["request_type", "status"], name: "index_employee_change_requests_on_request_type_and_status"
     t.index ["status", "submitted_at"], name: "index_employee_change_requests_on_status_and_submitted_at"
+  end
+
+  create_table "employee_deductions", force: :cascade do |t|
+    t.string "agency_name"
+    t.integer "amount_cents", default: 0, null: false
+    t.datetime "approved_at"
+    t.string "calculation_method", default: "fixed_amount", null: false
+    t.string "case_number"
+    t.datetime "closed_at"
+    t.datetime "created_at", null: false
+    t.integer "current_balance_cents"
+    t.string "deduction_type", default: "other", null: false
+    t.integer "employee_id", null: false
+    t.integer "employer_id", null: false
+    t.date "ends_on"
+    t.integer "max_per_paycheck_cents"
+    t.json "metadata", default: {}, null: false
+    t.datetime "paused_at"
+    t.integer "percent_basis_points"
+    t.boolean "pre_tax", default: false, null: false
+    t.integer "priority", default: 50, null: false
+    t.date "starts_on", null: false
+    t.string "status", default: "pending", null: false
+    t.string "title", null: false
+    t.datetime "updated_at", null: false
+    t.index ["case_number", "agency_name"], name: "index_employee_deductions_on_case_number_and_agency_name"
+    t.index ["deduction_type", "priority"], name: "index_employee_deductions_on_deduction_type_and_priority"
+    t.index ["employee_id", "status"], name: "index_employee_deductions_on_employee_id_and_status"
+    t.index ["employee_id"], name: "index_employee_deductions_on_employee_id"
+    t.index ["employer_id", "status"], name: "index_employee_deductions_on_employer_id_and_status"
+    t.index ["employer_id"], name: "index_employee_deductions_on_employer_id"
   end
 
   create_table "employee_documents", force: :cascade do |t|
@@ -854,6 +885,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_03_213000) do
   add_foreign_key "dependents", "employees"
   add_foreign_key "employee_bank_accounts", "employees"
   add_foreign_key "employee_change_requests", "employees"
+  add_foreign_key "employee_deductions", "employees"
+  add_foreign_key "employee_deductions", "employers"
   add_foreign_key "employee_documents", "employees"
   add_foreign_key "employee_expenses", "employees"
   add_foreign_key "employee_goals", "employees"

@@ -1,0 +1,302 @@
+<% current_run = @deductions.payroll_run %>
+<% latest_packet = @deductions.latest_packet %>
+
+<section class="space-y-7">
+  <div class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div class="grid xl:grid-cols-[1.18fr_0.82fr]">
+      <div class="p-6 lg:p-8">
+        <div class="flex flex-wrap items-center gap-2">
+          <%= status_pill(current_run&.status || "pending") %>
+          <span class="rounded-full bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-800 ring-1 ring-inset ring-rose-200">Recurring deductions</span>
+          <span class="rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-800 ring-1 ring-inset ring-indigo-200">Garnishments and payroll packets</span>
+        </div>
+
+        <h1 class="mt-5 text-4xl font-semibold tracking-tight text-slate-950">Payroll deductions and garnishments</h1>
+        <p class="mt-3 max-w-3xl text-base leading-7 text-slate-600">
+          Review recurring employee deductions, approve court or agency orders, model net-pay impact, and generate payroll-run deduction packets for <%= @deductions.employer&.name || "your employer portfolio" %>.
+        </p>
+
+        <div class="mt-6 flex flex-wrap gap-3">
+          <%= button_to "Generate deduction packet", generate_employee_deductions_packet_path, method: :post, params: { requested_by: "ops_console" }, class: "rounded-md bg-slate-950 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-slate-800" %>
+          <%= link_to "Payroll readiness", payroll_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
+          <%= link_to "Funding workspace", payroll_funding_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
+          <%= link_to "Reports", reports_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
+        </div>
+      </div>
+
+      <aside class="border-t border-slate-200 bg-slate-950 p-6 text-white xl:border-l xl:border-t-0 xl:p-8">
+        <p class="text-xs font-semibold uppercase tracking-[0.2em] text-rose-300">Current payroll run</p>
+        <% if current_run.present? %>
+          <div class="mt-6 flex flex-wrap items-center gap-2">
+            <%= status_pill(current_run.status) %>
+            <span class="rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-slate-200 ring-1 ring-inset ring-white/10">Pay date <%= current_run.pay_date.strftime("%b %-d") %></span>
+          </div>
+          <p class="mt-4 text-3xl font-semibold tracking-tight"><%= current_run.period_start_on.strftime("%b %-d") %> - <%= current_run.period_end_on.strftime("%b %-d, %Y") %></p>
+          <p class="mt-2 text-sm leading-6 text-slate-300">Recurring deductions are modeled against this run before payroll funding and pay statements are generated.</p>
+          <div class="mt-6 grid grid-cols-2 gap-3">
+            <div class="rounded-md bg-white/10 p-4">
+              <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Gross</p>
+              <p class="mt-2 text-2xl font-semibold"><%= money_cents(current_run.gross_pay_cents) %></p>
+            </div>
+            <div class="rounded-md bg-white/10 p-4">
+              <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Deductions</p>
+              <p class="mt-2 text-2xl font-semibold"><%= money_cents(current_run.total_deductions_cents) %></p>
+            </div>
+          </div>
+          <div class="mt-5 rounded-md bg-white/10 p-4">
+            <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Estimated net payroll</p>
+            <p class="mt-2 text-lg font-semibold"><%= money_cents(current_run.estimated_net_pay_cents) %></p>
+          </div>
+        <% else %>
+          <p class="mt-6 text-3xl font-semibold tracking-tight">No run</p>
+          <p class="mt-2 text-sm leading-6 text-slate-300">Create a payroll run before generating deduction packets.</p>
+        <% end %>
+      </aside>
+    </div>
+  </div>
+
+  <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+    <% @deductions.metrics.each do |metric| %>
+      <article class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <div class="flex items-center justify-between gap-3">
+          <p class="text-sm font-medium text-slate-500"><%= metric.label %></p>
+          <span class="h-2.5 w-2.5 shrink-0 rounded-full <%= metric.accent %>"></span>
+        </div>
+        <p class="mt-4 text-3xl font-semibold tracking-tight text-slate-950"><%= metric.format == "money" ? money_cents(metric.value) : compact_number(metric.value) %></p>
+        <div class="mt-2 flex flex-wrap items-center gap-2">
+          <%= status_pill(metric.status) %>
+          <p class="text-sm text-slate-500"><%= metric.hint %></p>
+        </div>
+      </article>
+    <% end %>
+  </div>
+
+  <div class="grid gap-6 xl:grid-cols-[1.03fr_0.97fr]">
+    <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="border-b border-slate-100 px-5 py-4">
+        <h2 class="text-base font-semibold text-slate-950">Deduction issues</h2>
+        <p class="text-sm text-slate-500">Approval, documentation, withholding, and packet readiness work.</p>
+      </div>
+      <div class="divide-y divide-slate-100">
+        <% @deductions.issues.each do |issue| %>
+          <div class="p-5">
+            <div class="flex flex-wrap items-start justify-between gap-3">
+              <div class="min-w-0">
+                <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400"><%= issue.owner %> · <%= issue.severity %></p>
+                <h3 class="mt-2 text-base font-semibold text-slate-950"><%= issue.title %></h3>
+              </div>
+              <%= status_pill(issue.status) %>
+            </div>
+            <p class="mt-3 text-sm leading-6 text-slate-600"><%= issue.detail %></p>
+            <div class="mt-4 flex items-center justify-between gap-3">
+              <span class="rounded-md bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700"><%= compact_number(issue.count) %> records · <%= money_cents(issue.amount_cents) %></span>
+              <%= link_to "Open workflow", issue.action_path, class: "text-sm font-semibold text-cyan-700 hover:text-cyan-900" %>
+            </div>
+          </div>
+        <% end %>
+      </div>
+    </section>
+
+    <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="flex flex-col gap-2 border-b border-slate-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 class="text-base font-semibold text-slate-950">Order mix</h2>
+          <p class="text-sm text-slate-500">Active deductions by legal risk, priority, and payroll treatment.</p>
+        </div>
+        <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700"><%= compact_number(@deductions.active_deductions.count) %> active</span>
+      </div>
+      <div class="grid divide-y divide-slate-100 sm:grid-cols-2 sm:divide-x sm:divide-y-0">
+        <div class="p-5">
+          <p class="text-sm font-semibold text-slate-950">Garnishment share</p>
+          <% garnishment_count = @deductions.deductions.count(&:garnishment?) %>
+          <% total_count = @deductions.deductions.count %>
+          <% width = total_count.zero? ? 0 : ((garnishment_count.to_f / total_count) * 100).round %>
+          <p class="mt-4 text-4xl font-semibold tracking-tight text-slate-950"><%= width %>%</p>
+          <div class="mt-4 h-2 overflow-hidden rounded-full bg-slate-100">
+            <div class="h-full rounded-full bg-rose-500" style="width: <%= width %>%"></div>
+          </div>
+          <p class="mt-3 text-sm text-slate-500"><%= compact_number(garnishment_count) %> of <%= compact_number(total_count) %> orders are court or agency driven.</p>
+        </div>
+        <div class="p-5">
+          <p class="text-sm font-semibold text-slate-950">Review queue</p>
+          <p class="mt-4 text-4xl font-semibold tracking-tight text-slate-950"><%= compact_number(@deductions.approvable_deductions.count) %></p>
+          <p class="mt-3 text-sm text-slate-500">Pending or blocked orders that need payroll approval before withholding.</p>
+          <div class="mt-4 flex flex-wrap gap-2">
+            <span class="rounded-md bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800 ring-1 ring-inset ring-amber-200">Pending</span>
+            <span class="rounded-md bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-700 ring-1 ring-inset ring-rose-200">Blocked</span>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div class="flex flex-col gap-2 border-b border-slate-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+      <div>
+        <h2 class="text-base font-semibold text-slate-950">Deduction roster</h2>
+        <p class="text-sm text-slate-500">Recurring orders, agency details, run impact, priority, and operator actions.</p>
+      </div>
+      <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700"><%= compact_number(@deductions.deductions.count) %> orders</span>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="min-w-full divide-y divide-slate-100 text-sm">
+        <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <tr>
+            <th class="px-5 py-3">Employee</th>
+            <th class="px-5 py-3">Order</th>
+            <th class="px-5 py-3">Calculation</th>
+            <th class="px-5 py-3">Run impact</th>
+            <th class="px-5 py-3">Readiness</th>
+            <th class="px-5 py-3">Action</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          <% @deductions.deductions.each do |deduction| %>
+            <tr class="hover:bg-slate-50">
+              <td class="px-5 py-4">
+                <%= link_to deduction.employee_name, employee_path(deduction.employee_id), class: "font-semibold text-slate-950 hover:text-cyan-700" %>
+                <p class="mt-1 text-xs text-slate-500"><%= deduction.employee_title.presence || "Role pending" %> · <%= deduction.department_name || "Unassigned" %></p>
+              </td>
+              <td class="px-5 py-4">
+                <div class="flex flex-wrap items-center gap-2">
+                  <p class="font-semibold text-slate-950"><%= deduction.title %></p>
+                  <%= status_pill(deduction.status) %>
+                </div>
+                <p class="mt-1 text-xs text-slate-500"><%= deduction.deduction_type.humanize %> · priority <%= deduction.priority %></p>
+                <% if deduction.agency_name.present? || deduction.case_number.present? %>
+                  <p class="mt-1 text-xs text-slate-500"><%= deduction.agency_name.presence || "Agency pending" %> · <%= deduction.case_number.presence || "Case pending" %></p>
+                <% end %>
+              </td>
+              <td class="px-5 py-4 text-slate-600">
+                <% if deduction.calculation_method == "percent_gross" %>
+                  <%= deduction.percent_basis_points.to_i / 100.0 %>% gross
+                <% elsif deduction.current_balance_cents.to_i.positive? %>
+                  <%= money_cents(deduction.amount_cents) %> · balance <%= money_cents(deduction.current_balance_cents) %>
+                <% else %>
+                  <%= money_cents(deduction.amount_cents) %>
+                <% end %>
+                <p class="mt-1 text-xs text-slate-500"><%= deduction.pre_tax ? "Pre-tax" : "Post-tax" %> · starts <%= deduction.starts_on.strftime("%b %-d") %></p>
+              </td>
+              <td class="px-5 py-4 font-semibold text-slate-950"><%= money_cents(deduction.estimated_amount_cents) %></td>
+              <td class="px-5 py-4">
+                <%= status_pill(deduction.readiness_status) %>
+                <p class="mt-1 max-w-56 text-xs text-slate-500"><%= deduction.readiness_reason %></p>
+              </td>
+              <td class="px-5 py-4">
+                <div class="flex flex-wrap gap-2">
+                  <% if deduction.approvable? %>
+                    <%= button_to "Approve", approve_employee_deduction_path(deduction.id), method: :post, params: { approved_by: "ops_console" }, class: "rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700" %>
+                  <% end %>
+                  <% if deduction.pausable? %>
+                    <%= button_to "Pause", pause_employee_deduction_path(deduction.id), method: :post, params: { paused_by: "ops_console", reason: "Paused from deduction center" }, class: "rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:border-slate-300" %>
+                  <% end %>
+                  <% unless deduction.approvable? || deduction.pausable? %>
+                    <span class="text-xs font-semibold text-slate-400">No action</span>
+                  <% end %>
+                </div>
+              </td>
+            </tr>
+          <% end %>
+          <% if @deductions.deductions.empty? %>
+            <tr>
+              <td colspan="6" class="px-5 py-5 text-sm text-slate-600">No recurring employee deductions exist yet.</td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div class="border-b border-slate-100 px-5 py-4">
+      <h2 class="text-base font-semibold text-slate-950">Deduction packet ledger</h2>
+      <p class="text-sm text-slate-500">Payroll-run deduction lines created from recurring orders and holdbacks excluded from the run.</p>
+    </div>
+    <% if latest_packet.present? %>
+      <div class="grid gap-4 border-b border-slate-100 bg-slate-50 px-5 py-4 lg:grid-cols-[1.2fr_0.8fr]">
+        <div class="min-w-0">
+          <div class="flex flex-wrap items-center gap-2">
+            <%= status_pill(latest_packet.status) %>
+            <span class="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600 ring-1 ring-inset ring-slate-200">Deduction packet</span>
+          </div>
+          <p class="mt-3 break-words text-sm font-semibold text-slate-950"><%= latest_packet.batch_id %></p>
+          <p class="mt-1 text-sm text-slate-500">Requested by <%= latest_packet.requested_by.presence || "ops_console" %> · payroll run <%= latest_packet.payroll_run_id || "pending" %></p>
+        </div>
+        <div class="grid grid-cols-4 gap-2 text-center">
+          <div class="rounded-md bg-white px-2 py-3 ring-1 ring-inset ring-slate-200">
+            <p class="text-xs text-slate-500">Lines</p>
+            <p class="mt-1 font-semibold text-slate-950"><%= compact_number(latest_packet.line_count) %></p>
+          </div>
+          <div class="rounded-md bg-white px-2 py-3 ring-1 ring-inset ring-slate-200">
+            <p class="text-xs text-slate-500">People</p>
+            <p class="mt-1 font-semibold text-slate-950"><%= compact_number(latest_packet.employee_count) %></p>
+          </div>
+          <div class="rounded-md bg-white px-2 py-3 ring-1 ring-inset ring-slate-200">
+            <p class="text-xs text-slate-500">Held</p>
+            <p class="mt-1 font-semibold text-slate-950"><%= compact_number(latest_packet.holdback_count) %></p>
+          </div>
+          <div class="rounded-md bg-white px-2 py-3 ring-1 ring-inset ring-slate-200">
+            <p class="text-xs text-slate-500">Total</p>
+            <p class="mt-1 font-semibold text-slate-950"><%= money_cents(latest_packet.total_cents) %></p>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid divide-y divide-slate-100 xl:grid-cols-2 xl:divide-x xl:divide-y-0">
+        <div>
+          <div class="border-b border-slate-100 px-5 py-3">
+            <h3 class="text-sm font-semibold text-slate-950">Created payroll lines</h3>
+          </div>
+          <div class="divide-y divide-slate-100">
+            <% @deductions.packet_lines.each do |line| %>
+              <div class="p-5">
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                  <div class="min-w-0">
+                    <p class="font-semibold text-slate-950"><%= line.employee_name %></p>
+                    <p class="mt-1 text-sm text-slate-500"><%= line.title %> · <%= line.deduction_type.humanize %></p>
+                  </div>
+                  <%= status_pill(line.status) %>
+                </div>
+                <div class="mt-3 flex flex-wrap gap-2">
+                  <span class="rounded-md bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-600"><%= money_cents(line.amount_cents) %></span>
+                  <span class="rounded-md bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-600">Priority <%= line.priority %></span>
+                  <% if line.case_number.present? %>
+                    <span class="rounded-md bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-600"><%= line.case_number %></span>
+                  <% end %>
+                </div>
+              </div>
+            <% end %>
+            <% if @deductions.packet_lines.empty? %>
+              <div class="p-5 text-sm text-slate-600">No deduction lines were created in the latest packet.</div>
+            <% end %>
+          </div>
+        </div>
+
+        <div>
+          <div class="border-b border-slate-100 px-5 py-3">
+            <h3 class="text-sm font-semibold text-slate-950">Holdbacks</h3>
+          </div>
+          <div class="divide-y divide-slate-100">
+            <% @deductions.packet_holdbacks.each do |holdback| %>
+              <div class="p-5">
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                  <div class="min-w-0">
+                    <p class="font-semibold text-slate-950"><%= holdback.employee_name %></p>
+                    <p class="mt-1 text-sm text-slate-500"><%= holdback.title %> · <%= holdback.deduction_type.humanize %></p>
+                  </div>
+                  <%= status_pill(holdback.status) %>
+                </div>
+                <p class="mt-3 text-sm leading-6 text-slate-600"><%= holdback.reason %></p>
+              </div>
+            <% end %>
+            <% if @deductions.packet_holdbacks.empty? %>
+              <div class="p-5 text-sm text-slate-600">No holdbacks in the latest packet.</div>
+            <% end %>
+          </div>
+        </div>
+      </div>
+    <% else %>
+      <div class="p-5 text-sm text-slate-600">No deduction packet has been generated yet.</div>
+    <% end %>
+  </section>
+</section>

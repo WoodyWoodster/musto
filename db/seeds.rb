@@ -653,6 +653,36 @@ employees.each do |employee|
 end
 
 [
+  [ employees.second, "Child support order", "child_support", "active", "fixed_amount", 325_00, nil, nil, nil, 10, false, "PA Domestic Relations", "DR-2026-1048", Date.current - 2.months, nil ],
+  [ employees.third, "Transit commuter benefit", "benefit", "active", "fixed_amount", 120_00, nil, nil, nil, 40, true, "Musto Benefits", "TRN-COMMUTE", Date.current - 1.month, nil ],
+  [ employees.fourth, "401k employee deferral", "retirement", "active", "percent_gross", 0, 500, 650_00, nil, 30, true, "Musto Retirement", "RET-DEFERRAL", Date.current - 3.months, nil ],
+  [ employees[4], "Tax levy order", "tax_levy", "blocked", "court_order", 450_00, nil, 500_00, 4_800_00, 5, false, "Colorado Department of Revenue", "LEVY-8812", Date.current - 10.days, nil ],
+  [ employees.last, "Equipment repayment", "equipment", "pending", "remaining_balance", 75_00, nil, 75_00, 525_00, 60, false, "Atlas Coffee Roasters", "EQ-ROASTER-22", Date.current + 5.days, nil ],
+  [ employees.first, "Wellness advance repayment", "loan_repayment", "paused", "fixed_amount", 90_00, nil, nil, 360_00, 70, false, "Atlas Coffee Roasters", "ADV-2026-04", Date.current - 2.months, nil ]
+].each do |employee, title, deduction_type, status, calculation_method, amount_cents, percent_basis_points, max_per_paycheck_cents, current_balance_cents, priority, pre_tax, agency_name, case_number, starts_on, ends_on|
+  deduction = employer.employee_deductions.find_or_initialize_by(employee:, title:)
+  deduction.assign_attributes(
+    deduction_type:,
+    status:,
+    calculation_method:,
+    amount_cents:,
+    percent_basis_points:,
+    max_per_paycheck_cents:,
+    current_balance_cents:,
+    priority:,
+    pre_tax:,
+    agency_name:,
+    case_number:,
+    starts_on:,
+    ends_on:,
+    approved_at: status == "active" ? 2.weeks.ago : nil,
+    paused_at: status == "paused" ? 3.days.ago : nil,
+    metadata: { source: "seeded_employee_deduction", payroll_review_owner: "payroll_ops" }
+  )
+  deduction.save!
+end
+
+[
   [ employees.first, "bonus", 2_500_00, "Quarterly operations bonus", true ],
   [ employees.third, "reimbursement", 340_00, "Home office stipend", false ],
   [ employees.last, "correction", -120_00, "Prior period correction", true ]
