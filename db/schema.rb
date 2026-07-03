@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_03_194500) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_03_200000) do
   create_table "api_request_logs", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.integer "duration_ms"
@@ -92,6 +92,32 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_03_194500) do
     t.index ["employer_id", "status"], name: "index_benefit_plans_on_employer_id_and_status"
     t.index ["employer_id", "vitable_id"], name: "index_benefit_plans_on_employer_id_and_vitable_id", unique: true
     t.index ["employer_id"], name: "index_benefit_plans_on_employer_id"
+  end
+
+  create_table "candidates", force: :cascade do |t|
+    t.datetime "accepted_at"
+    t.date "applied_on", null: false
+    t.integer "compensation_cents", default: 0, null: false
+    t.datetime "created_at", null: false
+    t.string "email", null: false
+    t.integer "employee_id"
+    t.string "first_name", null: false
+    t.datetime "hired_at"
+    t.integer "job_opening_id", null: false
+    t.string "last_name", null: false
+    t.json "metadata", default: {}, null: false
+    t.datetime "offer_sent_at"
+    t.string "phone"
+    t.datetime "rejected_at"
+    t.integer "score", default: 0, null: false
+    t.string "source", default: "direct", null: false
+    t.string "stage", default: "applied", null: false
+    t.date "target_start_on"
+    t.datetime "updated_at", null: false
+    t.index ["employee_id"], name: "index_candidates_on_employee_id"
+    t.index ["job_opening_id", "email"], name: "index_candidates_on_job_opening_id_and_email", unique: true
+    t.index ["job_opening_id"], name: "index_candidates_on_job_opening_id"
+    t.index ["stage", "applied_on"], name: "index_candidates_on_stage_and_applied_on"
   end
 
   create_table "compliance_cases", force: :cascade do |t|
@@ -370,6 +396,31 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_03_194500) do
     t.index ["organization_id", "provider", "environment"], name: "idx_integration_connections_unique_provider_environment", unique: true
     t.index ["organization_id"], name: "index_integration_connections_on_organization_id"
     t.index ["status"], name: "index_integration_connections_on_status"
+  end
+
+  create_table "job_openings", force: :cascade do |t|
+    t.string "code", null: false
+    t.integer "compensation_max_cents", default: 0, null: false
+    t.integer "compensation_min_cents", default: 0, null: false
+    t.datetime "created_at", null: false
+    t.integer "department_id"
+    t.text "description"
+    t.integer "employer_id", null: false
+    t.string "employment_type", default: "full_time", null: false
+    t.integer "headcount", default: 1, null: false
+    t.json "metadata", default: {}, null: false
+    t.boolean "remote", default: false, null: false
+    t.string "status", default: "open", null: false
+    t.date "target_start_on"
+    t.string "title", null: false
+    t.datetime "updated_at", null: false
+    t.integer "work_location_id"
+    t.index ["department_id"], name: "index_job_openings_on_department_id"
+    t.index ["employer_id", "code"], name: "index_job_openings_on_employer_id_and_code", unique: true
+    t.index ["employer_id", "status"], name: "index_job_openings_on_employer_id_and_status"
+    t.index ["employer_id"], name: "index_job_openings_on_employer_id"
+    t.index ["status", "target_start_on"], name: "index_job_openings_on_status_and_target_start_on"
+    t.index ["work_location_id"], name: "index_job_openings_on_work_location_id"
   end
 
   create_table "onboarding_tasks", force: :cascade do |t|
@@ -669,6 +720,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_03_194500) do
   add_foreign_key "benefit_invoice_lines", "enrollments"
   add_foreign_key "benefit_invoices", "employers"
   add_foreign_key "benefit_plans", "employers"
+  add_foreign_key "candidates", "employees"
+  add_foreign_key "candidates", "job_openings"
   add_foreign_key "compliance_cases", "employees"
   add_foreign_key "compliance_cases", "employers"
   add_foreign_key "contractor_payments", "contractors"
@@ -688,6 +741,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_03_194500) do
   add_foreign_key "enrollments", "benefit_plans"
   add_foreign_key "enrollments", "employees"
   add_foreign_key "integration_connections", "organizations"
+  add_foreign_key "job_openings", "departments"
+  add_foreign_key "job_openings", "employers"
+  add_foreign_key "job_openings", "work_locations"
   add_foreign_key "onboarding_tasks", "employees"
   add_foreign_key "open_enrollment_campaigns", "employers"
   add_foreign_key "open_enrollment_invitations", "employees"

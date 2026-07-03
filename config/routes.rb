@@ -21,6 +21,9 @@ Rails.application.routes.draw do
   post "lifecycle/sync_batch", to: "lifecycle#generate_batch", as: :generate_lifecycle_sync_batch
   get "company/setup", to: "company_setup#show", as: :company_setup
   post "company/setup/:step_key/complete", to: "company_setup#complete_step", as: :complete_company_setup_step
+  get "hiring", to: "hiring#show"
+  post "hiring/candidates/:id/send_offer", to: "hiring#send_offer", as: :send_candidate_offer
+  post "hiring/onboarding_handoff", to: "hiring#generate_handoff", as: :generate_hiring_onboarding_handoff
   get "onboarding", to: "onboarding#show"
   get "documents", to: "employee_documents#show", as: :documents
   post "documents/request_batch", to: "employee_documents#request_batch", as: :request_document_batch

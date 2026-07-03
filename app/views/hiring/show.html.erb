@@ -1,0 +1,333 @@
+<% latest_batch = @hiring.latest_handoff_batch %>
+<% top_stage = @hiring.pipeline_stages.max_by(&:candidate_count) %>
+
+<section class="space-y-7">
+  <div class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div class="grid xl:grid-cols-[1.2fr_0.8fr]">
+      <div class="p-6 lg:p-8">
+        <div class="flex flex-wrap items-center gap-2">
+          <%= status_pill(@hiring.accepted_candidates.any? ? "ready" : "in_progress") %>
+          <span class="rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-800 ring-1 ring-inset ring-indigo-200">Offer desk</span>
+          <span class="rounded-full bg-cyan-50 px-3 py-1 text-xs font-semibold text-cyan-800 ring-1 ring-inset ring-cyan-200">Onboarding handoff</span>
+        </div>
+
+        <h1 class="mt-5 text-4xl font-semibold tracking-tight text-slate-950">Hiring and offer command center</h1>
+        <p class="mt-3 max-w-3xl text-base leading-7 text-slate-600">
+          Manage openings, candidate stages, offer issuance, and onboarding creation for <%= @hiring.employer&.name || "your employer portfolio" %>.
+        </p>
+
+        <div class="mt-6 flex flex-wrap gap-3">
+          <%= button_to "Generate onboarding handoff", generate_hiring_onboarding_handoff_path, method: :post, params: { requested_by: "ops_console" }, class: "rounded-md bg-slate-950 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-slate-800" %>
+          <%= link_to "Onboarding", onboarding_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
+          <%= link_to "Workforce", workforce_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
+          <%= link_to "Compensation", compensation_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
+        </div>
+      </div>
+
+      <aside class="border-t border-slate-200 bg-slate-950 p-6 text-white xl:border-l xl:border-t-0 xl:p-8">
+        <p class="text-xs font-semibold uppercase tracking-[0.2em] text-indigo-300">Latest handoff</p>
+        <% if latest_batch.present? %>
+          <div class="mt-6 flex flex-wrap items-center gap-2">
+            <%= status_pill(latest_batch.status) %>
+            <span class="rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-slate-200 ring-1 ring-inset ring-white/10">Generated <%= time_ago_in_words(latest_batch.generated_at) %> ago</span>
+          </div>
+          <p class="mt-4 break-all font-mono text-sm font-semibold text-white"><%= latest_batch.batch_id %></p>
+          <p class="mt-2 text-sm leading-6 text-slate-300">Requested by <%= latest_batch.requested_by %></p>
+          <div class="mt-6 grid grid-cols-3 gap-3 text-center">
+            <div class="rounded-md bg-white/10 px-3 py-4">
+              <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Hires</p>
+              <p class="mt-2 text-2xl font-semibold"><%= compact_number(latest_batch.hire_count) %></p>
+            </div>
+            <div class="rounded-md bg-white/10 px-3 py-4">
+              <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Tasks</p>
+              <p class="mt-2 text-2xl font-semibold"><%= compact_number(latest_batch.task_count) %></p>
+            </div>
+            <div class="rounded-md bg-white/10 px-3 py-4">
+              <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Held</p>
+              <p class="mt-2 text-2xl font-semibold"><%= compact_number(latest_batch.holdback_count) %></p>
+            </div>
+          </div>
+        <% else %>
+          <p class="mt-6 text-4xl font-semibold tracking-tight"><%= compact_number(@hiring.accepted_candidates.count) %></p>
+          <p class="mt-2 text-sm leading-6 text-slate-300">accepted candidates are waiting to become employees with onboarding tasks.</p>
+          <div class="mt-6 rounded-md bg-white/10 px-4 py-4">
+            <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Most active lane</p>
+            <p class="mt-2 text-lg font-semibold"><%= top_stage&.label || "No pipeline" %></p>
+            <p class="mt-1 text-sm text-slate-300"><%= compact_number(top_stage&.candidate_count || 0) %> candidates</p>
+          </div>
+        <% end %>
+      </aside>
+    </div>
+  </div>
+
+  <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+    <% @hiring.metrics.each do |metric| %>
+      <article class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <div class="flex items-center justify-between gap-3">
+          <p class="text-sm font-medium text-slate-500"><%= metric.label %></p>
+          <span class="h-2.5 w-2.5 shrink-0 rounded-full <%= metric.accent %>"></span>
+        </div>
+        <p class="mt-4 text-3xl font-semibold tracking-tight text-slate-950"><%= compact_number(metric.value) %></p>
+        <div class="mt-2 flex flex-wrap items-center gap-2">
+          <%= status_pill(metric.status) %>
+          <p class="text-sm text-slate-500"><%= metric.hint %></p>
+        </div>
+      </article>
+    <% end %>
+  </div>
+
+  <section class="space-y-4">
+    <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+      <div>
+        <h2 class="text-lg font-semibold text-slate-950">Pipeline stages</h2>
+        <p class="text-sm text-slate-500">Candidate volume by stage from application through onboarding handoff.</p>
+      </div>
+      <span class="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200"><%= compact_number(@hiring.candidates.count) %> candidates</span>
+    </div>
+
+    <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <% @hiring.pipeline_stages.each do |stage| %>
+        <article class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+          <div class="flex items-start justify-between gap-4">
+            <div>
+              <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400"><%= stage.stage %></p>
+              <h3 class="mt-2 text-base font-semibold text-slate-950"><%= stage.label %></h3>
+            </div>
+            <%= status_pill(stage.status) %>
+          </div>
+          <p class="mt-5 text-3xl font-semibold tracking-tight text-slate-950"><%= compact_number(stage.candidate_count) %></p>
+          <p class="mt-2 line-clamp-2 text-sm text-slate-500"><%= stage.top_candidate_name %></p>
+        </article>
+      <% end %>
+    </div>
+  </section>
+
+  <div class="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
+    <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="border-b border-slate-100 px-5 py-4">
+        <h2 class="text-base font-semibold text-slate-950">Hiring issues</h2>
+        <p class="text-sm text-slate-500">Offer, readiness, and onboarding handoff work that needs attention.</p>
+      </div>
+      <div class="divide-y divide-slate-100">
+        <% @hiring.issues.each do |issue| %>
+          <div class="p-5">
+            <div class="flex flex-wrap items-start justify-between gap-3">
+              <div class="min-w-0">
+                <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400"><%= issue.owner %> · <%= issue.severity %></p>
+                <h3 class="mt-2 text-base font-semibold text-slate-950"><%= issue.title %></h3>
+              </div>
+              <%= status_pill(issue.status) %>
+            </div>
+            <p class="mt-3 text-sm leading-6 text-slate-600"><%= issue.detail %></p>
+            <div class="mt-4 flex items-center justify-between gap-3">
+              <span class="rounded-md bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700"><%= compact_number(issue.count) %> records</span>
+              <%= link_to "Open workflow", issue.action_path, class: "text-sm font-semibold text-cyan-700 hover:text-cyan-900" %>
+            </div>
+          </div>
+        <% end %>
+      </div>
+    </section>
+
+    <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="border-b border-slate-100 px-5 py-4">
+        <h2 class="text-base font-semibold text-slate-950">Open roles</h2>
+        <p class="text-sm text-slate-500">Headcount plan, compensation band, and candidate coverage by opening.</p>
+      </div>
+      <div class="divide-y divide-slate-100">
+        <% @hiring.job_openings.each do |opening| %>
+          <article class="p-5">
+            <div class="flex flex-wrap items-start justify-between gap-3">
+              <div class="min-w-0">
+                <div class="flex flex-wrap items-center gap-2">
+                  <h3 class="text-base font-semibold text-slate-950"><%= opening.title %></h3>
+                  <span class="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600"><%= opening.code %></span>
+                </div>
+                <p class="mt-1 text-sm text-slate-500"><%= opening.department_name || "Unassigned" %> · <%= opening.remote ? "Remote" : opening.location_name || "Location pending" %></p>
+              </div>
+              <%= status_pill(opening.status) %>
+            </div>
+            <div class="mt-5 grid grid-cols-3 gap-2 text-center">
+              <div class="rounded-md bg-slate-50 px-2 py-3">
+                <p class="text-xs text-slate-500">Headcount</p>
+                <p class="mt-1 font-semibold text-slate-950"><%= compact_number(opening.headcount) %></p>
+              </div>
+              <div class="rounded-md bg-slate-50 px-2 py-3">
+                <p class="text-xs text-slate-500">Active</p>
+                <p class="mt-1 font-semibold text-slate-950"><%= compact_number(opening.active_candidate_count) %></p>
+              </div>
+              <div class="rounded-md bg-slate-50 px-2 py-3">
+                <p class="text-xs text-slate-500">Accepted</p>
+                <p class="mt-1 font-semibold text-slate-950"><%= compact_number(opening.accepted_candidate_count) %></p>
+              </div>
+            </div>
+            <p class="mt-4 text-sm font-medium text-slate-600">
+              <%= money_cents(opening.compensation_min_cents) %> - <%= money_cents(opening.compensation_max_cents) %>
+              <% if opening.target_start_on.present? %>
+                <span class="text-slate-400">·</span> target <%= opening.target_start_on.strftime("%b %-d, %Y") %>
+              <% end %>
+            </p>
+          </article>
+        <% end %>
+        <% if @hiring.job_openings.empty? %>
+          <div class="p-5 text-sm text-slate-600">No openings exist yet.</div>
+        <% end %>
+      </div>
+    </section>
+  </div>
+
+  <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div class="flex flex-col gap-2 border-b border-slate-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+      <div>
+        <h2 class="text-base font-semibold text-slate-950">Candidate pipeline</h2>
+        <p class="text-sm text-slate-500">Offer status, hiring readiness, target start, compensation, and job alignment.</p>
+      </div>
+      <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700"><%= compact_number(@hiring.offerable_candidates.count) %> offer-ready</span>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="min-w-full divide-y divide-slate-100 text-sm">
+        <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <tr>
+            <th class="px-5 py-3">Candidate</th>
+            <th class="px-5 py-3">Role</th>
+            <th class="px-5 py-3">Stage</th>
+            <th class="px-5 py-3">Readiness</th>
+            <th class="px-5 py-3">Compensation</th>
+            <th class="px-5 py-3">Action</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          <% @hiring.candidates.each do |candidate| %>
+            <tr class="hover:bg-slate-50">
+              <td class="px-5 py-4">
+                <p class="font-semibold text-slate-950"><%= candidate.candidate_name %></p>
+                <p class="mt-1 text-xs text-slate-500"><%= candidate.email %></p>
+              </td>
+              <td class="px-5 py-4 text-slate-600">
+                <%= candidate.job_title %>
+                <p class="mt-1 text-xs text-slate-500"><%= candidate.department_name || "Unassigned" %> · <%= candidate.location_name || "Location pending" %></p>
+              </td>
+              <td class="px-5 py-4">
+                <%= status_pill(candidate.stage) %>
+                <p class="mt-1 text-xs text-slate-500">Score <%= candidate.score %> · applied <%= candidate.applied_on.strftime("%b %-d") %></p>
+              </td>
+              <td class="px-5 py-4">
+                <%= status_pill(candidate.readiness_status) %>
+                <p class="mt-1 max-w-56 text-xs text-slate-500"><%= candidate.readiness_reason %></p>
+              </td>
+              <td class="px-5 py-4 text-slate-600">
+                <%= money_cents(candidate.compensation_cents) %>
+                <p class="mt-1 text-xs text-slate-500"><%= candidate.target_start_on&.strftime("starts %b %-d, %Y") || "start pending" %></p>
+              </td>
+              <td class="px-5 py-4">
+                <% if candidate.offerable? %>
+                  <%= button_to "Send offer", send_candidate_offer_path(candidate.id), method: :post, params: { offered_by: "ops_console" }, class: "rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-800" %>
+                <% else %>
+                  <span class="text-xs font-semibold text-slate-400">No action</span>
+                <% end %>
+              </td>
+            </tr>
+          <% end %>
+          <% if @hiring.candidates.empty? %>
+            <tr>
+              <td colspan="6" class="px-5 py-5 text-sm text-slate-600">No candidates are attached to open roles yet.</td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div class="border-b border-slate-100 px-5 py-4">
+      <h2 class="text-base font-semibold text-slate-950">Onboarding handoff ledger</h2>
+      <p class="text-sm text-slate-500">Employees and onboarding tasks created from accepted candidates.</p>
+    </div>
+    <% if latest_batch.present? %>
+      <div class="grid gap-4 border-b border-slate-100 bg-slate-50 px-5 py-4 lg:grid-cols-[1.2fr_0.8fr]">
+        <div class="min-w-0">
+          <div class="flex flex-wrap items-center gap-2">
+            <%= status_pill(latest_batch.status) %>
+            <span class="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600 ring-1 ring-inset ring-slate-200">Hiring onboarding batch</span>
+          </div>
+          <p class="mt-3 break-all font-mono text-sm font-semibold text-slate-950"><%= latest_batch.batch_id %></p>
+          <p class="mt-2 text-sm text-slate-500">Generated <%= latest_batch.generated_at.strftime("%b %-d, %Y at %-l:%M %p") %></p>
+        </div>
+        <div class="grid grid-cols-3 gap-2 text-center">
+          <div class="rounded-md bg-white px-3 py-3 shadow-sm ring-1 ring-inset ring-slate-200">
+            <p class="text-xs text-slate-500">Hires</p>
+            <p class="mt-1 text-lg font-semibold text-slate-950"><%= compact_number(latest_batch.hire_count) %></p>
+          </div>
+          <div class="rounded-md bg-white px-3 py-3 shadow-sm ring-1 ring-inset ring-slate-200">
+            <p class="text-xs text-slate-500">Tasks</p>
+            <p class="mt-1 text-lg font-semibold text-slate-950"><%= compact_number(latest_batch.task_count) %></p>
+          </div>
+          <div class="rounded-md bg-white px-3 py-3 shadow-sm ring-1 ring-inset ring-slate-200">
+            <p class="text-xs text-slate-500">Held</p>
+            <p class="mt-1 text-lg font-semibold text-slate-950"><%= compact_number(latest_batch.holdback_count) %></p>
+          </div>
+        </div>
+      </div>
+      <div class="grid divide-y divide-slate-100 lg:grid-cols-[1fr_0.85fr] lg:divide-x lg:divide-y-0">
+        <div class="min-w-0">
+          <div class="border-b border-slate-100 px-5 py-3">
+            <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Created employees</p>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-slate-100 text-sm">
+              <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th class="px-5 py-3">Candidate</th>
+                  <th class="px-5 py-3">Role</th>
+                  <th class="px-5 py-3">Start</th>
+                  <th class="px-5 py-3">Tasks</th>
+                  <th class="px-5 py-3">Status</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100">
+                <% @hiring.handoff_lines.each do |line| %>
+                  <tr class="hover:bg-slate-50">
+                    <td class="px-5 py-4 font-semibold text-slate-950"><%= line.candidate_name %></td>
+                    <td class="px-5 py-4 text-slate-600"><%= line.job_title %><p class="mt-1 text-xs text-slate-500"><%= line.department_name || "Unassigned" %></p></td>
+                    <td class="px-5 py-4 text-slate-600"><%= line.start_on.strftime("%b %-d, %Y") %></td>
+                    <td class="px-5 py-4 text-slate-600"><%= compact_number(line.task_count) %></td>
+                    <td class="px-5 py-4"><%= status_pill(line.status) %></td>
+                  </tr>
+                <% end %>
+                <% if @hiring.handoff_lines.empty? %>
+                  <tr>
+                    <td colspan="5" class="px-5 py-5 text-sm text-slate-600">No employees were created by this handoff.</td>
+                  </tr>
+                <% end %>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="min-w-0">
+          <div class="border-b border-slate-100 px-5 py-3">
+            <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Holdbacks</p>
+          </div>
+          <div class="divide-y divide-slate-100">
+            <% @hiring.handoff_holdbacks.each do |holdback| %>
+              <div class="p-5">
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                  <div class="min-w-0">
+                    <p class="font-semibold text-slate-950"><%= holdback.candidate_name %></p>
+                    <p class="mt-1 text-sm text-slate-500"><%= holdback.job_title %></p>
+                  </div>
+                  <%= status_pill(holdback.status) %>
+                </div>
+                <p class="mt-3 text-sm leading-6 text-slate-600"><%= holdback.reason %></p>
+              </div>
+            <% end %>
+            <% if @hiring.handoff_holdbacks.empty? %>
+              <div class="p-5 text-sm text-slate-600">No handoff holdbacks were generated.</div>
+            <% end %>
+          </div>
+        </div>
+      </div>
+    <% else %>
+      <div class="p-5 text-sm text-slate-600">No hiring onboarding handoff has been generated yet.</div>
+    <% end %>
+  </section>
+</section>

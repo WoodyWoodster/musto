@@ -19,6 +19,7 @@ class Employee < ApplicationRecord
   has_many :benefit_invoice_lines, dependent: :destroy
   has_many :open_enrollment_invitations, dependent: :destroy
   has_many :compliance_cases, dependent: :nullify
+  has_many :candidate_profiles, class_name: "Candidate", dependent: :nullify
 
   validates :first_name, :last_name, :email, :employment_status, :pay_type, :onboarding_status, presence: true
   validates :compensation_cents, numericality: { greater_than_or_equal_to: 0 }

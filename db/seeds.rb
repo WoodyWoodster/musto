@@ -124,6 +124,56 @@ departments["RET"].update!(manager: employees.second)
 departments["PPL"].update!(manager: employees.third)
 departments["FIN"].update!(manager: employees.fourth)
 
+job_openings = [
+  [ "RET-GM-2026", "Retail General Manager", "RET", "Philadelphia HQ", "open", "full_time", 1, 92_000_00, 118_000_00, false, Date.current.next_month.beginning_of_month + 14.days, "Own Philadelphia retail operations and manager enablement." ],
+  [ "FIN-PAY-2026", "Payroll Operations Specialist", "FIN", "Remote US", "open", "full_time", 1, 82_000_00, 98_000_00, true, Date.current.next_month.beginning_of_month + 21.days, "Run payroll controls, funding review, and Vitable deduction checks." ],
+  [ "PPL-BEN-2026", "Benefits Implementation Lead", "PPL", "Remote US", "paused", "full_time", 1, 105_000_00, 132_000_00, true, Date.current.next_month.beginning_of_month + 28.days, "Coordinate onboarding, open enrollment, and Vitable implementation readiness." ]
+].to_h do |code, title, department_code, location_name, status, employment_type, headcount, compensation_min_cents, compensation_max_cents, remote, target_start_on, description|
+  opening = employer.job_openings.find_or_initialize_by(code:)
+  opening.assign_attributes(
+    title:,
+    department: departments.fetch(department_code),
+    work_location: locations.fetch(location_name),
+    status:,
+    employment_type:,
+    headcount:,
+    compensation_min_cents:,
+    compensation_max_cents:,
+    remote:,
+    target_start_on:,
+    description:,
+    metadata: { source: "seeded_hiring_plan", recruiter: "people_ops" }
+  )
+  opening.save!
+  [ code, opening ]
+end
+
+[
+  [ "Nia", "Okafor", "nia.okafor.candidate@example.com", "referral", "interview", 94, "RET-GM-2026", 108_000_00, Date.current.next_month.beginning_of_month + 14.days, 11.days.ago.to_date ],
+  [ "Miles", "Sato", "miles.sato.candidate@example.com", "linkedin", "offer", 88, "FIN-PAY-2026", 91_000_00, Date.current.next_month.beginning_of_month + 21.days, 18.days.ago.to_date ],
+  [ "Priya", "Nair", "priya.nair.candidate@example.com", "direct", "accepted", 96, "PPL-BEN-2026", 124_000_00, Date.current.next_month.beginning_of_month + 28.days, 23.days.ago.to_date ],
+  [ "Luca", "Marin", "luca.marin.candidate@example.com", "agency", "screening", 77, "RET-GM-2026", 101_000_00, Date.current.next_month.beginning_of_month + 18.days, 6.days.ago.to_date ],
+  [ "Rhea", "Cole", "rhea.cole.candidate@example.com", "direct", "applied", 69, "FIN-PAY-2026", 86_000_00, Date.current.next_month.beginning_of_month + 30.days, 2.days.ago.to_date ]
+].each do |first_name, last_name, email, source, stage, score, opening_code, compensation_cents, target_start_on, applied_on|
+  candidate = job_openings.fetch(opening_code).candidates.find_or_initialize_by(email:)
+  offer_sent_at = stage.in?([ "offer", "accepted" ]) ? 2.days.ago : nil
+  candidate.assign_attributes(
+    first_name:,
+    last_name:,
+    phone: "555-0199",
+    source:,
+    stage:,
+    score:,
+    applied_on:,
+    target_start_on:,
+    compensation_cents:,
+    offer_sent_at:,
+    accepted_at: stage == "accepted" ? 12.hours.ago : nil,
+    metadata: { source: "seeded_candidate_pipeline", scorecard: "structured_interview" }
+  )
+  candidate.save!
+end
+
 [
   [ employees.first, "Primary checking", "Chase", "checking", "0210", "1842", "remainder", 100, "verified", "manual", true, 2.days.ago, nil ],
   [ employees.second, "Retail payroll", "Wells Fargo", "checking", "0821", "6640", "remainder", 100, "prenote_sent", "prenote", true, nil, 1.day.ago ],

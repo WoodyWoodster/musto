@@ -2,6 +2,8 @@ class Employer < ApplicationRecord
   belongs_to :organization
 
   has_many :employees, dependent: :destroy
+  has_many :job_openings, dependent: :destroy
+  has_many :candidates, through: :job_openings
   has_many :contractors, dependent: :destroy
   has_many :departments, dependent: :destroy
   has_many :work_locations, dependent: :destroy

@@ -43,6 +43,9 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     @pending_document = @employee.employee_documents.create!(title: "Benefits disclosure", document_type: "benefits", status: "pending", expires_on: Date.current + 30.days, requested_at: 2.days.ago)
     @complete_document = @employee.employee_documents.create!(title: "W-4", document_type: "tax", status: "complete", issued_on: Date.current, verified_at: 1.day.ago)
     @expiring_document = @employee.employee_documents.create!(title: "Handbook acknowledgment", document_type: "policy", status: "complete", issued_on: Date.current - 1.year, expires_on: Date.current + 10.days, verified_at: 1.year.ago)
+    @job_opening = @employer.job_openings.create!(title: "Payroll Implementation Lead", code: "PAY-LEAD", department: @department, work_location: @location, compensation_min_cents: 98_000_00, compensation_max_cents: 128_000_00, target_start_on: Date.current + 21.days)
+    @offerable_candidate = @job_opening.candidates.create!(first_name: "Nia", last_name: "Okafor", email: "nia.candidate@example.com", source: "referral", stage: "screening", score: 91, applied_on: Date.current - 5.days, target_start_on: Date.current + 21.days, compensation_cents: 118_000_00)
+    @accepted_candidate = @job_opening.candidates.create!(first_name: "Miles", last_name: "Sato", email: "miles.candidate@example.com", source: "direct", stage: "accepted", score: 95, applied_on: Date.current - 12.days, target_start_on: Date.current + 28.days, compensation_cents: 122_000_00, offer_sent_at: 2.days.ago, accepted_at: 1.day.ago)
     @policy = @employer.time_off_policies.create!(name: "PTO", annual_hours: 120)
     @time_off_request = @employee.time_off_requests.create!(time_off_policy: @policy, starts_on: Date.current + 1.day, ends_on: Date.current + 2.days, hours: 16)
     @sick_policy = @employer.time_off_policies.create!(name: "Sick Leave", accrual_method: "state_accrual", annual_hours: 56, carryover_hours: 16)
@@ -172,6 +175,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       root_path,
       company_setup_path,
       workforce_path,
+      hiring_path,
       lifecycle_path,
       onboarding_path,
       documents_path,
@@ -209,6 +213,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     dashboard = DashboardQuery.new.call
     company = Company::SetupQuery.new.call
     workforce = Operations::WorkforceQuery.new.call
+    hiring = Hiring::CenterQuery.new.call
     lifecycle = Lifecycle::CommandCenterQuery.new.call
     payroll = Operations::PayrollQuery.new.call
     payroll_calendar = PayrollCalendar::CenterQuery.new.call
@@ -237,6 +242,12 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_instance_of Company::SetupStepDto, company.steps.first
     assert_instance_of Company::MetricDto, company.metrics.first
     assert_instance_of Operations::WorkforceEmployeeDto, workforce.fetch(:employees).first
+    assert_instance_of Hiring::CenterDto, hiring
+    assert_instance_of Hiring::MetricDto, hiring.metrics.first
+    assert_instance_of Hiring::JobOpeningDto, hiring.job_openings.first
+    assert_instance_of Hiring::CandidateDto, hiring.candidates.first
+    assert_instance_of Hiring::PipelineStageDto, hiring.pipeline_stages.first
+    assert_instance_of Hiring::IssueDto, hiring.issues.first
     assert_instance_of Lifecycle::CenterDto, lifecycle
     assert_instance_of Lifecycle::MetricDto, lifecycle.metrics.first
     assert_instance_of Lifecycle::EventDto, lifecycle.events.first
@@ -459,6 +470,70 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     step = @employer.settings.fetch("setup_steps").fetch("launch_review")
     assert_equal "ops_console", step.fetch("completed_by")
     assert_not_nil step.fetch("completed_at")
+  end
+
+  test "hiring center exposes offer pipeline DTOs" do
+    detail = Hiring::CenterQuery.new.call
+
+    assert_instance_of Hiring::CenterDto, detail
+    assert_instance_of Hiring::MetricDto, detail.metrics.first
+    assert_instance_of Hiring::JobOpeningDto, detail.job_openings.first
+    assert_instance_of Hiring::CandidateDto, detail.candidates.first
+    assert_instance_of Hiring::PipelineStageDto, detail.pipeline_stages.first
+    assert_instance_of Hiring::IssueDto, detail.issues.first
+    assert detail.offerable_candidates.any? { |candidate| candidate.id == @offerable_candidate.id }
+    assert detail.accepted_candidates.any? { |candidate| candidate.id == @accepted_candidate.id }
+
+    get hiring_path
+
+    assert_response :success
+    assert_select "h1", "Hiring and offer command center"
+    assert_select "h2", "Pipeline stages"
+    assert_select "h2", "Hiring issues"
+    assert_select "h2", "Open roles"
+    assert_select "h2", "Candidate pipeline"
+    assert_select "h2", "Onboarding handoff ledger"
+  end
+
+  test "sends a candidate offer through command action" do
+    post send_candidate_offer_path(@offerable_candidate), params: { offered_by: "recruiting_admin" }
+
+    assert_redirected_to hiring_path
+    @offerable_candidate.reload
+    assert_equal "offer", @offerable_candidate.stage
+    assert_equal "recruiting_admin", @offerable_candidate.metadata.fetch("offered_by")
+    assert_equal "candidate_portal", @offerable_candidate.metadata.fetch("offer_channel")
+    assert_not_nil @offerable_candidate.offer_sent_at
+  end
+
+  test "generates hiring onboarding handoff through command action" do
+    post generate_hiring_onboarding_handoff_path, params: { requested_by: "people_ops_admin" }
+
+    assert_redirected_to hiring_path
+    @accepted_candidate.reload
+    employee = @accepted_candidate.employee
+    batch = @employer.reload.settings.fetch("hiring_onboarding_handoff")
+
+    assert_equal "hired", @accepted_candidate.stage
+    assert_not_nil @accepted_candidate.hired_at
+    assert_not_nil employee
+    assert_equal @accepted_candidate.email, employee.email
+    assert_equal "in_progress", employee.onboarding_status
+    assert_equal 4, employee.onboarding_tasks.count
+    assert_match(/\Ahiring_onboarding_#{@employer.id}_/, batch.fetch("batch_id"))
+    assert_equal "people_ops_admin", batch.fetch("requested_by")
+    assert_equal 1, batch.fetch("totals").fetch("hire_count")
+    assert_equal 4, batch.fetch("totals").fetch("task_count")
+
+    detail = Hiring::CenterQuery.new.call
+    assert_instance_of Hiring::HandoffBatchDto, detail.latest_handoff_batch
+    assert_instance_of Hiring::HandoffLineDto, detail.handoff_lines.first
+
+    post generate_hiring_onboarding_handoff_path
+
+    assert_redirected_to hiring_path
+    holdback_detail = Hiring::CenterQuery.new.call
+    assert_instance_of Hiring::HandoffHoldbackDto, holdback_detail.handoff_holdbacks.first
   end
 
   test "lifecycle command center exposes employee change DTOs" do
