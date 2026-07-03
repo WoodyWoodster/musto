@@ -9,6 +9,7 @@ class Employee < ApplicationRecord
   has_many :onboarding_tasks, dependent: :destroy
   has_many :employee_documents, dependent: :destroy
   has_many :time_off_requests, dependent: :destroy
+  has_many :time_entries, dependent: :destroy
   has_many :payroll_adjustments, dependent: :destroy
   has_many :compliance_cases, dependent: :nullify
 

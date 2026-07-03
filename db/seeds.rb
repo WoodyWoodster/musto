@@ -203,6 +203,26 @@ end
   adjustment.save!
 end
 
+employees.each_with_index do |employee, employee_index|
+  4.times do |day_offset|
+    work_date = current_run.period_start_on + day_offset.days
+    entry = employee.time_entries.find_or_initialize_by(work_date:, source: "web")
+    clock_in_at = work_date.in_time_zone.change(hour: 9, min: 0) + employee_index.minutes
+    clock_out_at = clock_in_at + (employee.pay_type == "hourly" ? 9.hours : 8.hours)
+    entry.assign_attributes(
+      clock_in_at:,
+      clock_out_at:,
+      break_minutes: employee.pay_type == "hourly" ? 45 : 30,
+      status: day_offset == 3 && employee_index.odd? ? "submitted" : "approved",
+      approved_at: day_offset == 3 && employee_index.odd? ? nil : 1.day.ago,
+      reviewed_at: day_offset == 3 && employee_index.odd? ? nil : 1.day.ago,
+      notes: day_offset == 3 && employee_index.odd? ? "Manager review needed before export" : "Regular shift",
+      metadata: { import_source: "seeded_clock" }
+    )
+    entry.save!
+  end
+end
+
 [
   [ employees[4], "i9_reverification", "critical", "open", Date.current + 2.days, "I-9 document still pending for Denver manager." ],
   [ nil, "aca_measurement_period", "high", "open", Date.current + 9.days, "ACA measurement period needs review before the next benefits export." ],

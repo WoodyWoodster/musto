@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_03_045110) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_03_120000) do
   create_table "api_request_logs", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.integer "duration_ms"
@@ -266,6 +266,26 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_03_045110) do
     t.index ["status"], name: "index_sync_runs_on_status"
   end
 
+  create_table "time_entries", force: :cascade do |t|
+    t.datetime "approved_at"
+    t.integer "break_minutes", default: 0, null: false
+    t.datetime "clock_in_at", null: false
+    t.datetime "clock_out_at", null: false
+    t.datetime "created_at", null: false
+    t.integer "employee_id", null: false
+    t.json "metadata", default: {}, null: false
+    t.text "notes"
+    t.datetime "reviewed_at"
+    t.string "source", default: "web", null: false
+    t.string "status", default: "submitted", null: false
+    t.datetime "updated_at", null: false
+    t.date "work_date", null: false
+    t.index ["employee_id", "work_date"], name: "index_time_entries_on_employee_id_and_work_date"
+    t.index ["employee_id"], name: "index_time_entries_on_employee_id"
+    t.index ["source"], name: "index_time_entries_on_source"
+    t.index ["status", "work_date"], name: "index_time_entries_on_status_and_work_date"
+  end
+
   create_table "time_off_policies", force: :cascade do |t|
     t.string "accrual_method", default: "annual_grant", null: false
     t.decimal "annual_hours", precision: 8, scale: 2, default: "0.0", null: false
@@ -360,6 +380,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_03_045110) do
   add_foreign_key "payroll_deductions", "payroll_runs"
   add_foreign_key "payroll_runs", "employers"
   add_foreign_key "sync_runs", "integration_connections"
+  add_foreign_key "time_entries", "employees"
   add_foreign_key "time_off_policies", "employers"
   add_foreign_key "time_off_requests", "employees"
   add_foreign_key "time_off_requests", "time_off_policies"

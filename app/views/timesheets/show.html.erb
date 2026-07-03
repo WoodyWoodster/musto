@@ -1,0 +1,213 @@
+<section class="space-y-7">
+  <div class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div class="grid xl:grid-cols-[1.25fr_0.75fr]">
+      <div class="p-6 lg:p-8">
+        <div class="flex flex-wrap items-center gap-2">
+          <%= status_pill(@timesheets.pending_entries.any? ? "needs_review" : "ready") %>
+          <span class="rounded-full bg-lime-50 px-3 py-1 text-xs font-semibold text-lime-800 ring-1 ring-inset ring-lime-200">Time tracking</span>
+          <span class="rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-800 ring-1 ring-inset ring-indigo-200">Payroll export</span>
+        </div>
+
+        <h1 class="mt-5 text-4xl font-semibold tracking-tight text-slate-950">Timesheets command center</h1>
+        <p class="mt-3 max-w-3xl text-base leading-7 text-slate-600">
+          Review submitted time, monitor approved hours, catch overtime exposure, and generate payroll-ready time exports for <%= @timesheets.employer&.name || "your employer portfolio" %>.
+        </p>
+
+        <div class="mt-6 flex flex-wrap gap-3">
+          <%= link_to "Payroll", payroll_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
+          <%= link_to "Workforce", workforce_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
+          <%= link_to "Time off", time_off_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
+          <%= button_to "Generate payroll export", generate_time_tracking_export_path, method: :post, params: { requested_by: "ops_console" }, class: "rounded-md bg-slate-950 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-slate-800" %>
+        </div>
+      </div>
+
+      <aside class="border-t border-slate-200 bg-slate-950 p-6 text-white xl:border-l xl:border-t-0 xl:p-8">
+        <p class="text-xs font-semibold uppercase tracking-[0.2em] text-lime-300">Latest export</p>
+        <% if @timesheets.latest_export.present? %>
+          <p class="mt-6 break-all font-mono text-sm font-semibold"><%= @timesheets.latest_export.export_id %></p>
+          <p class="mt-3 text-sm text-slate-300">Generated <%= time_ago_in_words(@timesheets.latest_export.generated_at) %> ago by <%= @timesheets.latest_export.requested_by %></p>
+          <div class="mt-6 grid grid-cols-2 gap-3">
+            <div class="rounded-md bg-white/10 p-4">
+              <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Lines</p>
+              <p class="mt-2 text-2xl font-semibold"><%= compact_number(@timesheets.latest_export.line_count) %></p>
+            </div>
+            <div class="rounded-md bg-white/10 p-4">
+              <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Holdbacks</p>
+              <p class="mt-2 text-2xl font-semibold"><%= compact_number(@timesheets.latest_export.holdback_count) %></p>
+            </div>
+          </div>
+          <div class="mt-5 rounded-md bg-white/10 p-4">
+            <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Gross pay</p>
+            <p class="mt-2 text-2xl font-semibold"><%= money_cents(@timesheets.latest_export.total_gross_cents) %></p>
+          </div>
+        <% else %>
+          <p class="mt-6 text-3xl font-semibold tracking-tight">No export</p>
+          <p class="mt-2 text-sm leading-6 text-slate-300">Generate a payroll export after submitted time entries are reviewed.</p>
+        <% end %>
+      </aside>
+    </div>
+  </div>
+
+  <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+    <% @timesheets.metrics.each do |metric| %>
+      <article class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <div class="flex items-center justify-between gap-3">
+          <p class="text-sm font-medium text-slate-500"><%= metric.label %></p>
+          <span class="h-2.5 w-2.5 shrink-0 rounded-full <%= metric.accent %>"></span>
+        </div>
+        <p class="mt-4 text-3xl font-semibold tracking-tight text-slate-950">
+          <% if metric.format == "hours" %>
+            <%= number_with_precision(metric.value, precision: 1, strip_insignificant_zeros: true) %>h
+          <% else %>
+            <%= compact_number(metric.value) %>
+          <% end %>
+        </p>
+        <div class="mt-2 flex flex-wrap items-center gap-2">
+          <%= status_pill(metric.status) %>
+          <p class="text-sm text-slate-500"><%= metric.hint %></p>
+        </div>
+      </article>
+    <% end %>
+  </div>
+
+  <div class="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
+    <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="border-b border-slate-100 px-5 py-4">
+        <h2 class="text-base font-semibold text-slate-950">Time entry review</h2>
+        <p class="text-sm text-slate-500">Approve or reject submitted time before it becomes payroll-ready.</p>
+      </div>
+      <div class="divide-y divide-slate-100">
+        <% @timesheets.entries.first(10).each do |entry| %>
+          <div class="px-5 py-4">
+            <div class="flex flex-wrap items-start justify-between gap-4">
+              <div class="min-w-0">
+                <div class="flex flex-wrap items-center gap-2">
+                  <%= link_to entry.employee_name, employee_path(entry.employee_id), class: "font-semibold text-slate-950 hover:text-cyan-700" %>
+                  <%= status_pill(entry.status) %>
+                </div>
+                <p class="mt-1 text-sm text-slate-500"><%= entry.department_name %> · <%= entry.location_name %> · <%= entry.source.humanize %></p>
+                <p class="mt-2 text-sm text-slate-600">
+                  <%= entry.work_date.strftime("%b %-d, %Y") %> ·
+                  <%= entry.clock_in_at.strftime("%-l:%M %p") %> - <%= entry.clock_out_at.strftime("%-l:%M %p") %> ·
+                  <%= number_with_precision(entry.payable_hours, precision: 1, strip_insignificant_zeros: true) %>h after <%= entry.break_minutes %>m break
+                </p>
+                <% if entry.notes.present? %>
+                  <p class="mt-2 text-sm text-slate-600"><%= entry.notes %></p>
+                <% end %>
+              </div>
+              <p class="text-right text-sm font-semibold text-slate-950"><%= number_with_precision(entry.payable_hours, precision: 1, strip_insignificant_zeros: true) %>h</p>
+            </div>
+            <% if entry.submitted? %>
+              <div class="mt-4 flex flex-wrap gap-2">
+                <%= button_to "Approve", approve_time_entry_path(entry.id), method: :post, params: { return_to: "timesheets", reviewed_by: "ops_console" }, class: "rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700" %>
+                <%= button_to "Reject", reject_time_entry_path(entry.id), method: :post, params: { return_to: "timesheets", reviewed_by: "ops_console" }, class: "rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:border-slate-300" %>
+              </div>
+            <% end %>
+          </div>
+        <% end %>
+
+        <% if @timesheets.entries.empty? %>
+          <div class="p-5">
+            <p class="font-semibold text-slate-950">No time entries</p>
+            <p class="mt-2 text-sm leading-6 text-slate-600">Submitted, approved, and rejected entries will appear here once employees record time.</p>
+          </div>
+        <% end %>
+      </div>
+    </section>
+
+    <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="border-b border-slate-100 px-5 py-4">
+        <h2 class="text-base font-semibold text-slate-950">Timesheet exceptions</h2>
+        <p class="text-sm text-slate-500">Approval, missing time, overtime, and correction risks before export.</p>
+      </div>
+      <div class="divide-y divide-slate-100">
+        <% @timesheets.exceptions.each do |exception| %>
+          <div class="p-5">
+            <div class="flex flex-wrap items-start justify-between gap-3">
+              <div class="min-w-0">
+                <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400"><%= exception.owner %> · <%= exception.severity %></p>
+                <h3 class="mt-2 text-base font-semibold text-slate-950"><%= exception.title %></h3>
+              </div>
+              <%= status_pill(exception.status) %>
+            </div>
+            <p class="mt-3 text-sm leading-6 text-slate-600"><%= exception.detail %></p>
+            <%= link_to "Open source workflow", exception.action_path, class: "mt-4 inline-flex text-sm font-semibold text-cyan-700 hover:text-cyan-900" %>
+          </div>
+        <% end %>
+      </div>
+    </section>
+  </div>
+
+  <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div class="border-b border-slate-100 px-5 py-4">
+      <h2 class="text-base font-semibold text-slate-950">Employee time summary</h2>
+      <p class="text-sm text-slate-500">Approved, submitted, regular, and overtime minutes by employee.</p>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="min-w-full divide-y divide-slate-100 text-sm">
+        <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <tr>
+            <th class="px-5 py-3">Employee</th>
+            <th class="px-5 py-3">Pay type</th>
+            <th class="px-5 py-3">Entries</th>
+            <th class="px-5 py-3">Approved</th>
+            <th class="px-5 py-3">Submitted</th>
+            <th class="px-5 py-3">Overtime</th>
+            <th class="px-5 py-3">Status</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          <% @timesheets.employees.each do |employee| %>
+            <tr class="hover:bg-slate-50">
+              <td class="px-5 py-4">
+                <%= link_to employee.employee_name, employee_path(employee.employee_id), class: "font-semibold text-slate-950 hover:text-cyan-700" %>
+                <p class="mt-1 text-xs text-slate-500"><%= employee.department_name %></p>
+              </td>
+              <td class="px-5 py-4 text-slate-600"><%= employee.pay_type.humanize %></td>
+              <td class="px-5 py-4 text-slate-600"><%= compact_number(employee.entry_count) %></td>
+              <td class="px-5 py-4 text-slate-600"><%= number_with_precision(employee.approved_minutes / 60.0, precision: 1, strip_insignificant_zeros: true) %>h</td>
+              <td class="px-5 py-4 text-slate-600"><%= number_with_precision(employee.submitted_minutes / 60.0, precision: 1, strip_insignificant_zeros: true) %>h</td>
+              <td class="px-5 py-4 text-slate-600"><%= number_with_precision(employee.overtime_minutes / 60.0, precision: 1, strip_insignificant_zeros: true) %>h</td>
+              <td class="px-5 py-4"><%= status_pill(employee.status) %></td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div class="border-b border-slate-100 px-5 py-4">
+      <h2 class="text-base font-semibold text-slate-950">Department coverage</h2>
+      <p class="text-sm text-slate-500">Approval rates and overtime exposure by department.</p>
+    </div>
+    <div class="grid divide-y divide-slate-100 md:grid-cols-4 md:divide-x md:divide-y-0">
+      <% @timesheets.departments.each do |department| %>
+        <article class="p-5">
+          <div class="flex flex-wrap items-start justify-between gap-3">
+            <div class="min-w-0">
+              <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400"><%= department.employee_count %> employees</p>
+              <h3 class="mt-2 text-base font-semibold text-slate-950"><%= department.department_name %></h3>
+            </div>
+            <%= status_pill(department.status) %>
+          </div>
+          <p class="mt-5 text-3xl font-semibold tracking-tight text-slate-950"><%= department.approval_rate %>%</p>
+          <p class="mt-1 text-sm text-slate-500">approval rate</p>
+          <div class="mt-4 h-2 overflow-hidden rounded-full bg-slate-100">
+            <div class="h-full rounded-full bg-lime-500" style="width: <%= department.approval_rate %>%"></div>
+          </div>
+          <dl class="mt-4 grid grid-cols-2 gap-2 text-center">
+            <div class="rounded-md bg-slate-50 px-2 py-3">
+              <dt class="text-xs text-slate-500">Approved</dt>
+              <dd class="mt-1 text-lg font-semibold text-slate-950"><%= number_with_precision(department.approved_minutes / 60.0, precision: 1, strip_insignificant_zeros: true) %>h</dd>
+            </div>
+            <div class="rounded-md bg-slate-50 px-2 py-3">
+              <dt class="text-xs text-slate-500">Overtime</dt>
+              <dd class="mt-1 text-lg font-semibold text-slate-950"><%= number_with_precision(department.overtime_minutes / 60.0, precision: 1, strip_insignificant_zeros: true) %>h</dd>
+            </div>
+          </dl>
+        </article>
+      <% end %>
+    </div>
+  </section>
+</section>

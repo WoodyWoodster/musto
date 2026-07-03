@@ -45,6 +45,9 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     @pending_deduction = @payroll_run.payroll_deductions.create!(employee: @employee, enrollment: @pending_enrollment, code: "VITABLE_DENTAL", amount_cents: 0, status: "waiting_on_enrollment")
     @waivable_deduction = @payroll_run.payroll_deductions.create!(employee: @employee, enrollment: @waivable_enrollment, code: "VITABLE_VISION", amount_cents: 0, status: "waiting_on_enrollment")
     @payroll_adjustment = @payroll_run.payroll_adjustments.create!(employee: @employee, adjustment_type: "bonus", description: "Quarterly performance bonus", amount_cents: 1_500_00, taxable: true)
+    time_start = @payroll_run.period_start_on.in_time_zone.change(hour: 9, min: 0)
+    @approved_time_entry = @employee.time_entries.create!(work_date: @payroll_run.period_start_on, clock_in_at: time_start, clock_out_at: time_start + 8.hours, break_minutes: 30, source: "web", status: "approved", approved_at: 1.hour.ago, reviewed_at: 1.hour.ago, notes: "Regular shift")
+    @submitted_time_entry = @employee.time_entries.create!(work_date: @payroll_run.period_start_on + 1.day, clock_in_at: time_start + 1.day, clock_out_at: time_start + 1.day + 9.hours, break_minutes: 45, source: "mobile", status: "submitted", notes: "Needs manager review")
     @compliance_case = @employer.compliance_cases.create!(employee: @employee, kind: "i9_reverification", severity: "high", due_on: Date.current + 5.days)
     @connection = @organization.integration_connections.create!(provider: "vitable", environment: "production")
     @sync_run = @connection.sync_runs.create!(
@@ -91,6 +94,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       workforce_path,
       onboarding_path,
       time_off_path,
+      timesheets_path,
       compensation_path,
       taxes_path,
       reports_path,
@@ -118,6 +122,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     payroll = Operations::PayrollQuery.new.call
     onboarding = Onboarding::CommandCenterQuery.new.call
     time_off = TimeOff::CommandCenterQuery.new.call
+    timesheets = TimeTracking::CenterQuery.new.call
     compensation = Compensation::CenterQuery.new.call
     taxes = Taxes::CenterQuery.new.call
     reports = Reports::CenterQuery.new.call
@@ -142,6 +147,11 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_instance_of TimeOff::RequestDto, time_off.requests.first
     assert_instance_of TimeOff::PolicyDto, time_off.policies.first
     assert_instance_of TimeOff::EmployeeBalanceDto, time_off.balances.first
+    assert_instance_of TimeTracking::CenterDto, timesheets
+    assert_instance_of TimeTracking::EntryDto, timesheets.entries.first
+    assert_instance_of TimeTracking::EmployeeSummaryDto, timesheets.employees.first
+    assert_instance_of TimeTracking::DepartmentSummaryDto, timesheets.departments.first
+    assert_instance_of TimeTracking::ExceptionDto, timesheets.exceptions.first
     assert_instance_of Compensation::CenterDto, compensation
     assert_instance_of Compensation::EmployeeCompensationDto, compensation.employees.first
     assert_instance_of Compensation::DepartmentBudgetDto, compensation.departments.first
@@ -359,6 +369,53 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal "time_off_command_center", @time_off_request.metadata.fetch("reviewed_from")
     assert_equal "approved", @time_off_request.metadata.fetch("review_decision")
     assert_not_nil @time_off_request.reviewed_at
+  end
+
+  test "timesheets command center exposes approval and export DTOs" do
+    detail = TimeTracking::CenterQuery.new.call
+
+    assert_instance_of TimeTracking::CenterDto, detail
+    assert_instance_of TimeTracking::MetricDto, detail.metrics.first
+    assert_instance_of TimeTracking::EntryDto, detail.entries.first
+    assert_instance_of TimeTracking::EmployeeSummaryDto, detail.employees.first
+    assert_instance_of TimeTracking::DepartmentSummaryDto, detail.departments.first
+    assert_instance_of TimeTracking::ExceptionDto, detail.exceptions.first
+    assert detail.pending_entries.any? { |entry| entry.id == @submitted_time_entry.id }
+
+    get timesheets_path
+
+    assert_response :success
+    assert_select "h1", "Timesheets command center"
+    assert_select "h2", "Time entry review"
+    assert_select "h2", "Timesheet exceptions"
+    assert_select "h2", "Employee time summary"
+    assert_select "h2", "Department coverage"
+  end
+
+  test "approves a submitted time entry through command action" do
+    post approve_time_entry_path(@submitted_time_entry), params: { reviewed_by: "ops_console" }
+
+    assert_redirected_to timesheets_path
+    @submitted_time_entry.reload
+    assert_equal "approved", @submitted_time_entry.status
+    assert_equal "ops_console", @submitted_time_entry.metadata.fetch("reviewed_by")
+    assert_equal "approved", @submitted_time_entry.metadata.fetch("review_decision")
+    assert_not_nil @submitted_time_entry.reviewed_at
+    assert_not_nil @submitted_time_entry.approved_at
+  end
+
+  test "generates a timesheet payroll export through command action" do
+    post generate_time_tracking_export_path
+
+    assert_redirected_to timesheets_path
+    export = @employer.reload.settings.fetch("time_tracking_export")
+    assert_match(/\Atime_export_#{@employer.id}_/, export.fetch("export_id"))
+    assert_equal "ops_console", export.fetch("requested_by")
+    assert_equal @payroll_run.id, export.fetch("payroll_run_id")
+    assert_equal 1, export.fetch("totals").fetch("line_count")
+    assert_equal 1, export.fetch("totals").fetch("holdback_count")
+    assert export.fetch("totals").fetch("approved_minutes").positive?
+    assert export.fetch("totals").fetch("total_gross_cents").positive?
   end
 
   test "employee profile exposes a feature-rich employee 360 DTO" do

@@ -20,6 +20,10 @@ Rails.application.routes.draw do
   post "company/setup/:step_key/complete", to: "company_setup#complete_step", as: :complete_company_setup_step
   get "onboarding", to: "onboarding#show"
   get "time-off", to: "time_off#show", as: :time_off
+  get "timesheets", to: "timesheets#show"
+  post "timesheets/time_entries/:id/approve", to: "timesheets#approve_entry", as: :approve_time_entry
+  post "timesheets/time_entries/:id/reject", to: "timesheets#reject_entry", as: :reject_time_entry
+  post "timesheets/export", to: "timesheets#generate_export", as: :generate_time_tracking_export
   get "reports", to: "reports#show"
   post "reports/snapshot", to: "reports#generate_snapshot", as: :generate_reports_snapshot
   get "compensation", to: "compensation#show"
