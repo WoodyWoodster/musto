@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_03_223000) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_03_224500) do
   create_table "api_request_logs", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.integer "duration_ms"
@@ -118,6 +118,37 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_03_223000) do
     t.index ["job_opening_id", "email"], name: "index_candidates_on_job_opening_id_and_email", unique: true
     t.index ["job_opening_id"], name: "index_candidates_on_job_opening_id"
     t.index ["stage", "applied_on"], name: "index_candidates_on_stage_and_applied_on"
+  end
+
+  create_table "compensation_changes", force: :cascade do |t|
+    t.datetime "applied_at"
+    t.string "applied_by"
+    t.datetime "approved_at"
+    t.string "approved_by"
+    t.string "change_type", null: false
+    t.datetime "created_at", null: false
+    t.integer "current_compensation_cents", default: 0, null: false
+    t.integer "delta_cents", default: 0, null: false
+    t.date "effective_on", null: false
+    t.integer "employee_id", null: false
+    t.integer "employer_id", null: false
+    t.json "metadata", default: {}, null: false
+    t.integer "payroll_run_id"
+    t.integer "proposed_compensation_cents", default: 0, null: false
+    t.string "reason", null: false
+    t.datetime "rejected_at"
+    t.string "rejected_by"
+    t.string "rejection_reason"
+    t.string "status", default: "draft", null: false
+    t.datetime "submitted_at"
+    t.string "submitted_by"
+    t.datetime "updated_at", null: false
+    t.index ["employee_id", "effective_on"], name: "index_compensation_changes_on_employee_id_and_effective_on"
+    t.index ["employee_id"], name: "index_compensation_changes_on_employee_id"
+    t.index ["employer_id", "status"], name: "index_compensation_changes_on_employer_id_and_status"
+    t.index ["employer_id"], name: "index_compensation_changes_on_employer_id"
+    t.index ["payroll_run_id"], name: "index_compensation_changes_on_payroll_run_id"
+    t.index ["status", "effective_on"], name: "index_compensation_changes_on_status_and_effective_on"
   end
 
   create_table "compliance_cases", force: :cascade do |t|
@@ -920,6 +951,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_03_223000) do
   add_foreign_key "benefit_plans", "employers"
   add_foreign_key "candidates", "employees"
   add_foreign_key "candidates", "job_openings"
+  add_foreign_key "compensation_changes", "employees"
+  add_foreign_key "compensation_changes", "employers"
+  add_foreign_key "compensation_changes", "payroll_runs"
   add_foreign_key "compliance_cases", "employees"
   add_foreign_key "compliance_cases", "employers"
   add_foreign_key "contractor_payments", "contractors"

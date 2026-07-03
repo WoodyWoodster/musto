@@ -59,6 +59,11 @@ Rails.application.routes.draw do
   post "reports/snapshot", to: "reports#generate_snapshot", as: :generate_reports_snapshot
   get "compensation", to: "compensation#show"
   post "compensation/packet", to: "compensation#generate_packet", as: :generate_compensation_packet
+  get "compensation/changes", to: "compensation_changes#show", as: :compensation_changes
+  post "compensation/changes/packet", to: "compensation_changes#generate_packet", as: :generate_compensation_change_packet
+  post "compensation/changes/:id/approve", to: "compensation_changes#approve", as: :approve_compensation_change
+  post "compensation/changes/:id/reject", to: "compensation_changes#reject", as: :reject_compensation_change
+  post "compensation/changes/:id/apply", to: "compensation_changes#apply", as: :apply_compensation_change
   get "taxes", to: "taxes#show"
   post "taxes/packet", to: "taxes#generate_packet", as: :generate_tax_filing_packet
   get "payroll", to: "operations#payroll"

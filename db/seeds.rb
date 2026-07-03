@@ -682,6 +682,89 @@ previous_run = employer.payroll_runs.find_or_initialize_by(
 previous_run.assign_attributes(status: "finalized", gross_pay_cents: employees.sum(&:compensation_cents) / 24)
 previous_run.save!
 
+[
+  [
+    employees.first,
+    current_run,
+    "merit_increase",
+    "submitted",
+    "Annual merit adjustment for operations leadership scope.",
+    employees.first.compensation_cents,
+    employees.first.compensation_cents + 6_000_00,
+    Date.current.next_month.beginning_of_month,
+    "people_ops",
+    2.days.ago,
+    nil,
+    nil,
+    nil
+  ],
+  [
+    employees.second,
+    current_run,
+    "promotion",
+    "approved",
+    "Retail lead promotion into multi-site customer experience management.",
+    employees.second.compensation_cents,
+    employees.second.compensation_cents + 8_500_00,
+    current_run.pay_date,
+    "people_ops",
+    5.days.ago,
+    "finance_admin",
+    1.day.ago,
+    nil
+  ],
+  [
+    employees.third,
+    current_run,
+    "one_time_bonus",
+    "approved",
+    "Open enrollment implementation bonus pending payroll packaging.",
+    employees.third.compensation_cents,
+    employees.third.compensation_cents,
+    current_run.pay_date,
+    "people_ops",
+    3.days.ago,
+    "finance_admin",
+    10.hours.ago,
+    1_500_00
+  ],
+  [
+    employees[4],
+    current_run,
+    "market_adjustment",
+    "rejected",
+    "Market adjustment paused until Denver roastery role leveling is complete.",
+    employees[4].compensation_cents,
+    employees[4].compensation_cents + 4_000_00,
+    Date.current.next_month.beginning_of_month,
+    "people_ops",
+    6.days.ago,
+    nil,
+    nil,
+    nil
+  ]
+].each do |employee, run, change_type, status, reason, current_cents, proposed_cents, effective_on, submitted_by, submitted_at, approved_by, approved_at, override_delta_cents|
+  change = employer.compensation_changes.find_or_initialize_by(employee:, change_type:, reason:)
+  delta_cents = override_delta_cents || proposed_cents - current_cents
+  change.assign_attributes(
+    payroll_run: run,
+    status:,
+    current_compensation_cents: current_cents,
+    proposed_compensation_cents: proposed_cents,
+    delta_cents:,
+    effective_on:,
+    submitted_by:,
+    submitted_at:,
+    approved_by:,
+    approved_at:,
+    rejected_by: status == "rejected" ? "finance_admin" : nil,
+    rejected_at: status == "rejected" ? 1.day.ago : nil,
+    rejection_reason: status == "rejected" ? "Role leveling needs to close before compensation approval." : nil,
+    metadata: { source: "seeded_compensation_change", owner: "people_ops" }
+  )
+  change.save!
+end
+
 employees.each do |employee|
   current_run.payroll_deductions.find_or_initialize_by(employee:, code: "VITABLE_BENEFITS").tap do |deduction|
     accepted_enrollment = employee.enrollments.accepted.first

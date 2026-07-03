@@ -127,6 +127,10 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     @pay_statement = @payroll_run.pay_statements.create!(employee: @employee, statement_number: "PS-#{@payroll_run.id}-#{@employee.id}", period_start_on: @payroll_run.period_start_on, period_end_on: @payroll_run.period_end_on, pay_date: @payroll_run.pay_date, gross_pay_cents: 4_791_66, adjustment_cents: @payroll_adjustment.amount_cents, deduction_cents: 9_900, tax_cents: 86_250, net_pay_cents: 5_345_16)
     @payroll_schedule = @employer.payroll_schedules.create!(name: "Primary payroll schedule", cadence: "biweekly", period_anchor_on: @payroll_run.period_start_on, next_period_start_on: @payroll_run.period_start_on, next_period_end_on: @payroll_run.period_end_on, next_pay_date: @payroll_run.pay_date, approval_deadline_at: @payroll_run.pay_date.in_time_zone.change(hour: 12) - 2.days, funding_deadline_at: @payroll_run.pay_date.in_time_zone.change(hour: 14) - 1.day)
     @payroll_approval_step = @payroll_run.payroll_approval_steps.create!(payroll_schedule: @payroll_schedule, key: "adjustment_review", title: "Certify payroll adjustments", owner: "Payroll", status: "open", due_at: @payroll_schedule.approval_deadline_at - 4.hours, position: 2, metadata: { detail: "One adjustment needs payroll approval.", count: 1, amount_cents: @payroll_adjustment.amount_cents })
+    @submitted_compensation_change = @employer.compensation_changes.create!(employee: @employee, payroll_run: @payroll_run, change_type: "merit_increase", status: "submitted", reason: "Annual merit adjustment for benefits implementation ownership.", current_compensation_cents: @employee.compensation_cents, proposed_compensation_cents: @employee.compensation_cents + 5_000_00, delta_cents: 5_000_00, effective_on: Date.current + 15.days, submitted_by: "people_ops", submitted_at: 1.day.ago)
+    @approved_compensation_change = @employer.compensation_changes.create!(employee: @employee, payroll_run: @payroll_run, change_type: "promotion", status: "approved", reason: "Promotion into senior people operations role.", current_compensation_cents: @employee.compensation_cents, proposed_compensation_cents: @employee.compensation_cents + 10_000_00, delta_cents: 10_000_00, effective_on: Date.current + 10.days, submitted_by: "people_ops", submitted_at: 4.days.ago, approved_by: "finance_admin", approved_at: 1.day.ago)
+    @bonus_compensation_change = @employer.compensation_changes.create!(employee: @employee, payroll_run: @payroll_run, change_type: "one_time_bonus", status: "approved", reason: "Open enrollment implementation bonus.", current_compensation_cents: @employee.compensation_cents, proposed_compensation_cents: @employee.compensation_cents, delta_cents: 750_00, effective_on: @payroll_run.pay_date, submitted_by: "people_ops", submitted_at: 3.days.ago, approved_by: "finance_admin", approved_at: 12.hours.ago)
+    @rejectable_compensation_change = @employer.compensation_changes.create!(employee: @employee, payroll_run: @payroll_run, change_type: "market_adjustment", status: "submitted", reason: "Market adjustment pending leveling review.", current_compensation_cents: @employee.compensation_cents, proposed_compensation_cents: @employee.compensation_cents + 3_000_00, delta_cents: 3_000_00, effective_on: Date.current + 20.days, submitted_by: "people_ops", submitted_at: 2.days.ago)
     @benefit_invoice = @employer.benefit_invoices.create!(invoice_number: "VIT-#{@employer.id}-#{Date.current.strftime("%Y%m")}", carrier: "Vitable", period_start_on: Date.current.beginning_of_month, period_end_on: Date.current.end_of_month, due_on: Date.current.end_of_month + 10.days, status: "needs_review", total_premium_cents: 15_400, employee_contribution_cents: 9_900, employer_contribution_cents: 5_500, variance_cents: 1_000)
     @benefit_invoice_line = @benefit_invoice.benefit_invoice_lines.create!(employee: @employee, benefit_plan: @plan, enrollment: @enrollment, coverage_level: "employee", amount_cents: 9_900, expected_premium_cents: 9_900, expected_payroll_deduction_cents: 9_900, employee_contribution_cents: 9_900, employer_contribution_cents: 0, variance_cents: 0, status: "matched")
     @benefit_invoice_variance_line = @benefit_invoice.benefit_invoice_lines.create!(employee: @employee, benefit_plan: @pending_plan, enrollment: @pending_enrollment, coverage_level: "employee", amount_cents: 5_500, expected_premium_cents: 4_500, expected_payroll_deduction_cents: 0, employee_contribution_cents: 0, employer_contribution_cents: 5_500, variance_cents: 1_000, status: "variance")
@@ -257,6 +261,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       expenses_path,
       contractors_path,
       compensation_path,
+      compensation_changes_path,
       taxes_path,
       payroll_deductions_center_path,
       payroll_calendar_path,
@@ -309,6 +314,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     billing = Benefits::BillingQuery.new.call
     contractors = Contractors::CenterQuery.new.call
     compensation = Compensation::CenterQuery.new.call
+    compensation_changes = Compensation::ChangesQuery.new.call
     taxes = Taxes::CenterQuery.new.call
     reports = Reports::CenterQuery.new.call
     benefits = Operations::BenefitsQuery.new.call
@@ -421,6 +427,9 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_instance_of Compensation::DepartmentBudgetDto, compensation.departments.first
     assert_instance_of Compensation::AdjustmentDto, compensation.adjustments.first
     assert_instance_of Compensation::RecommendationDto, compensation.recommendations.first
+    assert_instance_of Compensation::ChangeCenterDto, compensation_changes
+    assert_instance_of Compensation::ChangeDto, compensation_changes.changes.first
+    assert_instance_of Compensation::MetricDto, compensation_changes.metrics.first
     assert_instance_of Taxes::CenterDto, taxes
     assert_instance_of Taxes::AgencyAccountDto, taxes.agency_accounts.first
     assert_instance_of Taxes::PayrollLiabilityDto, taxes.liabilities.first
@@ -510,6 +519,87 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal @employee.compensation_cents, packet.fetch("totals").fetch("annual_compensation_cents")
     assert_equal @payroll_adjustment.amount_cents, packet.fetch("totals").fetch("adjustment_cents")
     assert_instance_of Array, packet.fetch("recommendations")
+  end
+
+  test "compensation changes center exposes pay change DTOs" do
+    detail = Compensation::ChangesQuery.new.call
+
+    assert_instance_of Compensation::ChangeCenterDto, detail
+    assert_instance_of Compensation::MetricDto, detail.metrics.first
+    assert_instance_of Compensation::ChangeDto, detail.changes.first
+    assert detail.reviewable_changes.any? { |change| change.id == @submitted_compensation_change.id }
+    assert detail.approved_changes.any? { |change| change.id == @approved_compensation_change.id }
+
+    get compensation_changes_path
+
+    assert_response :success
+    assert_select "h1", "Compensation change management"
+    assert_select "h2", "Review queue"
+    assert_select "h2", "Approved changes"
+    assert_select "h2", "Change ledger"
+    assert_select "h2", "Payroll packet lines"
+    assert_select "h2", "Packet holdbacks"
+  end
+
+  test "approves compensation change through command action" do
+    post approve_compensation_change_path(@submitted_compensation_change), params: { approved_by: "finance_admin" }
+
+    assert_redirected_to compensation_changes_path
+    @submitted_compensation_change.reload
+    assert_equal "approved", @submitted_compensation_change.status
+    assert_equal "finance_admin", @submitted_compensation_change.approved_by
+    assert_not_nil @submitted_compensation_change.approved_at
+  end
+
+  test "rejects compensation change through command action" do
+    post reject_compensation_change_path(@rejectable_compensation_change), params: { reviewed_by: "finance_admin", reason: "Leveling is incomplete" }
+
+    assert_redirected_to compensation_changes_path
+    @rejectable_compensation_change.reload
+    assert_equal "rejected", @rejectable_compensation_change.status
+    assert_equal "finance_admin", @rejectable_compensation_change.rejected_by
+    assert_equal "Leveling is incomplete", @rejectable_compensation_change.rejection_reason
+  end
+
+  test "applies approved base compensation change through command action" do
+    post apply_compensation_change_path(@approved_compensation_change), params: { applied_by: "payroll_admin" }
+
+    assert_redirected_to compensation_changes_path
+    @approved_compensation_change.reload
+    assert_equal "applied", @approved_compensation_change.status
+    assert_equal "payroll_admin", @approved_compensation_change.applied_by
+    assert_equal @approved_compensation_change.proposed_compensation_cents, @employee.reload.compensation_cents
+  end
+
+  test "applies one-time compensation change as payroll adjustment" do
+    assert_difference -> { @payroll_run.payroll_adjustments.count }, 1 do
+      post apply_compensation_change_path(@bonus_compensation_change), params: { applied_by: "payroll_admin" }
+    end
+
+    assert_redirected_to compensation_changes_path
+    adjustment = @payroll_run.payroll_adjustments.order(:created_at).last
+    assert_equal "one_time_bonus", adjustment.adjustment_type
+    assert_equal @bonus_compensation_change.delta_cents, adjustment.amount_cents
+    assert_equal "applied", @bonus_compensation_change.reload.status
+  end
+
+  test "generates compensation change payroll packet" do
+    post generate_compensation_change_packet_path, params: { requested_by: "finance_admin" }
+
+    assert_redirected_to compensation_changes_path
+    packet = @employer.reload.settings.fetch("compensation_change_packet")
+    assert_match(/\Acomp_changes_#{@employer.id}_/, packet.fetch("packet_id"))
+    assert_equal "finance_admin", packet.fetch("requested_by")
+    assert_equal 2, packet.fetch("totals").fetch("change_count")
+    assert_equal 1, packet.fetch("totals").fetch("employee_count")
+    assert_equal @approved_compensation_change.delta_cents, packet.fetch("totals").fetch("recurring_delta_cents")
+    assert_equal @bonus_compensation_change.delta_cents, packet.fetch("totals").fetch("one_time_cents")
+    assert_equal 2, packet.fetch("totals").fetch("holdback_count")
+
+    detail = Compensation::ChangesQuery.new.call
+    assert_instance_of Compensation::ChangePacketDto, detail.packet
+    assert_instance_of Compensation::ChangePacketLineDto, detail.packet_lines.first
+    assert_instance_of Compensation::ChangePacketHoldbackDto, detail.packet_holdbacks.first
   end
 
   test "tax filings center exposes agency and liability DTOs" do
