@@ -20,6 +20,8 @@ Rails.application.routes.draw do
   post "company/setup/:step_key/complete", to: "company_setup#complete_step", as: :complete_company_setup_step
   get "onboarding", to: "onboarding#show"
   get "time-off", to: "time_off#show", as: :time_off
+  get "reports", to: "reports#show"
+  post "reports/snapshot", to: "reports#generate_snapshot", as: :generate_reports_snapshot
   get "payroll", to: "operations#payroll"
   get "benefits", to: "operations#benefits"
   get "benefits/reconciliation", to: "benefits_reconciliations#show", as: :benefits_reconciliation

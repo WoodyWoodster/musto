@@ -90,6 +90,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       workforce_path,
       onboarding_path,
       time_off_path,
+      reports_path,
       payroll_path,
       payroll_run_path(@payroll_run),
       payroll_run_benefits_export_path(@payroll_run),
@@ -114,6 +115,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     payroll = Operations::PayrollQuery.new.call
     onboarding = Onboarding::CommandCenterQuery.new.call
     time_off = TimeOff::CommandCenterQuery.new.call
+    reports = Reports::CenterQuery.new.call
     benefits = Operations::BenefitsQuery.new.call
     reconciliation = Benefits::ReconciliationQuery.new.call
     compliance = Operations::ComplianceQuery.new.call
@@ -135,10 +137,45 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_instance_of TimeOff::RequestDto, time_off.requests.first
     assert_instance_of TimeOff::PolicyDto, time_off.policies.first
     assert_instance_of TimeOff::EmployeeBalanceDto, time_off.balances.first
+    assert_instance_of Reports::CenterDto, reports
+    assert_instance_of Reports::MetricDto, reports.metrics.first
+    assert_instance_of Reports::ReportCardDto, reports.report_cards.first
     assert_instance_of Operations::BenefitPlanDto, benefits.fetch(:benefit_plans).first
     assert_instance_of Benefits::ReconciliationDetailDto, reconciliation
     assert_instance_of Operations::ComplianceCaseDto, compliance.fetch(:cases).first
     assert_instance_of Operations::IntegrationConnectionDto, integrations.fetch(:connections).first
+  end
+
+  test "reports command center exposes finance and risk DTOs" do
+    detail = Reports::CenterQuery.new.call
+
+    assert_instance_of Reports::CenterDto, detail
+    assert_instance_of Reports::MetricDto, detail.metrics.first
+    assert_instance_of Reports::ReportCardDto, detail.report_cards.first
+    assert_instance_of Reports::DepartmentCostDto, detail.department_costs.first
+    assert_instance_of Reports::BenefitSpendDto, detail.benefit_spend.first
+    assert_instance_of Reports::RiskItemDto, detail.risk_items.first
+    assert_equal @department.name, detail.department_costs.first.department_name
+
+    get reports_path
+
+    assert_response :success
+    assert_select "h1", "Reports command center"
+    assert_select "h2", "Report library"
+    assert_select "h2", "Department cost ledger"
+    assert_select "h2", "Benefits spend"
+    assert_select "h2", "Risk register"
+  end
+
+  test "generates a reports snapshot through command action" do
+    post generate_reports_snapshot_path
+
+    assert_redirected_to reports_path
+    snapshot = @employer.reload.settings.fetch("report_snapshot")
+    assert_match(/\Aops_reports_#{@employer.id}_/, snapshot.fetch("snapshot_id"))
+    assert_equal "ops_console", snapshot.fetch("requested_by")
+    assert_equal 1, snapshot.fetch("metrics").fetch("active_employee_count")
+    assert_equal 4, snapshot.fetch("exports").count
   end
 
   test "company setup center exposes launch readiness DTOs" do
