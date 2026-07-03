@@ -17,12 +17,18 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       onboarding_status: "in_progress"
     )
     @plan = @employer.benefit_plans.create!(name: "Primary Care", category: "direct_primary_care", monthly_premium_cents: 9_900)
-    @employee.enrollments.create!(benefit_plan: @plan, status: "accepted", effective_on: Date.current)
+    @enrollment = @employee.enrollments.create!(benefit_plan: @plan, status: "accepted", effective_on: Date.current)
+    @pending_plan = @employer.benefit_plans.create!(name: "Dental", category: "dental", monthly_premium_cents: 4_500)
+    @pending_enrollment = @employee.enrollments.create!(benefit_plan: @pending_plan, status: "pending", effective_on: Date.current.next_month.beginning_of_month)
+    @waivable_plan = @employer.benefit_plans.create!(name: "Vision", category: "vision", monthly_premium_cents: 2_500)
+    @waivable_enrollment = @employee.enrollments.create!(benefit_plan: @waivable_plan, status: "pending", effective_on: Date.current.next_month.beginning_of_month)
     @task = @employee.onboarding_tasks.create!(title: "Confirm payroll setup", category: "payroll", due_on: Date.current)
     @policy = @employer.time_off_policies.create!(name: "PTO", annual_hours: 120)
     @time_off_request = @employee.time_off_requests.create!(time_off_policy: @policy, starts_on: Date.current + 1.day, ends_on: Date.current + 2.days, hours: 16)
     @payroll_run = @employer.payroll_runs.create!(period_start_on: Date.current.beginning_of_month, period_end_on: Date.current.end_of_month, pay_date: Date.current.end_of_month, gross_pay_cents: 9_500_00, status: "estimated")
-    @payroll_run.payroll_deductions.create!(employee: @employee, enrollment: @employee.enrollments.first, code: "VITABLE_BENEFITS", amount_cents: 9_900, status: "ready")
+    @payroll_run.payroll_deductions.create!(employee: @employee, enrollment: @enrollment, code: "VITABLE_BENEFITS", amount_cents: 9_900, status: "ready")
+    @pending_deduction = @payroll_run.payroll_deductions.create!(employee: @employee, enrollment: @pending_enrollment, code: "VITABLE_DENTAL", amount_cents: 0, status: "waiting_on_enrollment")
+    @waivable_deduction = @payroll_run.payroll_deductions.create!(employee: @employee, enrollment: @waivable_enrollment, code: "VITABLE_VISION", amount_cents: 0, status: "waiting_on_enrollment")
     @compliance_case = @employer.compliance_cases.create!(employee: @employee, kind: "i9_reverification", severity: "high", due_on: Date.current + 5.days)
     @organization.integration_connections.create!(provider: "vitable", environment: "production")
   end
@@ -34,6 +40,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       payroll_path,
       payroll_run_path(@payroll_run),
       benefits_path,
+      enrollment_path(@pending_enrollment),
       compliance_path,
       integrations_path,
       employee_path(@employee)
@@ -93,6 +100,43 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_select "h2", "Preflight checklist"
     assert_select "h2", "Employee pay lines"
     assert_select "h2", "Export payload"
+  end
+
+  test "benefits enrollment workspace exposes review and sync DTOs" do
+    detail = Benefits::EnrollmentDetailQuery.new.call(@pending_enrollment.id)
+
+    assert_instance_of Benefits::EnrollmentDetailDto, detail
+    assert_instance_of Benefits::EnrollmentPreflightCheckDto, detail.preflight_checks.first
+    assert_instance_of Benefits::EnrollmentTimelineItemDto, detail.timeline.first
+    assert_equal @pending_plan.name, detail.benefit_plan_name
+
+    get enrollment_path(@pending_enrollment)
+
+    assert_response :success
+    assert_select "h1", @pending_plan.name
+    assert_select "h2", "Enrollment preflight"
+    assert_select "h2", "Payroll deductions"
+    assert_select "h2", "Sync payload"
+  end
+
+  test "accepts an enrollment and readies payroll deductions" do
+    post accept_enrollment_path(@pending_enrollment)
+
+    assert_redirected_to enrollment_path(@pending_enrollment)
+    assert_equal "accepted", @pending_enrollment.reload.status
+    assert_not_nil @pending_enrollment.accepted_at
+    assert_equal "ready", @pending_deduction.reload.status
+    assert_equal @pending_plan.monthly_premium_cents, @pending_deduction.amount_cents
+  end
+
+  test "waives an enrollment and zeroes payroll deductions" do
+    post waive_enrollment_path(@waivable_enrollment)
+
+    assert_redirected_to enrollment_path(@waivable_enrollment)
+    assert_equal "waived", @waivable_enrollment.reload.status
+    assert_nil @waivable_enrollment.accepted_at
+    assert_equal "waived", @waivable_deduction.reload.status
+    assert_equal 0, @waivable_deduction.amount_cents
   end
 
   test "completes an onboarding task through the command action" do

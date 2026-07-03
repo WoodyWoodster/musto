@@ -3,6 +3,10 @@ Rails.application.routes.draw do
 
   resources :employers, only: [ :index, :show ]
   resources :employees, only: [ :show ]
+  resources :enrollments, only: [ :show ] do
+    post :accept, on: :member
+    post :waive, on: :member
+  end
 
   get "workforce", to: "operations#workforce"
   get "payroll", to: "operations#payroll"

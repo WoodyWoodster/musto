@@ -19,7 +19,7 @@ module ApplicationHelper
       "bg-emerald-50 text-emerald-700 ring-emerald-200"
     when "pending", "requested", "received", "onboarding", "estimated", "open", "running", "in_progress"
       "bg-cyan-50 text-cyan-700 ring-cyan-200"
-    when "needs_credentials", "waiting_on_enrollment", "needs_review", "draft", "not_synced"
+    when "needs_credentials", "waiting_on_enrollment", "needs_review", "draft", "not_synced", "waived"
       "bg-amber-50 text-amber-800 ring-amber-200"
     when "failed", "expired", "denied", "critical", "high", "blocked"
       "bg-rose-50 text-rose-700 ring-rose-200"

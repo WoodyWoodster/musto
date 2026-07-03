@@ -79,8 +79,8 @@
           <tbody class="divide-y divide-slate-100">
             <% @benefits[:enrollments].each do |enrollment| %>
               <tr class="hover:bg-slate-50">
-                <td class="px-5 py-4 font-medium text-slate-950"><%= enrollment.employee_name %></td>
-                <td class="px-5 py-4 text-slate-600"><%= enrollment.benefit_plan_name %></td>
+                <td class="px-5 py-4"><%= link_to enrollment.employee_name, employee_path(enrollment.employee_id), class: "font-medium text-slate-950 hover:text-cyan-700" %></td>
+                <td class="px-5 py-4"><%= link_to enrollment.benefit_plan_name, enrollment_path(enrollment.id), class: "font-medium text-slate-700 hover:text-cyan-700" %></td>
                 <td class="px-5 py-4 text-slate-600"><%= enrollment.coverage_level.humanize %></td>
                 <td class="px-5 py-4 text-slate-600"><%= enrollment.effective_on&.strftime("%b %-d, %Y") || "Pending" %></td>
                 <td class="px-5 py-4"><%= status_pill(enrollment.status) %></td>

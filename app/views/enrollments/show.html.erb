@@ -1,0 +1,141 @@
+<section class="space-y-7">
+  <div class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div class="grid gap-0 xl:grid-cols-[1.2fr_0.8fr]">
+      <div class="p-6 lg:p-8">
+        <%= link_to "Back to benefits", benefits_path, class: "text-sm font-semibold text-cyan-700 hover:text-cyan-900" %>
+        <div class="mt-5 flex flex-wrap items-center gap-2">
+          <%= status_pill(@enrollment.status) %>
+          <%= status_pill(@enrollment.plan_status) %>
+          <%= status_pill(@enrollment.employee_status) %>
+        </div>
+        <h1 class="mt-5 text-4xl font-semibold tracking-tight text-slate-950"><%= @enrollment.benefit_plan_name %></h1>
+        <p class="mt-3 max-w-3xl text-base leading-7 text-slate-600">
+          Review <%= @enrollment.employee_name %>’s <%= @enrollment.coverage_level.humanize.downcase %> election, payroll deduction impact, and Vitable enrollment mapping before accepting or waiving coverage.
+        </p>
+        <div class="mt-6 flex flex-wrap gap-2">
+          <%= link_to "Employee profile", employee_path(@enrollment.employee_id), class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm hover:border-slate-300" %>
+          <% if @enrollment.actionable? %>
+            <%= button_to "Accept enrollment", accept_enrollment_path(@enrollment.id), method: :post, class: "rounded-md bg-slate-950 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-slate-800" %>
+            <%= button_to "Waive coverage", waive_enrollment_path(@enrollment.id), method: :post, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm hover:border-slate-300" %>
+          <% end %>
+        </div>
+      </div>
+
+      <aside class="border-t border-slate-200 bg-slate-950 p-6 text-white xl:border-l xl:border-t-0 xl:p-8">
+        <p class="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-300">Vitable enrollment</p>
+        <div class="mt-6 space-y-5">
+          <div>
+            <p class="text-sm text-slate-300">Remote enrollment ID</p>
+            <p class="mt-1 break-all font-mono text-sm font-semibold"><%= @enrollment.vitable_id.presence || "Waiting for remote ID" %></p>
+          </div>
+          <div class="h-px bg-white/10"></div>
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <p class="text-sm text-slate-300">Monthly premium</p>
+              <p class="mt-1 text-2xl font-semibold"><%= money_cents(@enrollment.monthly_premium_cents) %></p>
+            </div>
+            <div>
+              <p class="text-sm text-slate-300">Annualized</p>
+              <p class="mt-1 text-2xl font-semibold"><%= money_cents(@enrollment.annual_premium_cents) %></p>
+            </div>
+          </div>
+          <div class="rounded-md bg-white/10 p-4">
+            <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Payroll impact</p>
+            <p class="mt-2 text-sm leading-6 text-slate-200"><%= @enrollment.payroll_deduction_count %> deductions · <%= money_cents(@enrollment.payroll_deduction_cents) %> currently queued.</p>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <div class="grid gap-4 md:grid-cols-4">
+    <% [
+      ["Employee", @enrollment.employee_name, "bg-emerald-500"],
+      ["Coverage", @enrollment.coverage_level.humanize, "bg-cyan-500"],
+      ["Effective", @enrollment.effective_on&.strftime("%b %-d, %Y") || "Pending", "bg-indigo-500"],
+      ["Carrier", @enrollment.carrier.presence || "Carrier pending", "bg-amber-500"]
+    ].each do |label, value, accent| %>
+      <article class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <div class="flex items-center justify-between gap-4">
+          <p class="text-sm font-medium text-slate-500"><%= label %></p>
+          <span class="h-2.5 w-2.5 shrink-0 rounded-full <%= accent %>"></span>
+        </div>
+        <p class="mt-4 text-lg font-semibold tracking-tight text-slate-950"><%= value %></p>
+      </article>
+    <% end %>
+  </div>
+
+  <div class="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
+    <section class="rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="border-b border-slate-100 px-5 py-4">
+        <h2 class="text-base font-semibold text-slate-950">Enrollment preflight</h2>
+        <p class="text-sm text-slate-500">Operational checks before this election is synced into payroll.</p>
+      </div>
+      <div class="divide-y divide-slate-100">
+        <% @enrollment.preflight_checks.each do |check| %>
+          <div class="flex items-start justify-between gap-4 px-5 py-4">
+            <div>
+              <p class="font-semibold text-slate-950"><%= check.label %></p>
+              <p class="mt-1 text-sm text-slate-500"><%= check.detail %></p>
+            </div>
+            <%= status_pill(check.status) %>
+          </div>
+        <% end %>
+      </div>
+    </section>
+
+    <section class="rounded-lg border border-slate-200 bg-slate-950 shadow-sm">
+      <div class="border-b border-white/10 px-5 py-4">
+        <h2 class="text-base font-semibold text-white">Sync payload</h2>
+        <p class="text-sm text-slate-400">Enrollment and payroll deduction payload prepared for Vitable/provider export.</p>
+      </div>
+      <pre class="overflow-x-auto p-5 text-xs leading-6 text-cyan-100"><%= JSON.pretty_generate(@enrollment.export_payload) %></pre>
+    </section>
+  </div>
+
+  <div class="grid gap-6 xl:grid-cols-[1fr_1fr]">
+    <section class="rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="border-b border-slate-100 px-5 py-4">
+        <h2 class="text-base font-semibold text-slate-950">Payroll deductions</h2>
+        <p class="text-sm text-slate-500">Amounts and readiness produced by this benefits election.</p>
+      </div>
+      <div class="divide-y divide-slate-100">
+        <% @enrollment.payroll_deductions.each do |deduction| %>
+          <div class="flex items-start justify-between gap-4 px-5 py-4">
+            <div>
+              <p class="font-semibold text-slate-950"><%= deduction.code %></p>
+              <p class="mt-1 text-sm text-slate-500"><%= deduction.employee_name %> · <%= deduction.enrollment_name || "Pending enrollment" %></p>
+            </div>
+            <div class="text-right">
+              <p class="font-semibold text-slate-950"><%= money_cents(deduction.amount_cents) %></p>
+              <div class="mt-1"><%= status_pill(deduction.status) %></div>
+            </div>
+          </div>
+        <% end %>
+        <% if @enrollment.payroll_deductions.empty? %>
+          <p class="px-5 py-4 text-sm text-slate-500">No payroll deductions have been generated for this enrollment yet.</p>
+        <% end %>
+      </div>
+    </section>
+
+    <section class="rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="border-b border-slate-100 px-5 py-4">
+        <h2 class="text-base font-semibold text-slate-950">Enrollment timeline</h2>
+        <p class="text-sm text-slate-500">Review history across enrollment and payroll updates.</p>
+      </div>
+      <div class="divide-y divide-slate-100">
+        <% @enrollment.timeline.each do |item| %>
+          <div class="flex items-start justify-between gap-4 px-5 py-4">
+            <div>
+              <p class="text-xs font-semibold uppercase tracking-wide text-slate-400"><%= item.type %></p>
+              <p class="mt-1 font-medium text-slate-950"><%= item.title %></p>
+              <p class="mt-1 text-sm text-slate-500"><%= item.subtitle %></p>
+              <p class="mt-1 text-xs text-slate-400"><%= time_ago_in_words(item.timestamp) %> ago</p>
+            </div>
+            <%= status_pill(item.status) %>
+          </div>
+        <% end %>
+      </div>
+    </section>
+  </div>
+</section>
