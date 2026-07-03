@@ -47,6 +47,9 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     @pending_deduction = @payroll_run.payroll_deductions.create!(employee: @employee, enrollment: @pending_enrollment, code: "VITABLE_DENTAL", amount_cents: 0, status: "waiting_on_enrollment")
     @waivable_deduction = @payroll_run.payroll_deductions.create!(employee: @employee, enrollment: @waivable_enrollment, code: "VITABLE_VISION", amount_cents: 0, status: "waiting_on_enrollment")
     @payroll_adjustment = @payroll_run.payroll_adjustments.create!(employee: @employee, adjustment_type: "bonus", description: "Quarterly performance bonus", amount_cents: 1_500_00, taxable: true)
+    @expense = @employee.employee_expenses.create!(incurred_on: Date.current - 2.days, merchant: "Amtrak", category: "travel", description: "Benefits implementation travel", amount_cents: 184_00, status: "submitted", receipt_status: "uploaded")
+    @approved_expense = @employee.employee_expenses.create!(incurred_on: Date.current - 3.days, merchant: "Staples", category: "supplies", description: "Operations supplies", amount_cents: 86_00, status: "approved", receipt_status: "verified", approved_at: 1.day.ago)
+    @blocked_expense = @employee.employee_expenses.create!(incurred_on: Date.current - 1.day, merchant: "Cafe", category: "meals", description: "Team lunch missing receipt", amount_cents: 145_00, status: "submitted", receipt_status: "missing")
     time_start = @payroll_run.period_start_on.in_time_zone.change(hour: 9, min: 0)
     @approved_time_entry = @employee.time_entries.create!(work_date: @payroll_run.period_start_on, clock_in_at: time_start, clock_out_at: time_start + 8.hours, break_minutes: 30, source: "web", status: "approved", approved_at: 1.hour.ago, reviewed_at: 1.hour.ago, notes: "Regular shift")
     @submitted_time_entry = @employee.time_entries.create!(work_date: @payroll_run.period_start_on + 1.day, clock_in_at: time_start + 1.day, clock_out_at: time_start + 1.day + 9.hours, break_minutes: 45, source: "mobile", status: "submitted", notes: "Needs manager review")
@@ -162,6 +165,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       onboarding_path,
       time_off_path,
       timesheets_path,
+      expenses_path,
       contractors_path,
       compensation_path,
       taxes_path,
@@ -193,6 +197,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     onboarding = Onboarding::CommandCenterQuery.new.call
     time_off = TimeOff::CommandCenterQuery.new.call
     timesheets = TimeTracking::CenterQuery.new.call
+    expenses = Expenses::CenterQuery.new.call
     contractors = Contractors::CenterQuery.new.call
     compensation = Compensation::CenterQuery.new.call
     taxes = Taxes::CenterQuery.new.call
@@ -228,6 +233,10 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_instance_of TimeTracking::EmployeeSummaryDto, timesheets.employees.first
     assert_instance_of TimeTracking::DepartmentSummaryDto, timesheets.departments.first
     assert_instance_of TimeTracking::ExceptionDto, timesheets.exceptions.first
+    assert_instance_of Expenses::CenterDto, expenses
+    assert_instance_of Expenses::MetricDto, expenses.metrics.first
+    assert_instance_of Expenses::ExpenseDto, expenses.expenses.first
+    assert_instance_of Expenses::PolicyItemDto, expenses.policy_items.first
     assert_instance_of Contractors::CenterDto, contractors
     assert_instance_of Contractors::MetricDto, contractors.metrics.first
     assert_instance_of Contractors::ContractorDto, contractors.contractors.first
@@ -553,6 +562,55 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal 1, export.fetch("totals").fetch("holdback_count")
     assert export.fetch("totals").fetch("approved_minutes").positive?
     assert export.fetch("totals").fetch("total_gross_cents").positive?
+  end
+
+  test "expenses center exposes employee reimbursement DTOs" do
+    detail = Expenses::CenterQuery.new.call
+
+    assert_instance_of Expenses::CenterDto, detail
+    assert_instance_of Expenses::MetricDto, detail.metrics.first
+    assert_instance_of Expenses::ExpenseDto, detail.expenses.first
+    assert_instance_of Expenses::PolicyItemDto, detail.policy_items.first
+    assert detail.reviewable_expenses.any? { |expense| expense.id == @expense.id }
+    assert detail.approved_expenses.any? { |expense| expense.id == @approved_expense.id }
+
+    get expenses_path
+
+    assert_response :success
+    assert_select "h1", "Expenses and reimbursements"
+    assert_select "h2", "Expense review queue"
+    assert_select "h2", "Policy exceptions"
+    assert_select "h2", "Expense ledger"
+    assert_select "h2", "Reimbursement batch ledger"
+  end
+
+  test "approves a receipt-ready employee expense through command action" do
+    post approve_expense_path(@expense), params: { reviewed_by: "ops_console" }
+
+    assert_redirected_to expenses_path
+    @expense.reload
+    assert_equal "approved", @expense.status
+    assert_equal "ops_console", @expense.metadata.fetch("reviewed_by")
+    assert_not_nil @expense.approved_at
+  end
+
+  test "generates an expense reimbursement batch through command action" do
+    post generate_expense_reimbursement_batch_path
+
+    assert_redirected_to expenses_path
+    batch = @employer.reload.settings.fetch("expense_reimbursement_batch")
+    assert_match(/\Aexpense_reimbursements_#{@employer.id}_/, batch.fetch("batch_id"))
+    assert_equal "ops_console", batch.fetch("requested_by")
+    assert_equal 1, batch.fetch("totals").fetch("reimbursement_count")
+    assert_equal 1, batch.fetch("totals").fetch("employee_count")
+    assert_equal 2, batch.fetch("totals").fetch("holdback_count")
+    assert_equal @approved_expense.amount_cents, batch.fetch("totals").fetch("total_cents")
+    assert_equal "reimbursed", @approved_expense.reload.status
+
+    detail = Expenses::CenterQuery.new.call
+    assert_instance_of Expenses::BatchDto, detail.latest_batch
+    assert_instance_of Expenses::BatchLineDto, detail.batch_lines.first
+    assert_instance_of Expenses::BatchHoldbackDto, detail.batch_holdbacks.first
   end
 
   test "contractor payments center exposes contractor payment DTOs" do

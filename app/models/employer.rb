@@ -12,6 +12,7 @@ class Employer < ApplicationRecord
   has_many :time_off_requests, through: :employees
   has_many :onboarding_tasks, through: :employees
   has_many :employee_documents, through: :employees
+  has_many :employee_expenses, through: :employees
   has_many :compliance_cases, dependent: :destroy
 
   validates :name, :status, presence: true

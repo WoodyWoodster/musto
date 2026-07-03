@@ -27,6 +27,9 @@ Rails.application.routes.draw do
   post "timesheets/time_entries/:id/approve", to: "timesheets#approve_entry", as: :approve_time_entry
   post "timesheets/time_entries/:id/reject", to: "timesheets#reject_entry", as: :reject_time_entry
   post "timesheets/export", to: "timesheets#generate_export", as: :generate_time_tracking_export
+  get "expenses", to: "expenses#show"
+  post "expenses/reimbursement_batch", to: "expenses#generate_batch", as: :generate_expense_reimbursement_batch
+  post "expenses/:id/approve", to: "expenses#approve_expense", as: :approve_expense
   get "contractors", to: "contractors#show"
   post "contractors/payments/:id/approve", to: "contractors#approve_payment", as: :approve_contractor_payment
   post "contractors/payments/batch", to: "contractors#generate_batch", as: :generate_contractor_payment_batch

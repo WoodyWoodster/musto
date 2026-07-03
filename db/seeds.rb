@@ -285,6 +285,27 @@ end
   adjustment.save!
 end
 
+[
+  [ employees.third, Date.current - 2.days, "Amtrak", "travel", "Open enrollment onsite travel", 184_00, "submitted", "uploaded", true, "employee_paid" ],
+  [ employees.first, Date.current - 3.days, "Staples", "supplies", "Operations supplies for benefits launch", 86_00, "approved", "verified", true, "employee_paid" ],
+  [ employees.second, Date.current - 1.day, "High Street Cafe", "meals", "Team lunch missing receipt", 145_00, "submitted", "missing", true, "employee_paid" ],
+  [ employees.last, Date.current - 4.days, "City Gym", "wellness", "Out-of-policy wellness reimbursement request", 59_00, "submitted", "uploaded", false, "employee_paid" ]
+].each do |employee, incurred_on, merchant, category, description, amount_cents, status, receipt_status, reimbursable, payment_method|
+  expense = employee.employee_expenses.find_or_initialize_by(merchant:, incurred_on:, description:)
+  expense.assign_attributes(
+    category:,
+    amount_cents:,
+    status:,
+    receipt_status:,
+    reimbursable:,
+    payment_method:,
+    approved_at: status == "approved" ? 1.day.ago : nil,
+    reimbursed_at: nil,
+    metadata: { source: "seeded_expense_policy" }
+  )
+  expense.save!
+end
+
 employees.each_with_index do |employee, employee_index|
   4.times do |day_offset|
     work_date = current_run.period_start_on + day_offset.days

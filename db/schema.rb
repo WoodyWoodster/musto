@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_03_150000) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_03_160000) do
   create_table "api_request_logs", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.integer "duration_ms"
@@ -152,6 +152,29 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_03_150000) do
     t.index ["employee_id", "document_type"], name: "index_employee_documents_on_employee_id_and_document_type"
     t.index ["employee_id"], name: "index_employee_documents_on_employee_id"
     t.index ["status", "expires_on"], name: "index_employee_documents_on_status_and_expires_on"
+  end
+
+  create_table "employee_expenses", force: :cascade do |t|
+    t.integer "amount_cents", default: 0, null: false
+    t.datetime "approved_at"
+    t.string "category", null: false
+    t.datetime "created_at", null: false
+    t.text "description"
+    t.integer "employee_id", null: false
+    t.date "incurred_on", null: false
+    t.string "merchant", null: false
+    t.json "metadata", default: {}, null: false
+    t.string "payment_method", default: "employee_paid", null: false
+    t.string "receipt_status", default: "missing", null: false
+    t.boolean "reimbursable", default: true, null: false
+    t.datetime "reimbursed_at"
+    t.string "status", default: "submitted", null: false
+    t.datetime "updated_at", null: false
+    t.index ["category"], name: "index_employee_expenses_on_category"
+    t.index ["employee_id", "incurred_on"], name: "index_employee_expenses_on_employee_id_and_incurred_on"
+    t.index ["employee_id"], name: "index_employee_expenses_on_employee_id"
+    t.index ["receipt_status"], name: "index_employee_expenses_on_receipt_status"
+    t.index ["status", "incurred_on"], name: "index_employee_expenses_on_status_and_incurred_on"
   end
 
   create_table "employee_lifecycle_events", force: :cascade do |t|
@@ -447,6 +470,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_03_150000) do
   add_foreign_key "departments", "employers"
   add_foreign_key "dependents", "employees"
   add_foreign_key "employee_documents", "employees"
+  add_foreign_key "employee_expenses", "employees"
   add_foreign_key "employee_lifecycle_events", "employees"
   add_foreign_key "employees", "departments"
   add_foreign_key "employees", "employers"
