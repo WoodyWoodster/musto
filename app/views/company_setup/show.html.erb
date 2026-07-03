@@ -1,0 +1,203 @@
+<section class="space-y-7">
+  <div class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div class="grid xl:grid-cols-[1.3fr_0.7fr]">
+      <div class="p-6 lg:p-8">
+        <div class="flex flex-wrap items-center gap-2">
+          <%= status_pill(@company_setup.ready_for_launch? ? "ready" : "needs_review") %>
+          <%= status_pill(@company_setup.status) %>
+        </div>
+        <h1 class="mt-5 text-4xl font-semibold tracking-tight text-slate-950">Company setup center</h1>
+        <p class="mt-3 max-w-3xl text-base leading-7 text-slate-600">
+          Legal entity, payroll settings, org structure, benefits configuration, compliance readiness, and Vitable launch posture for <%= @company_setup.employer&.name || "your employer" %>.
+        </p>
+        <div class="mt-6 flex flex-wrap gap-3">
+          <%= link_to "Employers", employers_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
+          <%= link_to "Workforce", workforce_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
+          <%= link_to "Integrations", integrations_path, class: "rounded-md bg-slate-950 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-slate-800" %>
+        </div>
+      </div>
+
+      <aside class="border-t border-slate-200 bg-slate-950 p-6 text-white xl:border-l xl:border-t-0 xl:p-8">
+        <p class="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-300">Launch progress</p>
+        <p class="mt-6 text-5xl font-semibold tracking-tight"><%= @company_setup.launch_progress %>%</p>
+        <div class="mt-5 h-2 overflow-hidden rounded-full bg-white/15">
+          <div class="h-full rounded-full bg-cyan-300" style="width: <%= @company_setup.launch_progress %>%"></div>
+        </div>
+        <p class="mt-4 text-sm leading-6 text-slate-300">
+          <%= @company_setup.critical_blockers.count %> critical blocker<%= "s" unless @company_setup.critical_blockers.count == 1 %> before a confident launch.
+        </p>
+      </aside>
+    </div>
+  </div>
+
+  <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+    <% @company_setup.metrics.each do |metric| %>
+      <article class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <div class="flex items-center justify-between gap-3">
+          <p class="text-sm font-medium text-slate-500"><%= metric.label %></p>
+          <span class="h-2.5 w-2.5 shrink-0 rounded-full <%= metric.accent %>"></span>
+        </div>
+        <p class="mt-4 text-3xl font-semibold tracking-tight text-slate-950"><%= compact_number(metric.value) %></p>
+        <div class="mt-2 flex flex-wrap items-center gap-2">
+          <%= status_pill(metric.status) %>
+          <p class="text-sm text-slate-500"><%= metric.hint %></p>
+        </div>
+      </article>
+    <% end %>
+  </div>
+
+  <section class="rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div class="border-b border-slate-100 px-5 py-4">
+      <h2 class="text-base font-semibold text-slate-950">Launch checklist</h2>
+      <p class="text-sm text-slate-500">Computed setup readiness plus command-backed acknowledgements for manual checkpoints.</p>
+    </div>
+    <div class="grid divide-y divide-slate-100 lg:grid-cols-2 lg:divide-x lg:divide-y-0">
+      <% @company_setup.steps.each_slice(4).each do |column_steps| %>
+        <div class="divide-y divide-slate-100">
+          <% column_steps.each do |step| %>
+            <div class="grid gap-4 px-5 py-4 sm:grid-cols-[1fr_auto] sm:items-center">
+              <div>
+                <div class="flex flex-wrap items-center gap-2">
+                  <p class="font-semibold text-slate-950"><%= step.label %></p>
+                  <%= status_pill(step.status) %>
+                </div>
+                <p class="mt-1 text-sm text-slate-500"><%= step.description %></p>
+                <p class="mt-2 text-sm font-medium text-slate-700"><%= step.detail %></p>
+                <% if step.manually_completed? && step.completed_at.present? %>
+                  <p class="mt-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Acknowledged <%= Time.iso8601(step.completed_at).strftime("%b %-d, %Y") %></p>
+                <% end %>
+              </div>
+              <% if step.actionable? %>
+                <%= button_to "Complete", complete_company_setup_step_path(step.key), method: :post, class: "rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-800" %>
+              <% elsif step.key == "vitable_connection" && @company_setup.integration.connection_id.present? %>
+                <%= link_to "Review", integration_connection_path(@company_setup.integration.connection_id), class: "rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:border-slate-300" %>
+              <% end %>
+            </div>
+          <% end %>
+        </div>
+      <% end %>
+    </div>
+  </section>
+
+  <div class="grid gap-6 xl:grid-cols-[0.85fr_1.15fr]">
+    <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="border-b border-slate-100 px-5 py-4">
+        <h2 class="text-base font-semibold text-slate-950">Legal entity and payroll settings</h2>
+        <p class="text-sm text-slate-500">Company identity and payroll defaults used across onboarding and exports.</p>
+      </div>
+      <dl class="grid gap-px bg-slate-100 sm:grid-cols-2">
+        <% [
+          ["Legal name", @company_setup.legal_name.presence || "Pending"],
+          ["EIN", @company_setup.ein.presence || "Pending"],
+          ["Organization", @company_setup.organization_name],
+          ["Onboarded", @company_setup.onboarded_at&.strftime("%b %-d, %Y") || "Not launched"]
+        ].each do |label, value| %>
+          <div class="bg-white p-5">
+            <dt class="text-xs font-semibold uppercase tracking-wide text-slate-400"><%= label %></dt>
+            <dd class="mt-2 text-sm font-semibold text-slate-950"><%= value %></dd>
+          </div>
+        <% end %>
+      </dl>
+      <div class="divide-y divide-slate-100">
+        <% @company_setup.payroll_settings.each do |setting| %>
+          <div class="flex items-center justify-between gap-4 px-5 py-4">
+            <div>
+              <p class="font-semibold text-slate-950"><%= setting.label %></p>
+              <p class="mt-1 text-sm text-slate-500"><%= setting.value.to_s.humanize %></p>
+            </div>
+            <%= status_pill(setting.status) %>
+          </div>
+        <% end %>
+      </div>
+    </section>
+
+    <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="border-b border-slate-100 px-5 py-4">
+        <h2 class="text-base font-semibold text-slate-950">Org structure</h2>
+        <p class="text-sm text-slate-500">Departments and locations that drive manager ownership, payroll tax setup, and compliance coverage.</p>
+      </div>
+      <div class="grid divide-y divide-slate-100 lg:grid-cols-2 lg:divide-x lg:divide-y-0">
+        <div class="divide-y divide-slate-100">
+          <% @company_setup.departments.each do |department| %>
+            <div class="px-5 py-4">
+              <div class="flex items-start justify-between gap-4">
+                <div>
+                  <p class="font-semibold text-slate-950"><%= department.name %></p>
+                  <p class="mt-1 text-sm text-slate-500"><%= department.code %> · <%= department.employee_count %> employees</p>
+                </div>
+                <%= status_pill(department.status) %>
+              </div>
+              <p class="mt-3 text-sm text-slate-600">Manager: <%= department.manager_name.presence || "Unassigned" %> · Budget <%= money_cents(department.budget_cents) %></p>
+            </div>
+          <% end %>
+        </div>
+        <div class="divide-y divide-slate-100">
+          <% @company_setup.locations.each do |location| %>
+            <div class="px-5 py-4">
+              <div class="flex items-start justify-between gap-4">
+                <div>
+                  <p class="font-semibold text-slate-950"><%= location.name %></p>
+                  <p class="mt-1 text-sm text-slate-500"><%= location.remote_label.presence || location.country %> · <%= location.employee_count %> employees</p>
+                </div>
+                <%= status_pill(location.status) %>
+              </div>
+            </div>
+          <% end %>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div class="grid gap-6 xl:grid-cols-[1fr_1fr]">
+    <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="border-b border-slate-100 px-5 py-4">
+        <h2 class="text-base font-semibold text-slate-950">Vitable readiness</h2>
+        <p class="text-sm text-slate-500">Connection posture for API credentials, webhooks, and resource synchronization.</p>
+      </div>
+      <div class="p-5">
+        <div class="flex flex-wrap items-center gap-2">
+          <p class="font-semibold text-slate-950"><%= @company_setup.integration.provider.humanize %> · <%= @company_setup.integration.environment.humanize %></p>
+          <%= status_pill(@company_setup.integration.status) %>
+        </div>
+        <dl class="mt-5 grid gap-px overflow-hidden rounded-lg bg-slate-100 sm:grid-cols-2">
+          <% [
+            ["API key", @company_setup.integration.api_key_reference],
+            ["Webhook secret", @company_setup.integration.webhook_secret_reference.presence || "Not configured"],
+            ["Sync runs", @company_setup.integration.sync_run_count],
+            ["Failed syncs", @company_setup.integration.failed_sync_count]
+          ].each do |label, value| %>
+            <div class="bg-white p-4">
+              <dt class="text-xs font-semibold uppercase tracking-wide text-slate-400"><%= label %></dt>
+              <dd class="mt-2 break-all text-sm font-semibold text-slate-950"><%= value %></dd>
+            </div>
+          <% end %>
+        </dl>
+        <% if @company_setup.integration.connection_id.present? %>
+          <%= link_to "Open connection", integration_connection_path(@company_setup.integration.connection_id), class: "mt-5 inline-flex rounded-md bg-slate-950 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-slate-800" %>
+        <% end %>
+      </div>
+    </section>
+
+    <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="border-b border-slate-100 px-5 py-4">
+        <h2 class="text-base font-semibold text-slate-950">Coverage summary</h2>
+        <p class="text-sm text-slate-500">Operational depth across payroll, benefits, documents, and compliance.</p>
+      </div>
+      <div class="grid gap-px bg-slate-100 sm:grid-cols-2">
+        <% {
+          "Payroll-ready employees" => @company_setup.coverage.fetch(:payroll_ready),
+          "Document issues" => @company_setup.coverage.fetch(:document_attention),
+          "Accepted enrollments" => @company_setup.coverage.fetch(:accepted_enrollments),
+          "Benefit plans" => @company_setup.coverage.fetch(:benefit_plan_count),
+          "Payroll runs" => @company_setup.coverage.fetch(:payroll_run_count),
+          "Open compliance cases" => @company_setup.coverage.fetch(:open_case_count)
+        }.each do |label, value| %>
+          <div class="bg-white p-5">
+            <p class="text-sm text-slate-500"><%= label %></p>
+            <p class="mt-3 text-3xl font-semibold text-slate-950"><%= compact_number(value) %></p>
+          </div>
+        <% end %>
+      </div>
+    </section>
+  </div>
+</section>

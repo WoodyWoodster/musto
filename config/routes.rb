@@ -16,6 +16,8 @@ Rails.application.routes.draw do
   end
 
   get "workforce", to: "operations#workforce"
+  get "company/setup", to: "company_setup#show", as: :company_setup
+  post "company/setup/:step_key/complete", to: "company_setup#complete_step", as: :complete_company_setup_step
   get "onboarding", to: "onboarding#show"
   get "time-off", to: "time_off#show", as: :time_off
   get "payroll", to: "operations#payroll"

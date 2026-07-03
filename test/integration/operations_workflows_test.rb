@@ -3,7 +3,18 @@ require "test_helper"
 class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
   setup do
     @organization = Organization.create!(name: "Ops Platform", external_id: "org_ops")
-    @employer = @organization.employers.create!(name: "Ops Employer", status: "active")
+    @employer = @organization.employers.create!(
+      name: "Ops Employer",
+      legal_name: "Ops Employer LLC",
+      ein: "12-3456789",
+      status: "active",
+      settings: {
+        pay_frequency: "biweekly",
+        payroll_provider: "musto_payroll",
+        contribution_strategy: "fixed_employer_contribution",
+        enrollment_widget: "embedded"
+      }
+    )
     @department = @employer.departments.create!(name: "People", code: "PPL", budget_cents: 250_000_00)
     @location = @employer.work_locations.create!(name: "Remote US", country: "US", remote: true)
     @employee = @employer.employees.create!(
@@ -75,6 +86,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
   test "renders the expanded operations pages" do
     [
       root_path,
+      company_setup_path,
       workforce_path,
       onboarding_path,
       time_off_path,
@@ -97,6 +109,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
 
   test "read side exposes DTOs instead of raw records" do
     dashboard = DashboardQuery.new.call
+    company = Company::SetupQuery.new.call
     workforce = Operations::WorkforceQuery.new.call
     payroll = Operations::PayrollQuery.new.call
     onboarding = Onboarding::CommandCenterQuery.new.call
@@ -108,6 +121,9 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
 
     assert_instance_of Employers::EmployerSummaryDto, dashboard.fetch(:employers).first
     assert_instance_of Dashboard::IntegrationHealthDto, dashboard.fetch(:integration_health)
+    assert_instance_of Company::SetupDetailDto, company
+    assert_instance_of Company::SetupStepDto, company.steps.first
+    assert_instance_of Company::MetricDto, company.metrics.first
     assert_instance_of Operations::WorkforceEmployeeDto, workforce.fetch(:employees).first
     assert_instance_of Operations::PayrollRunDto, payroll.fetch(:payroll_runs).first
     assert_instance_of Onboarding::CommandCenterDto, onboarding
@@ -123,6 +139,39 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_instance_of Benefits::ReconciliationDetailDto, reconciliation
     assert_instance_of Operations::ComplianceCaseDto, compliance.fetch(:cases).first
     assert_instance_of Operations::IntegrationConnectionDto, integrations.fetch(:connections).first
+  end
+
+  test "company setup center exposes launch readiness DTOs" do
+    detail = Company::SetupQuery.new.call
+
+    assert_instance_of Company::SetupDetailDto, detail
+    assert_instance_of Company::MetricDto, detail.metrics.first
+    assert_instance_of Company::SetupStepDto, detail.steps.first
+    assert_instance_of Company::PayrollSettingDto, detail.payroll_settings.first
+    assert_instance_of Company::OrgUnitDto, detail.departments.first
+    assert_instance_of Company::LocationCoverageDto, detail.locations.first
+    assert_instance_of Company::IntegrationReadinessDto, detail.integration
+    assert detail.steps.any? { |step| step.key == "launch_review" }
+
+    get company_setup_path
+
+    assert_response :success
+    assert_select "h1", "Company setup center"
+    assert_select "h2", "Launch checklist"
+    assert_select "h2", "Legal entity and payroll settings"
+    assert_select "h2", "Org structure"
+    assert_select "h2", "Vitable readiness"
+    assert_select "h2", "Coverage summary"
+  end
+
+  test "completes a company setup checkpoint through command action" do
+    post complete_company_setup_step_path("launch_review")
+
+    assert_redirected_to company_setup_path
+    @employer.reload
+    step = @employer.settings.fetch("setup_steps").fetch("launch_review")
+    assert_equal "ops_console", step.fetch("completed_by")
+    assert_not_nil step.fetch("completed_at")
   end
 
   test "onboarding command center exposes readiness and review DTOs" do

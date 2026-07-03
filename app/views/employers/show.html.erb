@@ -6,7 +6,10 @@
       <h1 class="mt-2 text-3xl font-semibold tracking-tight text-slate-950"><%= @employer.name %></h1>
       <p class="mt-2 max-w-3xl text-sm leading-6 text-slate-600"><%= @employer.legal_name.presence || "Legal entity pending" %> · EIN <%= @employer.ein.presence || "pending" %> · Vitable ID <%= @employer.vitable_id.presence || "not synced" %></p>
     </div>
-    <%= status_pill(@employer.status) %>
+    <div class="flex flex-wrap gap-2">
+      <%= link_to "Company setup", company_setup_path, class: "rounded-md bg-slate-950 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-slate-800" %>
+      <%= status_pill(@employer.status) %>
+    </div>
   </div>
 
   <div class="grid gap-4 md:grid-cols-4">
