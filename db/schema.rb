@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_03_183000) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_03_190000) do
   create_table "api_request_logs", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.integer "duration_ms"
@@ -27,6 +27,54 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_03_183000) do
     t.index ["integration_connection_id", "operation", "created_at"], name: "idx_api_request_logs_on_connection_operation_created"
     t.index ["integration_connection_id"], name: "index_api_request_logs_on_integration_connection_id"
     t.index ["status_code"], name: "index_api_request_logs_on_status_code"
+  end
+
+  create_table "benefit_invoice_lines", force: :cascade do |t|
+    t.integer "amount_cents", default: 0, null: false
+    t.integer "benefit_invoice_id", null: false
+    t.integer "benefit_plan_id", null: false
+    t.string "coverage_level", null: false
+    t.datetime "created_at", null: false
+    t.integer "employee_contribution_cents", default: 0, null: false
+    t.integer "employee_id", null: false
+    t.integer "employer_contribution_cents", default: 0, null: false
+    t.integer "enrollment_id"
+    t.integer "expected_payroll_deduction_cents", default: 0, null: false
+    t.integer "expected_premium_cents", default: 0, null: false
+    t.json "metadata", default: {}, null: false
+    t.string "status", default: "matched", null: false
+    t.datetime "updated_at", null: false
+    t.integer "variance_cents", default: 0, null: false
+    t.index ["benefit_invoice_id", "status"], name: "index_benefit_invoice_lines_on_benefit_invoice_id_and_status"
+    t.index ["benefit_invoice_id"], name: "index_benefit_invoice_lines_on_benefit_invoice_id"
+    t.index ["benefit_plan_id"], name: "index_benefit_invoice_lines_on_benefit_plan_id"
+    t.index ["employee_id", "benefit_plan_id"], name: "index_benefit_invoice_lines_on_employee_id_and_benefit_plan_id"
+    t.index ["employee_id"], name: "index_benefit_invoice_lines_on_employee_id"
+    t.index ["enrollment_id"], name: "index_benefit_invoice_lines_on_enrollment_id"
+    t.index ["variance_cents"], name: "index_benefit_invoice_lines_on_variance_cents"
+  end
+
+  create_table "benefit_invoices", force: :cascade do |t|
+    t.datetime "approved_at"
+    t.string "carrier", null: false
+    t.datetime "created_at", null: false
+    t.date "due_on", null: false
+    t.integer "employee_contribution_cents", default: 0, null: false
+    t.integer "employer_contribution_cents", default: 0, null: false
+    t.integer "employer_id", null: false
+    t.string "invoice_number", null: false
+    t.json "metadata", default: {}, null: false
+    t.datetime "paid_at"
+    t.date "period_end_on", null: false
+    t.date "period_start_on", null: false
+    t.string "status", default: "draft", null: false
+    t.integer "total_premium_cents", default: 0, null: false
+    t.datetime "updated_at", null: false
+    t.integer "variance_cents", default: 0, null: false
+    t.index ["carrier", "period_start_on"], name: "index_benefit_invoices_on_carrier_and_period_start_on"
+    t.index ["employer_id", "invoice_number"], name: "index_benefit_invoices_on_employer_id_and_invoice_number", unique: true
+    t.index ["employer_id"], name: "index_benefit_invoices_on_employer_id"
+    t.index ["status", "due_on"], name: "index_benefit_invoices_on_status_and_due_on"
   end
 
   create_table "benefit_plans", force: :cascade do |t|
@@ -538,6 +586,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_03_183000) do
   end
 
   add_foreign_key "api_request_logs", "integration_connections"
+  add_foreign_key "benefit_invoice_lines", "benefit_invoices"
+  add_foreign_key "benefit_invoice_lines", "benefit_plans"
+  add_foreign_key "benefit_invoice_lines", "employees"
+  add_foreign_key "benefit_invoice_lines", "enrollments"
+  add_foreign_key "benefit_invoices", "employers"
   add_foreign_key "benefit_plans", "employers"
   add_foreign_key "compliance_cases", "employees"
   add_foreign_key "compliance_cases", "employers"

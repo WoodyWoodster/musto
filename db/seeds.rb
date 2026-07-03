@@ -383,6 +383,58 @@ end
   statement.save!
 end
 
+benefit_invoice = employer.benefit_invoices.find_or_initialize_by(invoice_number: "VIT-#{employer.id}-#{Date.current.strftime("%Y%m")}")
+benefit_invoice.assign_attributes(
+  carrier: "Vitable",
+  period_start_on: Date.current.beginning_of_month,
+  period_end_on: Date.current.end_of_month,
+  due_on: Date.current.end_of_month + 10.days,
+  status: "needs_review",
+  approved_at: nil,
+  paid_at: nil,
+  metadata: { source: "seeded_vitable_invoice", payment_method: "ach_debit" }
+)
+benefit_invoice.save!
+
+employer.enrollments.accepted.includes(:employee, :benefit_plan, :payroll_deductions).each_with_index do |enrollment, index|
+  plan_premium_cents = enrollment.benefit_plan.monthly_premium_cents
+  invoice_amount_cents = index == 2 ? plan_premium_cents + 1_500 : plan_premium_cents
+  deduction_cents = enrollment.payroll_deductions.where(payroll_run: current_run, status: "ready").sum(:amount_cents)
+  employee_contribution_cents = [ deduction_cents, invoice_amount_cents ].min
+  variance_cents = invoice_amount_cents - plan_premium_cents
+  status = if variance_cents != 0
+    "variance"
+  elsif deduction_cents.zero?
+    "missing_deduction"
+  else
+    "matched"
+  end
+
+  line = benefit_invoice.benefit_invoice_lines.find_or_initialize_by(employee: enrollment.employee, benefit_plan: enrollment.benefit_plan)
+  line.assign_attributes(
+    enrollment:,
+    coverage_level: enrollment.coverage_level,
+    amount_cents: invoice_amount_cents,
+    expected_premium_cents: plan_premium_cents,
+    expected_payroll_deduction_cents: deduction_cents,
+    employee_contribution_cents:,
+    employer_contribution_cents: invoice_amount_cents - employee_contribution_cents,
+    variance_cents:,
+    status:,
+    metadata: { source: "seeded_vitable_invoice_line", remote_invoice_line_id: "vitable_line_#{enrollment.id}" }
+  )
+  line.save!
+end
+
+invoice_lines = benefit_invoice.benefit_invoice_lines.to_a
+benefit_invoice.update!(
+  total_premium_cents: invoice_lines.sum(&:amount_cents),
+  employee_contribution_cents: invoice_lines.sum(&:employee_contribution_cents),
+  employer_contribution_cents: invoice_lines.sum(&:employer_contribution_cents),
+  variance_cents: invoice_lines.sum(&:variance_cents),
+  status: invoice_lines.any?(&:blocked?) ? "needs_review" : "draft"
+)
+
 [
   [ employees.third, Date.current - 2.days, "Amtrak", "travel", "Open enrollment onsite travel", 184_00, "submitted", "uploaded", true, "employee_paid" ],
   [ employees.first, Date.current - 3.days, "Staples", "supplies", "Operations supplies for benefits launch", 86_00, "approved", "verified", true, "employee_paid" ],

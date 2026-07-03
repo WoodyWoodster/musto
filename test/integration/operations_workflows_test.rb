@@ -51,6 +51,9 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     @waivable_deduction = @payroll_run.payroll_deductions.create!(employee: @employee, enrollment: @waivable_enrollment, code: "VITABLE_VISION", amount_cents: 0, status: "waiting_on_enrollment")
     @payroll_adjustment = @payroll_run.payroll_adjustments.create!(employee: @employee, adjustment_type: "bonus", description: "Quarterly performance bonus", amount_cents: 1_500_00, taxable: true)
     @pay_statement = @payroll_run.pay_statements.create!(employee: @employee, statement_number: "PS-#{@payroll_run.id}-#{@employee.id}", period_start_on: @payroll_run.period_start_on, period_end_on: @payroll_run.period_end_on, pay_date: @payroll_run.pay_date, gross_pay_cents: 4_791_66, adjustment_cents: @payroll_adjustment.amount_cents, deduction_cents: 9_900, tax_cents: 86_250, net_pay_cents: 5_345_16)
+    @benefit_invoice = @employer.benefit_invoices.create!(invoice_number: "VIT-#{@employer.id}-#{Date.current.strftime("%Y%m")}", carrier: "Vitable", period_start_on: Date.current.beginning_of_month, period_end_on: Date.current.end_of_month, due_on: Date.current.end_of_month + 10.days, status: "needs_review", total_premium_cents: 15_400, employee_contribution_cents: 9_900, employer_contribution_cents: 5_500, variance_cents: 1_000)
+    @benefit_invoice_line = @benefit_invoice.benefit_invoice_lines.create!(employee: @employee, benefit_plan: @plan, enrollment: @enrollment, coverage_level: "employee", amount_cents: 9_900, expected_premium_cents: 9_900, expected_payroll_deduction_cents: 9_900, employee_contribution_cents: 9_900, employer_contribution_cents: 0, variance_cents: 0, status: "matched")
+    @benefit_invoice_variance_line = @benefit_invoice.benefit_invoice_lines.create!(employee: @employee, benefit_plan: @pending_plan, enrollment: @pending_enrollment, coverage_level: "employee", amount_cents: 5_500, expected_premium_cents: 4_500, expected_payroll_deduction_cents: 0, employee_contribution_cents: 0, employer_contribution_cents: 5_500, variance_cents: 1_000, status: "variance")
     @expense = @employee.employee_expenses.create!(incurred_on: Date.current - 2.days, merchant: "Amtrak", category: "travel", description: "Benefits implementation travel", amount_cents: 184_00, status: "submitted", receipt_status: "uploaded")
     @approved_expense = @employee.employee_expenses.create!(incurred_on: Date.current - 3.days, merchant: "Staples", category: "supplies", description: "Operations supplies", amount_cents: 86_00, status: "approved", receipt_status: "verified", approved_at: 1.day.ago)
     @blocked_expense = @employee.employee_expenses.create!(incurred_on: Date.current - 1.day, merchant: "Cafe", category: "meals", description: "Team lunch missing receipt", amount_cents: 145_00, status: "submitted", receipt_status: "missing")
@@ -176,6 +179,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       taxes_path,
       payroll_funding_path,
       pay_statements_path,
+      benefits_billing_path,
       reports_path,
       payroll_path,
       payroll_run_path(@payroll_run),
@@ -208,6 +212,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     expenses = Expenses::CenterQuery.new.call
     funding = PayrollFunding::CenterQuery.new.call
     statements = PayStatements::CenterQuery.new.call
+    billing = Benefits::BillingQuery.new.call
     contractors = Contractors::CenterQuery.new.call
     compensation = Compensation::CenterQuery.new.call
     taxes = Taxes::CenterQuery.new.call
@@ -264,6 +269,11 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_instance_of PayStatements::StatementDto, statements.statements.first
     assert_instance_of PayStatements::PayrollRunDto, statements.payroll_run
     assert_instance_of PayStatements::DeliveryIssueDto, statements.delivery_issues.first
+    assert_instance_of Benefits::BillingCenterDto, billing
+    assert_instance_of Benefits::BillingMetricDto, billing.metrics.first
+    assert_instance_of Benefits::BillingInvoiceDto, billing.invoices.first
+    assert_instance_of Benefits::BillingLineDto, billing.lines.first
+    assert_instance_of Benefits::BillingVarianceDto, billing.variances.first
     assert_instance_of Contractors::CenterDto, contractors
     assert_instance_of Contractors::MetricDto, contractors.metrics.first
     assert_instance_of Contractors::ContractorDto, contractors.contractors.first
@@ -797,6 +807,55 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     detail = PayStatements::CenterQuery.new.call
     assert_instance_of PayStatements::BatchDto, detail.latest_batch
     assert_instance_of PayStatements::BatchLineDto, detail.batch_lines.first
+  end
+
+  test "benefits billing center exposes invoice reconciliation DTOs" do
+    detail = Benefits::BillingQuery.new.call
+
+    assert_instance_of Benefits::BillingCenterDto, detail
+    assert_instance_of Benefits::BillingMetricDto, detail.metrics.first
+    assert_instance_of Benefits::BillingInvoiceDto, detail.invoices.first
+    assert_instance_of Benefits::BillingLineDto, detail.lines.first
+    assert_instance_of Benefits::BillingVarianceDto, detail.variances.first
+    assert detail.blocked_lines.any? { |line| line.id == @benefit_invoice_variance_line.id }
+
+    get benefits_billing_path
+
+    assert_response :success
+    assert_select "h1", "Benefits billing and carrier payments"
+    assert_select "h2", "Billing exceptions"
+    assert_select "h2", "Invoice ledger"
+    assert_select "h2", "Invoice line reconciliation"
+    assert_select "h2", "Billing packet ledger"
+  end
+
+  test "approves a benefit invoice through command action" do
+    post approve_benefit_invoice_path(@benefit_invoice), params: { reviewed_by: "finance_admin" }
+
+    assert_redirected_to benefits_billing_path
+    @benefit_invoice.reload
+    assert_equal "approved", @benefit_invoice.status
+    assert_equal "finance_admin", @benefit_invoice.metadata.fetch("approved_by")
+    assert_not_nil @benefit_invoice.approved_at
+  end
+
+  test "generates a benefit billing packet with payment lines and holdbacks" do
+    post generate_benefit_billing_packet_path
+
+    assert_redirected_to benefits_billing_path
+    packet = @employer.reload.settings.fetch("benefit_billing_packet")
+    assert_match(/\Abenefit_billing_#{@employer.id}_#{@benefit_invoice.id}_/, packet.fetch("packet_id"))
+    assert_equal "ops_console", packet.fetch("requested_by")
+    assert_equal 1, packet.fetch("totals").fetch("payment_count")
+    assert_equal 1, packet.fetch("totals").fetch("holdback_count")
+    assert_equal @benefit_invoice_line.amount_cents, packet.fetch("totals").fetch("total_cents")
+    assert_equal @employee.full_name, packet.fetch("payments").first.fetch("employee_name")
+    assert_equal "variance", packet.fetch("holdbacks").first.fetch("status")
+
+    detail = Benefits::BillingQuery.new.call
+    assert_instance_of Benefits::BillingPacketDto, detail.latest_packet
+    assert_instance_of Benefits::BillingPacketLineDto, detail.packet_lines.first
+    assert_instance_of Benefits::BillingPacketHoldbackDto, detail.packet_holdbacks.first
   end
 
   test "contractor payments center exposes contractor payment DTOs" do

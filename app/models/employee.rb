@@ -16,6 +16,7 @@ class Employee < ApplicationRecord
   has_many :employee_expenses, dependent: :destroy
   has_many :employee_bank_accounts, dependent: :destroy
   has_many :pay_statements, dependent: :destroy
+  has_many :benefit_invoice_lines, dependent: :destroy
   has_many :compliance_cases, dependent: :nullify
 
   validates :first_name, :last_name, :email, :employment_status, :pay_type, :onboarding_status, presence: true

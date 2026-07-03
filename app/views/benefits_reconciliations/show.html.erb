@@ -17,6 +17,7 @@
           <% if @reconciliation.payroll_run %>
             <%= link_to "Open payroll run", payroll_run_path(@reconciliation.payroll_run.id), class: "rounded-md bg-slate-950 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-slate-800" %>
           <% end %>
+          <%= link_to "Billing", benefits_billing_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm hover:border-slate-300" %>
           <%= link_to "Benefits cockpit", benefits_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm hover:border-slate-300" %>
         </div>
       </div>

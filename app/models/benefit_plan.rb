@@ -2,6 +2,7 @@ class BenefitPlan < ApplicationRecord
   belongs_to :employer
 
   has_many :enrollments, dependent: :restrict_with_error
+  has_many :benefit_invoice_lines, dependent: :restrict_with_error
 
   validates :name, :category, :status, presence: true
   validates :monthly_premium_cents, numericality: { greater_than_or_equal_to: 0 }

@@ -1,0 +1,269 @@
+<section class="space-y-7">
+  <div class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div class="grid xl:grid-cols-[1.22fr_0.78fr]">
+      <div class="p-6 lg:p-8">
+        <div class="flex flex-wrap items-center gap-2">
+          <%= status_pill(@billing.variances.any? { |issue| issue.status != "ready" } ? "needs_review" : "ready") %>
+          <span class="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-800 ring-1 ring-inset ring-emerald-200">Benefits billing</span>
+          <span class="rounded-full bg-cyan-50 px-3 py-1 text-xs font-semibold text-cyan-800 ring-1 ring-inset ring-cyan-200">Vitable invoice</span>
+        </div>
+
+        <h1 class="mt-5 text-4xl font-semibold tracking-tight text-slate-950">Benefits billing and carrier payments</h1>
+        <p class="mt-3 max-w-3xl text-base leading-7 text-slate-600">
+          Reconcile Vitable benefit invoices against accepted elections, payroll deductions, employee contributions, and employer contribution exposure for <%= @billing.employer&.name || "your employer portfolio" %>.
+        </p>
+
+        <div class="mt-6 flex flex-wrap gap-3">
+          <%= link_to "Benefits cockpit", benefits_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
+          <%= link_to "Eligibility sync", benefits_eligibility_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
+          <%= link_to "Deduction reconciliation", benefits_reconciliation_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
+          <%= button_to "Generate billing packet", generate_benefit_billing_packet_path, method: :post, params: { requested_by: "ops_console" }, class: "rounded-md bg-slate-950 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-slate-800" %>
+        </div>
+      </div>
+
+      <aside class="border-t border-slate-200 bg-slate-950 p-6 text-white xl:border-l xl:border-t-0 xl:p-8">
+        <p class="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-300">Latest billing packet</p>
+        <% if @billing.latest_packet.present? %>
+          <p class="mt-6 break-all font-mono text-sm font-semibold"><%= @billing.latest_packet.packet_id %></p>
+          <p class="mt-3 text-sm text-slate-300">Generated <%= time_ago_in_words(@billing.latest_packet.generated_at) %> ago by <%= @billing.latest_packet.requested_by %></p>
+          <div class="mt-6 grid grid-cols-3 gap-3">
+            <div class="rounded-md bg-white/10 p-4">
+              <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Payments</p>
+              <p class="mt-2 text-2xl font-semibold"><%= compact_number(@billing.latest_packet.payment_count) %></p>
+            </div>
+            <div class="rounded-md bg-white/10 p-4">
+              <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Held</p>
+              <p class="mt-2 text-2xl font-semibold"><%= compact_number(@billing.latest_packet.holdback_count) %></p>
+            </div>
+            <div class="rounded-md bg-white/10 p-4">
+              <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Status</p>
+              <p class="mt-2 text-sm font-semibold"><%= @billing.latest_packet.status.humanize %></p>
+            </div>
+          </div>
+          <div class="mt-5 rounded-md bg-white/10 p-4">
+            <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Payment amount</p>
+            <p class="mt-2 text-2xl font-semibold"><%= money_cents(@billing.latest_packet.total_cents) %></p>
+          </div>
+        <% else %>
+          <p class="mt-6 text-3xl font-semibold tracking-tight">No packet</p>
+          <p class="mt-2 text-sm leading-6 text-slate-300">Generate a billing packet after reviewing invoice variances and payroll deduction coverage.</p>
+        <% end %>
+      </aside>
+    </div>
+  </div>
+
+  <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+    <% @billing.metrics.each do |metric| %>
+      <article class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <div class="flex items-center justify-between gap-3">
+          <p class="text-sm font-medium text-slate-500"><%= metric.label %></p>
+          <span class="h-2.5 w-2.5 shrink-0 rounded-full <%= metric.accent %>"></span>
+        </div>
+        <p class="mt-4 text-3xl font-semibold tracking-tight text-slate-950"><%= metric.format == "money" ? money_cents(metric.value) : compact_number(metric.value) %></p>
+        <div class="mt-2 flex flex-wrap items-center gap-2">
+          <%= status_pill(metric.status) %>
+          <p class="text-sm text-slate-500"><%= metric.hint %></p>
+        </div>
+      </article>
+    <% end %>
+  </div>
+
+  <div class="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
+    <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="border-b border-slate-100 px-5 py-4">
+        <h2 class="text-base font-semibold text-slate-950">Billing exceptions</h2>
+        <p class="text-sm text-slate-500">Premium, deduction, and payment blockers before carrier remittance.</p>
+      </div>
+      <div class="divide-y divide-slate-100">
+        <% @billing.variances.each do |issue| %>
+          <div class="p-5">
+            <div class="flex flex-wrap items-start justify-between gap-3">
+              <div class="min-w-0">
+                <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400"><%= issue.owner %> · <%= issue.severity %></p>
+                <h3 class="mt-2 text-base font-semibold text-slate-950"><%= issue.title %></h3>
+              </div>
+              <%= status_pill(issue.status) %>
+            </div>
+            <p class="mt-3 text-sm leading-6 text-slate-600"><%= issue.detail %></p>
+            <div class="mt-4 grid grid-cols-2 gap-2 text-center">
+              <div class="rounded-md bg-slate-50 px-2 py-3">
+                <p class="text-xs text-slate-500">Count</p>
+                <p class="mt-1 text-lg font-semibold text-slate-950"><%= compact_number(issue.count) %></p>
+              </div>
+              <div class="rounded-md bg-slate-50 px-2 py-3">
+                <p class="text-xs text-slate-500">Exposure</p>
+                <p class="mt-1 text-lg font-semibold text-slate-950"><%= money_cents(issue.amount_cents) %></p>
+              </div>
+            </div>
+            <%= link_to "Open workflow", issue.action_path, class: "mt-4 inline-flex text-sm font-semibold text-cyan-700 hover:text-cyan-900" %>
+          </div>
+        <% end %>
+      </div>
+    </section>
+
+    <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="border-b border-slate-100 px-5 py-4">
+        <h2 class="text-base font-semibold text-slate-950">Invoice ledger</h2>
+        <p class="text-sm text-slate-500">Carrier invoices with premium, contribution, variance, and approval state.</p>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-slate-100 text-sm">
+          <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <tr>
+              <th class="px-5 py-3">Invoice</th>
+              <th class="px-5 py-3">Premium</th>
+              <th class="px-5 py-3">Employee</th>
+              <th class="px-5 py-3">Employer</th>
+              <th class="px-5 py-3">Variance</th>
+              <th class="px-5 py-3">Status</th>
+              <th class="px-5 py-3"></th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            <% @billing.invoices.each do |invoice| %>
+              <tr class="hover:bg-slate-50">
+                <td class="px-5 py-4">
+                  <p class="font-mono text-xs font-semibold text-slate-700"><%= invoice.invoice_number %></p>
+                  <p class="mt-1 text-xs text-slate-500"><%= invoice.carrier %> · due <%= invoice.due_on.strftime("%b %-d, %Y") %></p>
+                </td>
+                <td class="px-5 py-4 font-semibold text-slate-950"><%= money_cents(invoice.total_premium_cents) %></td>
+                <td class="px-5 py-4 text-slate-600"><%= money_cents(invoice.employee_contribution_cents) %></td>
+                <td class="px-5 py-4 text-slate-600"><%= money_cents(invoice.employer_contribution_cents) %></td>
+                <td class="px-5 py-4 text-slate-600"><%= money_cents(invoice.variance_cents) %></td>
+                <td class="px-5 py-4"><%= status_pill(invoice.status) %></td>
+                <td class="px-5 py-4 text-right">
+                  <% if invoice.approvable? %>
+                    <%= button_to "Approve", approve_benefit_invoice_path(invoice.id), method: :post, params: { reviewed_by: "ops_console" }, class: "rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700" %>
+                  <% else %>
+                    <%= status_pill(invoice.status) %>
+                  <% end %>
+                </td>
+              </tr>
+            <% end %>
+            <% if @billing.invoices.empty? %>
+              <tr>
+                <td colspan="7" class="px-5 py-5 text-sm text-slate-600">No benefit invoices are available yet. Generate a billing packet to create one from accepted enrollments.</td>
+              </tr>
+            <% end %>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div class="border-b border-slate-100 px-5 py-4">
+      <h2 class="text-base font-semibold text-slate-950">Invoice line reconciliation</h2>
+      <p class="text-sm text-slate-500">Employee-level premiums compared with local plan pricing and payroll deduction recovery.</p>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="min-w-full divide-y divide-slate-100 text-sm">
+        <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <tr>
+            <th class="px-5 py-3">Employee</th>
+            <th class="px-5 py-3">Plan</th>
+            <th class="px-5 py-3">Invoice</th>
+            <th class="px-5 py-3">Plan premium</th>
+            <th class="px-5 py-3">Payroll deduction</th>
+            <th class="px-5 py-3">Employer share</th>
+            <th class="px-5 py-3">Variance</th>
+            <th class="px-5 py-3">Status</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          <% @billing.lines.each do |line| %>
+            <tr class="hover:bg-slate-50">
+              <td class="px-5 py-4"><%= link_to line.employee_name, employee_path(line.employee_id), class: "font-semibold text-slate-950 hover:text-cyan-700" %></td>
+              <td class="px-5 py-4">
+                <p class="font-semibold text-slate-700"><%= line.plan_name %></p>
+                <p class="mt-1 text-xs text-slate-500"><%= line.plan_category.humanize %> · <%= line.coverage_level.humanize %></p>
+              </td>
+              <td class="px-5 py-4 font-semibold text-slate-950"><%= money_cents(line.amount_cents) %></td>
+              <td class="px-5 py-4 text-slate-600"><%= money_cents(line.expected_premium_cents) %></td>
+              <td class="px-5 py-4 text-slate-600"><%= money_cents(line.expected_payroll_deduction_cents) %></td>
+              <td class="px-5 py-4 text-slate-600"><%= money_cents(line.employer_contribution_cents) %></td>
+              <td class="px-5 py-4 text-slate-600"><%= money_cents(line.variance_cents) %></td>
+              <td class="px-5 py-4"><%= status_pill(line.status) %></td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div class="border-b border-slate-100 px-5 py-4">
+      <h2 class="text-base font-semibold text-slate-950">Billing packet ledger</h2>
+      <p class="text-sm text-slate-500">Carrier payment lines and holdbacks from the latest generated billing packet.</p>
+    </div>
+    <% if @billing.latest_packet.present? %>
+      <div class="grid divide-y divide-slate-100 lg:grid-cols-[1fr_0.9fr] lg:divide-x lg:divide-y-0">
+        <div class="min-w-0">
+          <div class="border-b border-slate-100 px-5 py-3">
+            <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Payment lines</p>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-slate-100 text-sm">
+              <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th class="px-5 py-3">Employee</th>
+                  <th class="px-5 py-3">Plan</th>
+                  <th class="px-5 py-3">Premium</th>
+                  <th class="px-5 py-3">Employee</th>
+                  <th class="px-5 py-3">Employer</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100">
+                <% @billing.packet_lines.each do |line| %>
+                  <tr class="hover:bg-slate-50">
+                    <td class="px-5 py-4 font-semibold text-slate-950"><%= line.employee_name %></td>
+                    <td class="px-5 py-4 text-slate-600"><%= line.plan_name %></td>
+                    <td class="px-5 py-4 font-semibold text-slate-950"><%= money_cents(line.amount_cents) %></td>
+                    <td class="px-5 py-4 text-slate-600"><%= money_cents(line.employee_contribution_cents) %></td>
+                    <td class="px-5 py-4 text-slate-600"><%= money_cents(line.employer_contribution_cents) %></td>
+                  </tr>
+                <% end %>
+                <% if @billing.packet_lines.empty? %>
+                  <tr>
+                    <td colspan="5" class="px-5 py-5 text-sm text-slate-600">No payment lines were included in the latest packet.</td>
+                  </tr>
+                <% end %>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="min-w-0">
+          <div class="border-b border-slate-100 px-5 py-3">
+            <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Holdbacks</p>
+          </div>
+          <div class="divide-y divide-slate-100">
+            <% @billing.packet_holdbacks.each do |holdback| %>
+              <div class="p-5">
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                  <div class="min-w-0">
+                    <p class="font-semibold text-slate-950"><%= holdback.employee_name %></p>
+                    <p class="mt-1 text-sm text-slate-500"><%= holdback.plan_name %> · <%= money_cents(holdback.amount_cents) %></p>
+                  </div>
+                  <%= status_pill(holdback.status) %>
+                </div>
+                <p class="mt-3 text-sm leading-6 text-slate-600"><%= holdback.reason %></p>
+              </div>
+            <% end %>
+            <% if @billing.packet_holdbacks.empty? %>
+              <div class="p-5">
+                <p class="font-semibold text-slate-950">No holdbacks</p>
+                <p class="mt-2 text-sm leading-6 text-slate-600">All current invoice lines were included in the latest carrier payment packet.</p>
+              </div>
+            <% end %>
+          </div>
+        </div>
+      </div>
+    <% else %>
+      <div class="p-5">
+        <p class="font-semibold text-slate-950">No generated billing packet</p>
+        <p class="mt-2 text-sm leading-6 text-slate-600">The next generated packet will show carrier payment lines and variance holdbacks here.</p>
+      </div>
+    <% end %>
+  </section>
+</section>
