@@ -44,6 +44,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     @payroll_run.payroll_deductions.create!(employee: @employee, enrollment: @enrollment, code: "VITABLE_BENEFITS", amount_cents: 9_900, status: "ready")
     @pending_deduction = @payroll_run.payroll_deductions.create!(employee: @employee, enrollment: @pending_enrollment, code: "VITABLE_DENTAL", amount_cents: 0, status: "waiting_on_enrollment")
     @waivable_deduction = @payroll_run.payroll_deductions.create!(employee: @employee, enrollment: @waivable_enrollment, code: "VITABLE_VISION", amount_cents: 0, status: "waiting_on_enrollment")
+    @payroll_adjustment = @payroll_run.payroll_adjustments.create!(employee: @employee, adjustment_type: "bonus", description: "Quarterly performance bonus", amount_cents: 1_500_00, taxable: true)
     @compliance_case = @employer.compliance_cases.create!(employee: @employee, kind: "i9_reverification", severity: "high", due_on: Date.current + 5.days)
     @connection = @organization.integration_connections.create!(provider: "vitable", environment: "production")
     @sync_run = @connection.sync_runs.create!(
@@ -90,6 +91,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       workforce_path,
       onboarding_path,
       time_off_path,
+      compensation_path,
       reports_path,
       payroll_path,
       payroll_run_path(@payroll_run),
@@ -115,6 +117,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     payroll = Operations::PayrollQuery.new.call
     onboarding = Onboarding::CommandCenterQuery.new.call
     time_off = TimeOff::CommandCenterQuery.new.call
+    compensation = Compensation::CenterQuery.new.call
     reports = Reports::CenterQuery.new.call
     benefits = Operations::BenefitsQuery.new.call
     reconciliation = Benefits::ReconciliationQuery.new.call
@@ -137,6 +140,11 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_instance_of TimeOff::RequestDto, time_off.requests.first
     assert_instance_of TimeOff::PolicyDto, time_off.policies.first
     assert_instance_of TimeOff::EmployeeBalanceDto, time_off.balances.first
+    assert_instance_of Compensation::CenterDto, compensation
+    assert_instance_of Compensation::EmployeeCompensationDto, compensation.employees.first
+    assert_instance_of Compensation::DepartmentBudgetDto, compensation.departments.first
+    assert_instance_of Compensation::AdjustmentDto, compensation.adjustments.first
+    assert_instance_of Compensation::RecommendationDto, compensation.recommendations.first
     assert_instance_of Reports::CenterDto, reports
     assert_instance_of Reports::MetricDto, reports.metrics.first
     assert_instance_of Reports::ReportCardDto, reports.report_cards.first
@@ -165,6 +173,41 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_select "h2", "Department cost ledger"
     assert_select "h2", "Benefits spend"
     assert_select "h2", "Risk register"
+  end
+
+  test "compensation center exposes pay planning DTOs" do
+    detail = Compensation::CenterQuery.new.call
+
+    assert_instance_of Compensation::CenterDto, detail
+    assert_instance_of Compensation::MetricDto, detail.metrics.first
+    assert_instance_of Compensation::EmployeeCompensationDto, detail.employees.first
+    assert_instance_of Compensation::DepartmentBudgetDto, detail.departments.first
+    assert_instance_of Compensation::AdjustmentDto, detail.adjustments.first
+    assert_instance_of Compensation::RecommendationDto, detail.recommendations.first
+    assert_equal @employee.full_name, detail.employees.first.employee_name
+    assert_equal @department.name, detail.departments.first.department_name
+
+    get compensation_path
+
+    assert_response :success
+    assert_select "h1", "Compensation planning center"
+    assert_select "h2", "Department budget exposure"
+    assert_select "h2", "Employee compensation"
+    assert_select "h2", "Adjustment review"
+    assert_select "h2", "Planning recommendations"
+  end
+
+  test "generates a compensation packet through command action" do
+    post generate_compensation_packet_path
+
+    assert_redirected_to compensation_path
+    packet = @employer.reload.settings.fetch("compensation_packet")
+    assert_match(/\Acomp_review_#{@employer.id}_/, packet.fetch("packet_id"))
+    assert_equal "ops_console", packet.fetch("requested_by")
+    assert_equal 1, packet.fetch("totals").fetch("employee_count")
+    assert_equal @employee.compensation_cents, packet.fetch("totals").fetch("annual_compensation_cents")
+    assert_equal @payroll_adjustment.amount_cents, packet.fetch("totals").fetch("adjustment_cents")
+    assert_instance_of Array, packet.fetch("recommendations")
   end
 
   test "generates a reports snapshot through command action" do

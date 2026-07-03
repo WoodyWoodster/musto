@@ -22,6 +22,8 @@ Rails.application.routes.draw do
   get "time-off", to: "time_off#show", as: :time_off
   get "reports", to: "reports#show"
   post "reports/snapshot", to: "reports#generate_snapshot", as: :generate_reports_snapshot
+  get "compensation", to: "compensation#show"
+  post "compensation/packet", to: "compensation#generate_packet", as: :generate_compensation_packet
   get "payroll", to: "operations#payroll"
   get "benefits", to: "operations#benefits"
   get "benefits/reconciliation", to: "benefits_reconciliations#show", as: :benefits_reconciliation
