@@ -28,6 +28,11 @@ Rails.application.routes.draw do
   post "employee-changes/requests/:id/approve", to: "employee_changes#approve", as: :approve_employee_change_request
   post "employee-changes/requests/:id/reject", to: "employee_changes#reject", as: :reject_employee_change_request
   post "employee-changes/sync_batch", to: "employee_changes#generate_batch", as: :generate_employee_changes_sync_batch
+  get "performance", to: "performance#show"
+  post "performance/cycles/launch", to: "performance#launch_cycle", as: :launch_performance_cycle
+  post "performance/reviews/:id/calibrate", to: "performance#calibrate_review", as: :calibrate_performance_review
+  post "performance/goals/:id/complete", to: "performance#complete_goal", as: :complete_employee_goal
+  post "performance/calibration_packet", to: "performance#generate_packet", as: :generate_performance_calibration_packet
   get "onboarding", to: "onboarding#show"
   get "documents", to: "employee_documents#show", as: :documents
   post "documents/request_batch", to: "employee_documents#request_batch", as: :request_document_batch

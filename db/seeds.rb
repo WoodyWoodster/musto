@@ -304,6 +304,76 @@ end
   request.save!
 end
 
+current_performance_cycle = employer.performance_cycles.find_or_initialize_by(name: "#{Date.current.year} Midyear Performance Review")
+current_performance_cycle.assign_attributes(
+  status: "active",
+  review_type: "quarterly",
+  period_start_on: Date.current.beginning_of_year,
+  period_end_on: Date.current.beginning_of_year + 6.months - 1.day,
+  due_on: Date.current + 14.days,
+  launched_at: 5.days.ago,
+  metadata: { source: "seeded_performance_program", calibration_owner: "people_ops" }
+)
+current_performance_cycle.save!
+
+next_performance_cycle = employer.performance_cycles.find_or_initialize_by(name: "#{Date.current.year} Year-End Performance Review")
+next_performance_cycle.assign_attributes(
+  status: "draft",
+  review_type: "annual",
+  period_start_on: Date.current.beginning_of_year,
+  period_end_on: Date.current.end_of_year,
+  due_on: Date.current.end_of_year + 14.days,
+  metadata: { source: "seeded_performance_program", calibration_owner: "people_ops" }
+)
+next_performance_cycle.save!
+
+[
+  [ employees.first, employees.third, "complete", 5, Date.current - 2.days, "Built stable operating cadence across payroll, benefits, and compliance.", "Delegate more recurring analysis to functional leads." ],
+  [ employees.second, employees.first, "manager_review", 4, Date.current + 6.days, "Strong retail team leadership during open enrollment intake.", "Needs tighter documentation around store manager handoffs." ],
+  [ employees.third, employees.first, "self_review", nil, Date.current + 3.days, "Partnered well with remote employees on benefits changes.", "Self-review is still pending final employee submission." ],
+  [ employees.fourth, employees.third, "calibration", 3, Date.current + 2.days, "Improved payroll funding controls and variance review.", "Needs clearer cross-training coverage for tax calendar work." ],
+  [ employees[4], employees.first, "overdue", nil, Date.current - 2.days, "Strong Denver operations ownership.", "Manager review is overdue and needs follow-up." ],
+  [ employees.last, employees.second, "manager_review", 4, Date.current + 8.days, "Consistent cafe execution and customer quality.", "Ready to expand into shift lead responsibilities." ]
+].each do |employee, reviewer, status, rating, due_on, strengths, growth_areas|
+  review = current_performance_cycle.performance_reviews.find_or_initialize_by(employee:)
+  review.assign_attributes(
+    reviewer:,
+    status:,
+    rating:,
+    due_on:,
+    self_submitted_at: status.in?([ "manager_review", "calibration", "complete" ]) ? 3.days.ago : nil,
+    manager_submitted_at: status.in?([ "calibration", "complete" ]) ? 2.days.ago : nil,
+    calibrated_at: status == "complete" ? 1.day.ago : nil,
+    completed_at: status == "complete" ? 1.day.ago : nil,
+    strengths:,
+    growth_areas:,
+    metadata: { source: "seeded_performance_review", review_channel: "manager_portal" }
+  )
+  review.save!
+end
+
+[
+  [ employees.first, current_performance_cycle, "Reduce payroll exception rate", "Bring payroll exceptions under 1% for the next two biweekly runs.", "on_track", 72, Date.current + 21.days, "manager", "Exception rate below 1%" ],
+  [ employees.second, current_performance_cycle, "Staff retail leadership bench", "Identify and train two shift leads before the year-end review cycle.", "at_risk", 38, Date.current + 30.days, "manager", "2 shift leads trained" ],
+  [ employees.third, current_performance_cycle, "Complete benefits education series", "Publish employee-facing Vitable plan education and enrollment reminders.", "complete", 100, Date.current - 3.days, "employee", "Education series completed" ],
+  [ employees.fourth, current_performance_cycle, "Document payroll funding backups", "Create a repeatable backup process for funding reviews and prenote exceptions.", "on_track", 64, Date.current + 18.days, "employee", "Backup runbook published" ],
+  [ employees[4], current_performance_cycle, "Rebuild Denver roastery coverage", "Stabilize staffing and manager coverage ahead of final pay season.", "paused", 45, Date.current + 45.days, "manager", "Coverage plan approved" ]
+].each do |employee, cycle, title, description, status, progress_percent, due_on, owner, metric|
+  goal = employee.employee_goals.find_or_initialize_by(title:)
+  goal.assign_attributes(
+    performance_cycle: cycle,
+    description:,
+    status:,
+    progress_percent:,
+    due_on:,
+    owner:,
+    metric:,
+    completed_at: status == "complete" ? 2.days.ago : nil,
+    metadata: { source: "seeded_performance_goal" }
+  )
+  goal.save!
+end
+
 plans = [
   [ "Vitable Direct Primary Care", "direct_primary_care", "Vitable", 9_900 ],
   [ "Minimum Essential Coverage", "minimum_essential_coverage", "Vitable", 14_900 ],

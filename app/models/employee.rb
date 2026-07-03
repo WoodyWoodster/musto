@@ -16,6 +16,9 @@ class Employee < ApplicationRecord
   has_many :employee_expenses, dependent: :destroy
   has_many :employee_bank_accounts, dependent: :destroy
   has_many :employee_change_requests, dependent: :destroy
+  has_many :performance_reviews, dependent: :destroy
+  has_many :review_assignments, class_name: "PerformanceReview", foreign_key: :reviewer_id, dependent: :nullify, inverse_of: :reviewer
+  has_many :employee_goals, dependent: :destroy
   has_many :pay_statements, dependent: :destroy
   has_many :benefit_invoice_lines, dependent: :destroy
   has_many :open_enrollment_invitations, dependent: :destroy

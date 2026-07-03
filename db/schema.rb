@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_03_203000) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_03_210000) do
   create_table "api_request_logs", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.integer "duration_ms"
@@ -299,6 +299,25 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_03_203000) do
     t.index ["employee_id"], name: "index_employee_expenses_on_employee_id"
     t.index ["receipt_status"], name: "index_employee_expenses_on_receipt_status"
     t.index ["status", "incurred_on"], name: "index_employee_expenses_on_status_and_incurred_on"
+  end
+
+  create_table "employee_goals", force: :cascade do |t|
+    t.datetime "completed_at"
+    t.datetime "created_at", null: false
+    t.text "description"
+    t.date "due_on", null: false
+    t.integer "employee_id", null: false
+    t.json "metadata", default: {}, null: false
+    t.string "metric"
+    t.string "owner", default: "employee", null: false
+    t.integer "performance_cycle_id"
+    t.integer "progress_percent", default: 0, null: false
+    t.string "status", default: "on_track", null: false
+    t.string "title", null: false
+    t.datetime "updated_at", null: false
+    t.index ["employee_id"], name: "index_employee_goals_on_employee_id"
+    t.index ["performance_cycle_id"], name: "index_employee_goals_on_performance_cycle_id"
+    t.index ["status", "due_on"], name: "index_employee_goals_on_status_and_due_on"
   end
 
   create_table "employee_lifecycle_events", force: :cascade do |t|
@@ -626,6 +645,47 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_03_203000) do
     t.index ["employer_id"], name: "index_payroll_schedules_on_employer_id"
   end
 
+  create_table "performance_cycles", force: :cascade do |t|
+    t.datetime "closed_at"
+    t.datetime "created_at", null: false
+    t.date "due_on", null: false
+    t.integer "employer_id", null: false
+    t.datetime "launched_at"
+    t.json "metadata", default: {}, null: false
+    t.string "name", null: false
+    t.date "period_end_on", null: false
+    t.date "period_start_on", null: false
+    t.string "review_type", default: "quarterly", null: false
+    t.string "status", default: "draft", null: false
+    t.datetime "updated_at", null: false
+    t.index ["employer_id", "period_start_on", "period_end_on"], name: "index_performance_cycles_on_employer_and_period"
+    t.index ["employer_id", "status"], name: "index_performance_cycles_on_employer_id_and_status"
+    t.index ["employer_id"], name: "index_performance_cycles_on_employer_id"
+  end
+
+  create_table "performance_reviews", force: :cascade do |t|
+    t.datetime "calibrated_at"
+    t.datetime "completed_at"
+    t.datetime "created_at", null: false
+    t.date "due_on", null: false
+    t.integer "employee_id", null: false
+    t.text "growth_areas"
+    t.datetime "manager_submitted_at"
+    t.json "metadata", default: {}, null: false
+    t.integer "performance_cycle_id", null: false
+    t.integer "rating"
+    t.integer "reviewer_id"
+    t.datetime "self_submitted_at"
+    t.string "status", default: "draft", null: false
+    t.text "strengths"
+    t.datetime "updated_at", null: false
+    t.index ["employee_id"], name: "index_performance_reviews_on_employee_id"
+    t.index ["performance_cycle_id", "employee_id"], name: "index_performance_reviews_on_cycle_and_employee", unique: true
+    t.index ["performance_cycle_id"], name: "index_performance_reviews_on_performance_cycle_id"
+    t.index ["reviewer_id"], name: "index_performance_reviews_on_reviewer_id"
+    t.index ["status", "due_on"], name: "index_performance_reviews_on_status_and_due_on"
+  end
+
   create_table "sync_runs", force: :cascade do |t|
     t.datetime "completed_at"
     t.datetime "created_at", null: false
@@ -754,6 +814,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_03_203000) do
   add_foreign_key "employee_change_requests", "employees"
   add_foreign_key "employee_documents", "employees"
   add_foreign_key "employee_expenses", "employees"
+  add_foreign_key "employee_goals", "employees"
+  add_foreign_key "employee_goals", "performance_cycles"
   add_foreign_key "employee_lifecycle_events", "employees"
   add_foreign_key "employees", "departments"
   add_foreign_key "employees", "employers"
@@ -781,6 +843,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_03_203000) do
   add_foreign_key "payroll_deductions", "payroll_runs"
   add_foreign_key "payroll_runs", "employers"
   add_foreign_key "payroll_schedules", "employers"
+  add_foreign_key "performance_cycles", "employers"
+  add_foreign_key "performance_reviews", "employees"
+  add_foreign_key "performance_reviews", "employees", column: "reviewer_id"
+  add_foreign_key "performance_reviews", "performance_cycles"
   add_foreign_key "sync_runs", "integration_connections"
   add_foreign_key "time_entries", "employees"
   add_foreign_key "time_off_policies", "employers"

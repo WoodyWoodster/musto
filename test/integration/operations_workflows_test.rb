@@ -90,6 +90,11 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
         impact: { payroll: "tax_withholding_update", benefits: "none", compliance: "w4_document" }
       }
     )
+    @performance_cycle = @employer.performance_cycles.create!(name: "Midyear Performance Review", status: "active", review_type: "quarterly", period_start_on: Date.current.beginning_of_year, period_end_on: Date.current.beginning_of_year + 6.months - 1.day, due_on: Date.current + 14.days, launched_at: 1.day.ago)
+    @draft_performance_cycle = @employer.performance_cycles.create!(name: "Year-End Performance Review", status: "draft", review_type: "annual", period_start_on: Date.current.beginning_of_year, period_end_on: Date.current.end_of_year, due_on: Date.current.end_of_year + 14.days)
+    @manager_review = @performance_cycle.performance_reviews.create!(employee: @employee, reviewer: @employee, status: "manager_review", rating: 4, due_on: Date.current + 7.days, strengths: "Strong operating cadence", growth_areas: "Delegate recurring reporting")
+    @holdback_review = @draft_performance_cycle.performance_reviews.create!(employee: @employee, reviewer: @employee, status: "self_review", due_on: Date.current + 21.days)
+    @at_risk_goal = @employee.employee_goals.create!(performance_cycle: @performance_cycle, title: "Build payroll audit coverage", description: "Create backup coverage for payroll exception review.", status: "at_risk", progress_percent: 35, due_on: Date.current + 10.days, owner: "manager", metric: "Audit backup assigned")
     @job_opening = @employer.job_openings.create!(title: "Payroll Implementation Lead", code: "PAY-LEAD", department: @department, work_location: @location, compensation_min_cents: 98_000_00, compensation_max_cents: 128_000_00, target_start_on: Date.current + 21.days)
     @offerable_candidate = @job_opening.candidates.create!(first_name: "Nia", last_name: "Okafor", email: "nia.candidate@example.com", source: "referral", stage: "screening", score: 91, applied_on: Date.current - 5.days, target_start_on: Date.current + 21.days, compensation_cents: 118_000_00)
     @accepted_candidate = @job_opening.candidates.create!(first_name: "Miles", last_name: "Sato", email: "miles.candidate@example.com", source: "direct", stage: "accepted", score: 95, applied_on: Date.current - 12.days, target_start_on: Date.current + 28.days, compensation_cents: 122_000_00, offer_sent_at: 2.days.ago, accepted_at: 1.day.ago)
@@ -224,6 +229,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       workforce_path,
       hiring_path,
       employee_changes_path,
+      performance_path,
       lifecycle_path,
       onboarding_path,
       documents_path,
@@ -263,6 +269,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     workforce = Operations::WorkforceQuery.new.call
     hiring = Hiring::CenterQuery.new.call
     employee_changes = EmployeeChanges::CenterQuery.new.call
+    performance = Performance::CenterQuery.new.call
     lifecycle = Lifecycle::CommandCenterQuery.new.call
     payroll = Operations::PayrollQuery.new.call
     payroll_calendar = PayrollCalendar::CenterQuery.new.call
@@ -302,6 +309,12 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_instance_of EmployeeChanges::RequestDto, employee_changes.requests.first
     assert_instance_of EmployeeChanges::TypeSummaryDto, employee_changes.type_summaries.first
     assert_instance_of EmployeeChanges::ImpactItemDto, employee_changes.impact_items.first
+    assert_instance_of Performance::CenterDto, performance
+    assert_instance_of Performance::MetricDto, performance.metrics.first
+    assert_instance_of Performance::CycleDto, performance.cycles.first
+    assert_instance_of Performance::ReviewDto, performance.reviews.first
+    assert_instance_of Performance::GoalDto, performance.goals.first
+    assert_instance_of Performance::IssueDto, performance.issues.first
     assert_instance_of Lifecycle::CenterDto, lifecycle
     assert_instance_of Lifecycle::MetricDto, lifecycle.metrics.first
     assert_instance_of Lifecycle::EventDto, lifecycle.events.first
@@ -657,6 +670,80 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_instance_of EmployeeChanges::SyncBatchDto, detail.latest_batch
     assert_instance_of EmployeeChanges::SyncLineDto, detail.sync_lines.first
     assert_instance_of EmployeeChanges::SyncHoldbackDto, detail.sync_holdbacks.first
+  end
+
+  test "performance center exposes review and goal DTOs" do
+    detail = Performance::CenterQuery.new.call
+
+    assert_instance_of Performance::CenterDto, detail
+    assert_instance_of Performance::MetricDto, detail.metrics.first
+    assert_instance_of Performance::CycleDto, detail.cycles.first
+    assert_instance_of Performance::ReviewDto, detail.reviews.first
+    assert_instance_of Performance::GoalDto, detail.goals.first
+    assert_instance_of Performance::IssueDto, detail.issues.first
+    assert detail.calibratable_reviews.any? { |review| review.id == @manager_review.id }
+    assert detail.open_goals.any? { |goal| goal.id == @at_risk_goal.id }
+
+    get performance_path
+
+    assert_response :success
+    assert_select "h1", "Performance management center"
+    assert_select "h2", "Cycle portfolio"
+    assert_select "h2", "Performance issues"
+    assert_select "h2", "Review queue"
+    assert_select "h2", "Goal tracker"
+    assert_select "h2", "Calibration packet ledger"
+  end
+
+  test "launches draft performance cycle through command action" do
+    post launch_performance_cycle_path, params: { requested_by: "people_ops_admin" }
+
+    assert_redirected_to performance_path
+    @draft_performance_cycle.reload
+    assert_equal "active", @draft_performance_cycle.status
+    assert_equal "people_ops_admin", @draft_performance_cycle.metadata.fetch("launched_by")
+    assert_not_nil @draft_performance_cycle.launched_at
+    assert @draft_performance_cycle.performance_reviews.where(employee: @employee).exists?
+  end
+
+  test "calibrates performance review through command action" do
+    post calibrate_performance_review_path(@manager_review), params: { calibrated_by: "calibration_admin" }
+
+    assert_redirected_to performance_path
+    @manager_review.reload
+    assert_equal "complete", @manager_review.status
+    assert_equal "calibration_admin", @manager_review.metadata.fetch("calibrated_by")
+    assert_not_nil @manager_review.calibrated_at
+    assert_not_nil @manager_review.completed_at
+  end
+
+  test "completes employee goal through command action" do
+    post complete_employee_goal_path(@at_risk_goal), params: { reviewed_by: "manager_admin" }
+
+    assert_redirected_to performance_path
+    @at_risk_goal.reload
+    assert_equal "complete", @at_risk_goal.status
+    assert_equal 100, @at_risk_goal.progress_percent
+    assert_equal "manager_admin", @at_risk_goal.metadata.fetch("completed_by")
+    assert_not_nil @at_risk_goal.completed_at
+  end
+
+  test "generates performance calibration packet through command action" do
+    post generate_performance_calibration_packet_path, params: { requested_by: "people_ops_admin" }
+
+    assert_redirected_to performance_path
+    batch = @employer.reload.settings.fetch("performance_calibration_packet")
+    assert_match(/\Aperformance_calibration_#{@employer.id}_/, batch.fetch("batch_id"))
+    assert_equal "people_ops_admin", batch.fetch("requested_by")
+    assert_equal 1, batch.fetch("totals").fetch("review_count")
+    assert_equal 1, batch.fetch("totals").fetch("employee_count")
+    assert_equal 1, batch.fetch("totals").fetch("holdback_count")
+    assert_equal "calibration", @manager_review.reload.status
+
+    detail = Performance::CenterQuery.new.call
+    assert_instance_of Performance::CalibrationBatchDto, detail.latest_batch
+    assert_instance_of Performance::CalibrationLineDto, detail.calibration_lines.first
+    assert_instance_of Performance::CalibrationHoldbackDto, detail.calibration_holdbacks.first
   end
 
   test "lifecycle command center exposes employee change DTOs" do
