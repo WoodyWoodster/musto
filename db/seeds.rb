@@ -223,6 +223,46 @@ employees.each_with_index do |employee, employee_index|
   end
 end
 
+contractors = [
+  [ "Devon", "Stone", "devon.stone@example.com", "Stone Ops LLC", "company", "active", "complete", "verified", 9_500 ],
+  [ "Kai", "Mendez", "kai.mendez@example.com", nil, "individual", "onboarding", "missing", "missing", 7_500 ],
+  [ "Priya", "Shah", "priya.shah@example.com", "Shah Compliance Studio", "company", "active", "complete", "verified", 12_000 ]
+].map do |first_name, last_name, email, business_name, contractor_type, status, tax_form_status, payment_method_status, hourly_rate_cents|
+  contractor = employer.contractors.find_or_initialize_by(email:)
+  contractor.assign_attributes(
+    first_name:,
+    last_name:,
+    business_name:,
+    contractor_type:,
+    status:,
+    tax_form_status:,
+    payment_method_status:,
+    hourly_rate_cents:,
+    start_on: Date.current - rand(10..180).days,
+    metadata: { source: "seed", contractor_portal: "invite_sent" }
+  )
+  contractor.save!
+  contractor
+end
+
+[
+  [ contractors.first, "Benefits implementation sprint", current_run.period_start_on, current_run.period_end_on, current_run.pay_date, 4_200_00, "draft" ],
+  [ contractors.second, "Open onboarding support", current_run.period_start_on, current_run.period_start_on + 7.days, current_run.pay_date, 1_200_00, "draft" ],
+  [ contractors.third, "ACA filing advisory", current_run.period_start_on, current_run.period_end_on, current_run.pay_date + 2.days, 2_800_00, "approved" ]
+].each do |contractor, description, work_period_start_on, work_period_end_on, pay_date, amount_cents, status|
+  payment = contractor.contractor_payments.find_or_initialize_by(description:, pay_date:)
+  payment.assign_attributes(
+    work_period_start_on:,
+    work_period_end_on:,
+    amount_cents:,
+    status:,
+    payment_method: "ach",
+    approved_at: status == "approved" ? 1.day.ago : nil,
+    metadata: { source: "seeded_invoice" }
+  )
+  payment.save!
+end
+
 [
   [ employees[4], "i9_reverification", "critical", "open", Date.current + 2.days, "I-9 document still pending for Denver manager." ],
   [ nil, "aca_measurement_period", "high", "open", Date.current + 9.days, "ACA measurement period needs review before the next benefits export." ],

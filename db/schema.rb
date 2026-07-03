@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_03_120000) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_03_130001) do
   create_table "api_request_logs", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.integer "duration_ms"
@@ -62,6 +62,49 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_03_120000) do
     t.index ["employer_id", "status"], name: "index_compliance_cases_on_employer_id_and_status"
     t.index ["employer_id"], name: "index_compliance_cases_on_employer_id"
     t.index ["severity", "due_on"], name: "index_compliance_cases_on_severity_and_due_on"
+  end
+
+  create_table "contractor_payments", force: :cascade do |t|
+    t.integer "amount_cents", default: 0, null: false
+    t.datetime "approved_at"
+    t.integer "contractor_id", null: false
+    t.datetime "created_at", null: false
+    t.string "description", null: false
+    t.json "metadata", default: {}, null: false
+    t.datetime "paid_at"
+    t.date "pay_date", null: false
+    t.string "payment_method", default: "ach", null: false
+    t.datetime "scheduled_at"
+    t.string "status", default: "draft", null: false
+    t.datetime "updated_at", null: false
+    t.date "work_period_end_on", null: false
+    t.date "work_period_start_on", null: false
+    t.index ["contractor_id", "pay_date"], name: "index_contractor_payments_on_contractor_id_and_pay_date"
+    t.index ["contractor_id", "status"], name: "index_contractor_payments_on_contractor_id_and_status"
+    t.index ["contractor_id"], name: "index_contractor_payments_on_contractor_id"
+    t.index ["status", "pay_date"], name: "index_contractor_payments_on_status_and_pay_date"
+  end
+
+  create_table "contractors", force: :cascade do |t|
+    t.string "business_name"
+    t.string "contractor_type", default: "individual", null: false
+    t.datetime "created_at", null: false
+    t.string "email", null: false
+    t.integer "employer_id", null: false
+    t.string "first_name", null: false
+    t.integer "hourly_rate_cents", default: 0, null: false
+    t.string "last_name", null: false
+    t.json "metadata", default: {}, null: false
+    t.string "payment_method_status", default: "missing", null: false
+    t.date "start_on"
+    t.string "status", default: "onboarding", null: false
+    t.string "tax_form_status", default: "missing", null: false
+    t.datetime "updated_at", null: false
+    t.index ["employer_id", "email"], name: "index_contractors_on_employer_id_and_email", unique: true
+    t.index ["employer_id", "status"], name: "index_contractors_on_employer_id_and_status"
+    t.index ["employer_id"], name: "index_contractors_on_employer_id"
+    t.index ["payment_method_status"], name: "index_contractors_on_payment_method_status"
+    t.index ["tax_form_status"], name: "index_contractors_on_tax_form_status"
   end
 
   create_table "departments", force: :cascade do |t|
@@ -362,6 +405,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_03_120000) do
   add_foreign_key "benefit_plans", "employers"
   add_foreign_key "compliance_cases", "employees"
   add_foreign_key "compliance_cases", "employers"
+  add_foreign_key "contractor_payments", "contractors"
+  add_foreign_key "contractors", "employers"
   add_foreign_key "departments", "employees", column: "manager_id"
   add_foreign_key "departments", "employers"
   add_foreign_key "employee_documents", "employees"

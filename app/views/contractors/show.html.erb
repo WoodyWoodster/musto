@@ -1,0 +1,251 @@
+<section class="space-y-7">
+  <div class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div class="grid xl:grid-cols-[1.25fr_0.75fr]">
+      <div class="p-6 lg:p-8">
+        <div class="flex flex-wrap items-center gap-2">
+          <%= status_pill(@contractors.generated? ? @contractors.latest_batch.status : "needs_review") %>
+          <span class="rounded-full bg-pink-50 px-3 py-1 text-xs font-semibold text-pink-800 ring-1 ring-inset ring-pink-200">Contractor payroll</span>
+          <span class="rounded-full bg-cyan-50 px-3 py-1 text-xs font-semibold text-cyan-800 ring-1 ring-inset ring-cyan-200">1099-ready</span>
+        </div>
+
+        <h1 class="mt-5 text-4xl font-semibold tracking-tight text-slate-950">Contractor payments center</h1>
+        <p class="mt-3 max-w-3xl text-base leading-7 text-slate-600">
+          Manage contractor onboarding, W-9 readiness, payment approvals, and 1099 payment batching for <%= @contractors.employer&.name || "your employer portfolio" %>.
+        </p>
+
+        <div class="mt-6 flex flex-wrap gap-3">
+          <%= link_to "Payroll", payroll_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
+          <%= link_to "Reports", reports_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
+          <%= link_to "Taxes", taxes_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
+          <%= button_to "Generate payment batch", generate_contractor_payment_batch_path, method: :post, params: { requested_by: "ops_console" }, class: "rounded-md bg-slate-950 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-slate-800" %>
+        </div>
+      </div>
+
+      <aside class="border-t border-slate-200 bg-slate-950 p-6 text-white xl:border-l xl:border-t-0 xl:p-8">
+        <p class="text-xs font-semibold uppercase tracking-[0.2em] text-pink-300">Latest batch</p>
+        <% if @contractors.latest_batch.present? %>
+          <p class="mt-6 break-all font-mono text-sm font-semibold"><%= @contractors.latest_batch.batch_id %></p>
+          <p class="mt-3 text-sm text-slate-300">Generated <%= time_ago_in_words(@contractors.latest_batch.generated_at) %> ago by <%= @contractors.latest_batch.requested_by %></p>
+          <div class="mt-6 grid grid-cols-2 gap-3">
+            <div class="rounded-md bg-white/10 p-4">
+              <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Payments</p>
+              <p class="mt-2 text-2xl font-semibold"><%= compact_number(@contractors.latest_batch.payment_count) %></p>
+            </div>
+            <div class="rounded-md bg-white/10 p-4">
+              <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Holdbacks</p>
+              <p class="mt-2 text-2xl font-semibold"><%= compact_number(@contractors.latest_batch.holdback_count) %></p>
+            </div>
+          </div>
+          <div class="mt-5 rounded-md bg-white/10 p-4">
+            <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Batch total</p>
+            <p class="mt-2 text-2xl font-semibold"><%= money_cents(@contractors.latest_batch.total_cents) %></p>
+          </div>
+        <% else %>
+          <p class="mt-6 text-3xl font-semibold tracking-tight">No batch</p>
+          <p class="mt-2 text-sm leading-6 text-slate-300">Approve ready contractor payments before generating the next payment batch.</p>
+        <% end %>
+      </aside>
+    </div>
+  </div>
+
+  <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+    <% @contractors.metrics.each do |metric| %>
+      <article class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <div class="flex items-center justify-between gap-3">
+          <p class="text-sm font-medium text-slate-500"><%= metric.label %></p>
+          <span class="h-2.5 w-2.5 shrink-0 rounded-full <%= metric.accent %>"></span>
+        </div>
+        <p class="mt-4 text-3xl font-semibold tracking-tight text-slate-950"><%= metric.format == "money" ? money_cents(metric.value) : compact_number(metric.value) %></p>
+        <div class="mt-2 flex flex-wrap items-center gap-2">
+          <%= status_pill(metric.status) %>
+          <p class="text-sm text-slate-500"><%= metric.hint %></p>
+        </div>
+      </article>
+    <% end %>
+  </div>
+
+  <div class="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+    <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="border-b border-slate-100 px-5 py-4">
+        <h2 class="text-base font-semibold text-slate-950">Payment approvals</h2>
+        <p class="text-sm text-slate-500">Review contractor payments after tax forms and payment methods are ready.</p>
+      </div>
+      <div class="divide-y divide-slate-100">
+        <% @contractors.payments.first(10).each do |payment| %>
+          <div class="px-5 py-4">
+            <div class="flex flex-wrap items-start justify-between gap-4">
+              <div class="min-w-0">
+                <div class="flex flex-wrap items-center gap-2">
+                  <p class="font-semibold text-slate-950"><%= payment.contractor_name %></p>
+                  <%= status_pill(payment.status) %>
+                  <%= status_pill(payment.tax_form_status) %>
+                  <%= status_pill(payment.payment_method_status) %>
+                </div>
+                <p class="mt-1 text-sm text-slate-500"><%= payment.business_name.presence || "Individual contractor" %> · <%= payment.payment_method.upcase %> · Pay date <%= payment.pay_date.strftime("%b %-d, %Y") %></p>
+                <p class="mt-2 text-sm leading-6 text-slate-600">
+                  <%= payment.description %> · <%= payment.work_period_start_on.strftime("%b %-d") %> - <%= payment.work_period_end_on.strftime("%b %-d, %Y") %>
+                </p>
+              </div>
+              <p class="text-right text-lg font-semibold text-slate-950"><%= money_cents(payment.amount_cents) %></p>
+            </div>
+            <% if payment.draft? %>
+              <div class="mt-4 flex flex-wrap gap-2">
+                <%= button_to(payment.ready_for_approval? ? "Approve" : "Review block", approve_contractor_payment_path(payment.id), method: :post, params: { reviewed_by: "ops_console" }, class: "rounded-md #{payment.ready_for_approval? ? "bg-emerald-600 text-white hover:bg-emerald-700" : "border border-amber-200 bg-amber-50 text-amber-800 hover:border-amber-300"} px-3 py-2 text-sm font-semibold shadow-sm") %>
+              </div>
+            <% end %>
+          </div>
+        <% end %>
+
+        <% if @contractors.payments.empty? %>
+          <div class="p-5">
+            <p class="font-semibold text-slate-950">No contractor payments</p>
+            <p class="mt-2 text-sm leading-6 text-slate-600">Draft, approved, and blocked contractor payments will appear here once invoices are queued.</p>
+          </div>
+        <% end %>
+      </div>
+    </section>
+
+    <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="border-b border-slate-100 px-5 py-4">
+        <h2 class="text-base font-semibold text-slate-950">Readiness recommendations</h2>
+        <p class="text-sm text-slate-500">The items that should clear before contractor funds move.</p>
+      </div>
+      <div class="divide-y divide-slate-100">
+        <% @contractors.readiness_items.each do |item| %>
+          <div class="p-5">
+            <div class="flex flex-wrap items-start justify-between gap-3">
+              <div class="min-w-0">
+                <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400"><%= item.owner %> · <%= item.severity %></p>
+                <h3 class="mt-2 text-base font-semibold text-slate-950"><%= item.title %></h3>
+              </div>
+              <%= status_pill(item.status) %>
+            </div>
+            <p class="mt-3 text-sm leading-6 text-slate-600"><%= item.detail %></p>
+            <%= link_to "Open workflow", item.action_path, class: "mt-4 inline-flex text-sm font-semibold text-cyan-700 hover:text-cyan-900" %>
+          </div>
+        <% end %>
+      </div>
+    </section>
+  </div>
+
+  <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div class="border-b border-slate-100 px-5 py-4">
+      <h2 class="text-base font-semibold text-slate-950">Contractor roster</h2>
+      <p class="text-sm text-slate-500">1099 profiles with onboarding, tax, payment, and pending invoice exposure.</p>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="min-w-full divide-y divide-slate-100 text-sm">
+        <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <tr>
+            <th class="px-5 py-3">Contractor</th>
+            <th class="px-5 py-3">Type</th>
+            <th class="px-5 py-3">Start</th>
+            <th class="px-5 py-3">Rate</th>
+            <th class="px-5 py-3">Tax form</th>
+            <th class="px-5 py-3">Payment method</th>
+            <th class="px-5 py-3">Pending</th>
+            <th class="px-5 py-3">Readiness</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          <% @contractors.contractors.each do |contractor| %>
+            <tr class="hover:bg-slate-50">
+              <td class="px-5 py-4">
+                <p class="font-semibold text-slate-950"><%= contractor.display_name %></p>
+                <p class="mt-1 text-xs text-slate-500"><%= contractor.full_name %> · <%= contractor.email %></p>
+              </td>
+              <td class="px-5 py-4 text-slate-600"><%= contractor.contractor_type.humanize %></td>
+              <td class="px-5 py-4 text-slate-600"><%= contractor.start_on&.strftime("%b %-d, %Y") || "Not set" %></td>
+              <td class="px-5 py-4 text-slate-600"><%= money_cents(contractor.hourly_rate_cents) %>/hr</td>
+              <td class="px-5 py-4"><%= status_pill(contractor.tax_form_status) %></td>
+              <td class="px-5 py-4"><%= status_pill(contractor.payment_method_status) %></td>
+              <td class="px-5 py-4 text-slate-600">
+                <%= money_cents(contractor.pending_payment_cents) %>
+                <p class="mt-1 text-xs text-slate-500"><%= compact_number(contractor.payment_count) %> payments</p>
+              </td>
+              <td class="px-5 py-4"><%= status_pill(contractor.readiness_status) %></td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div class="border-b border-slate-100 px-5 py-4">
+      <h2 class="text-base font-semibold text-slate-950">Payment batch ledger</h2>
+      <p class="text-sm text-slate-500">Approved payment lines and holdbacks from the latest contractor batch.</p>
+    </div>
+    <% if @contractors.latest_batch.present? %>
+      <div class="grid divide-y divide-slate-100 lg:grid-cols-[1fr_0.9fr] lg:divide-x lg:divide-y-0">
+        <div class="min-w-0">
+          <div class="border-b border-slate-100 px-5 py-3">
+            <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Included payments</p>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-slate-100 text-sm">
+              <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th class="px-5 py-3">Contractor</th>
+                  <th class="px-5 py-3">Pay date</th>
+                  <th class="px-5 py-3">Method</th>
+                  <th class="px-5 py-3">Amount</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100">
+                <% @contractors.batch_payments.each do |payment| %>
+                  <tr class="hover:bg-slate-50">
+                    <td class="px-5 py-4">
+                      <p class="font-semibold text-slate-950"><%= payment.contractor_name %></p>
+                      <p class="mt-1 text-xs text-slate-500"><%= payment.description %></p>
+                    </td>
+                    <td class="px-5 py-4 text-slate-600"><%= payment.pay_date.strftime("%b %-d, %Y") %></td>
+                    <td class="px-5 py-4 text-slate-600"><%= payment.payment_method.upcase %></td>
+                    <td class="px-5 py-4 font-semibold text-slate-950"><%= money_cents(payment.amount_cents) %></td>
+                  </tr>
+                <% end %>
+                <% if @contractors.batch_payments.empty? %>
+                  <tr>
+                    <td colspan="4" class="px-5 py-5 text-sm text-slate-600">No approved payment lines were included.</td>
+                  </tr>
+                <% end %>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="min-w-0">
+          <div class="border-b border-slate-100 px-5 py-3">
+            <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Holdbacks</p>
+          </div>
+          <div class="divide-y divide-slate-100">
+            <% @contractors.batch_holdbacks.each do |holdback| %>
+              <div class="p-5">
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                  <div class="min-w-0">
+                    <p class="font-semibold text-slate-950"><%= holdback.contractor_name %></p>
+                    <p class="mt-1 text-sm text-slate-500"><%= holdback.description %></p>
+                  </div>
+                  <%= status_pill(holdback.status) %>
+                </div>
+                <p class="mt-3 text-sm leading-6 text-slate-600"><%= holdback.reason %></p>
+                <p class="mt-3 text-sm font-semibold text-slate-950"><%= money_cents(holdback.amount_cents) %></p>
+              </div>
+            <% end %>
+            <% if @contractors.batch_holdbacks.empty? %>
+              <div class="p-5">
+                <p class="font-semibold text-slate-950">No holdbacks</p>
+                <p class="mt-2 text-sm leading-6 text-slate-600">All approved contractor payments were included in the latest batch.</p>
+              </div>
+            <% end %>
+          </div>
+        </div>
+      </div>
+    <% else %>
+      <div class="p-5">
+        <p class="font-semibold text-slate-950">No generated batch</p>
+        <p class="mt-2 text-sm leading-6 text-slate-600">The next generated batch will list included payments and holdbacks here.</p>
+      </div>
+    <% end %>
+  </section>
+</section>

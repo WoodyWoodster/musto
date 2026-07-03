@@ -48,6 +48,45 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     time_start = @payroll_run.period_start_on.in_time_zone.change(hour: 9, min: 0)
     @approved_time_entry = @employee.time_entries.create!(work_date: @payroll_run.period_start_on, clock_in_at: time_start, clock_out_at: time_start + 8.hours, break_minutes: 30, source: "web", status: "approved", approved_at: 1.hour.ago, reviewed_at: 1.hour.ago, notes: "Regular shift")
     @submitted_time_entry = @employee.time_entries.create!(work_date: @payroll_run.period_start_on + 1.day, clock_in_at: time_start + 1.day, clock_out_at: time_start + 1.day + 9.hours, break_minutes: 45, source: "mobile", status: "submitted", notes: "Needs manager review")
+    @contractor = @employer.contractors.create!(
+      first_name: "Devon",
+      last_name: "Stone",
+      email: "devon@example.com",
+      business_name: "Stone Ops LLC",
+      contractor_type: "company",
+      status: "active",
+      tax_form_status: "complete",
+      payment_method_status: "verified",
+      start_on: Date.current - 60.days,
+      hourly_rate_cents: 8_500
+    )
+    @blocked_contractor = @employer.contractors.create!(
+      first_name: "Rae",
+      last_name: "Morgan",
+      email: "rae@example.com",
+      contractor_type: "individual",
+      status: "onboarding",
+      tax_form_status: "missing",
+      payment_method_status: "missing",
+      start_on: Date.current - 10.days,
+      hourly_rate_cents: 6_000
+    )
+    @contractor_payment = @contractor.contractor_payments.create!(
+      work_period_start_on: @payroll_run.period_start_on,
+      work_period_end_on: @payroll_run.period_end_on,
+      pay_date: @payroll_run.pay_date,
+      description: "Benefits implementation support",
+      amount_cents: 3_200_00,
+      status: "draft"
+    )
+    @blocked_contractor_payment = @blocked_contractor.contractor_payments.create!(
+      work_period_start_on: @payroll_run.period_start_on,
+      work_period_end_on: @payroll_run.period_start_on + 7.days,
+      pay_date: @payroll_run.pay_date,
+      description: "Open onboarding support",
+      amount_cents: 900_00,
+      status: "draft"
+    )
     @compliance_case = @employer.compliance_cases.create!(employee: @employee, kind: "i9_reverification", severity: "high", due_on: Date.current + 5.days)
     @connection = @organization.integration_connections.create!(provider: "vitable", environment: "production")
     @sync_run = @connection.sync_runs.create!(
@@ -95,6 +134,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       onboarding_path,
       time_off_path,
       timesheets_path,
+      contractors_path,
       compensation_path,
       taxes_path,
       reports_path,
@@ -123,6 +163,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     onboarding = Onboarding::CommandCenterQuery.new.call
     time_off = TimeOff::CommandCenterQuery.new.call
     timesheets = TimeTracking::CenterQuery.new.call
+    contractors = Contractors::CenterQuery.new.call
     compensation = Compensation::CenterQuery.new.call
     taxes = Taxes::CenterQuery.new.call
     reports = Reports::CenterQuery.new.call
@@ -152,6 +193,11 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_instance_of TimeTracking::EmployeeSummaryDto, timesheets.employees.first
     assert_instance_of TimeTracking::DepartmentSummaryDto, timesheets.departments.first
     assert_instance_of TimeTracking::ExceptionDto, timesheets.exceptions.first
+    assert_instance_of Contractors::CenterDto, contractors
+    assert_instance_of Contractors::MetricDto, contractors.metrics.first
+    assert_instance_of Contractors::ContractorDto, contractors.contractors.first
+    assert_instance_of Contractors::PaymentDto, contractors.payments.first
+    assert_instance_of Contractors::ReadinessItemDto, contractors.readiness_items.first
     assert_instance_of Compensation::CenterDto, compensation
     assert_instance_of Compensation::EmployeeCompensationDto, compensation.employees.first
     assert_instance_of Compensation::DepartmentBudgetDto, compensation.departments.first
@@ -416,6 +462,56 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal 1, export.fetch("totals").fetch("holdback_count")
     assert export.fetch("totals").fetch("approved_minutes").positive?
     assert export.fetch("totals").fetch("total_gross_cents").positive?
+  end
+
+  test "contractor payments center exposes contractor payment DTOs" do
+    detail = Contractors::CenterQuery.new.call
+
+    assert_instance_of Contractors::CenterDto, detail
+    assert_instance_of Contractors::MetricDto, detail.metrics.first
+    assert_instance_of Contractors::ContractorDto, detail.contractors.first
+    assert_instance_of Contractors::PaymentDto, detail.payments.first
+    assert_instance_of Contractors::ReadinessItemDto, detail.readiness_items.first
+    assert detail.pending_payments.any? { |payment| payment.id == @contractor_payment.id }
+
+    get contractors_path
+
+    assert_response :success
+    assert_select "h1", "Contractor payments center"
+    assert_select "h2", "Payment approvals"
+    assert_select "h2", "Readiness recommendations"
+    assert_select "h2", "Contractor roster"
+    assert_select "h2", "Payment batch ledger"
+  end
+
+  test "approves a contractor payment through command action" do
+    post approve_contractor_payment_path(@contractor_payment), params: { reviewed_by: "ops_console" }
+
+    assert_redirected_to contractors_path
+    @contractor_payment.reload
+    assert_equal "approved", @contractor_payment.status
+    assert_equal "ops_console", @contractor_payment.metadata.fetch("reviewed_by")
+    assert_not_nil @contractor_payment.approved_at
+  end
+
+  test "generates a contractor payment batch through command action" do
+    @contractor_payment.approve!(reviewed_by: "ops_console")
+
+    post generate_contractor_payment_batch_path
+
+    assert_redirected_to contractors_path
+    batch = @employer.reload.settings.fetch("contractor_payment_batch")
+    assert_match(/\Acontractor_payments_#{@employer.id}_/, batch.fetch("batch_id"))
+    assert_equal "ops_console", batch.fetch("requested_by")
+    assert_equal 1, batch.fetch("totals").fetch("payment_count")
+    assert_equal 1, batch.fetch("totals").fetch("contractor_count")
+    assert_equal 1, batch.fetch("totals").fetch("holdback_count")
+    assert_equal @contractor_payment.amount_cents, batch.fetch("totals").fetch("total_cents")
+
+    detail = Contractors::CenterQuery.new.call
+    assert_instance_of Contractors::BatchDto, detail.latest_batch
+    assert_instance_of Contractors::BatchPaymentDto, detail.batch_payments.first
+    assert_instance_of Contractors::BatchHoldbackDto, detail.batch_holdbacks.first
   end
 
   test "employee profile exposes a feature-rich employee 360 DTO" do
