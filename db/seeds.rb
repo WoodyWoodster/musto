@@ -140,6 +140,71 @@ end
   dependent.save!
 end
 
+[
+  [
+    employees.second,
+    "department_transfer",
+    Date.current + 14.days,
+    "Jordan Lee is moving from Retail into People operations for open enrollment support.",
+    "draft",
+    {
+      changes: { department: { from: "Retail", to: "People" } },
+      payroll_impact: "tax_profile_review",
+      benefits_impact: "none",
+      compliance_impact: "manager_update"
+    }
+  ],
+  [
+    employees[4],
+    "termination",
+    Date.current + 21.days,
+    "Sam Rivera has a scheduled separation requiring final pay and benefits offboarding.",
+    "approved",
+    {
+      changes: { employment_status: { from: "active", to: "terminated" } },
+      payroll_impact: "final_pay",
+      benefits_impact: "end_coverage",
+      compliance_impact: "cobra_review"
+    }
+  ],
+  [
+    employees.third,
+    "compensation_change",
+    Date.current + 30.days,
+    "Morgan Patel compensation adjustment approved for the next payroll period.",
+    "approved",
+    {
+      changes: { compensation_cents: { from: 92_000_00, to: 98_500_00 } },
+      payroll_impact: "pay_rate_update",
+      benefits_impact: "none",
+      compliance_impact: "none"
+    }
+  ],
+  [
+    employees.last,
+    "location_change",
+    Date.current - 7.days,
+    "Taylor Brooks moved into the Denver roastery location and is queued for HRIS sync.",
+    "sync_queued",
+    {
+      changes: { work_location: { from: "Remote US", to: "Denver Roastery" } },
+      payroll_impact: "tax_profile_review",
+      benefits_impact: "eligibility_review",
+      compliance_impact: "state_notice"
+    }
+  ]
+].each do |employee, event_type, effective_on, summary, status, metadata|
+  event = employee.employee_lifecycle_events.find_or_initialize_by(event_type:, summary:)
+  event.assign_attributes(
+    effective_on:,
+    status:,
+    reviewed_at: status == "draft" ? nil : 1.day.ago,
+    source: "ops_console",
+    metadata: metadata.merge(source: "seed")
+  )
+  event.save!
+end
+
 employees.each do |employee|
   [
     [ "Complete I-9 verification", "identity", employee.onboarding_status == "blocked" ? "open" : "complete", Date.current - 2.days, "people" ],

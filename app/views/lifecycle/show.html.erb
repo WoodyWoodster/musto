@@ -1,0 +1,259 @@
+<section class="space-y-7">
+  <div class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div class="grid xl:grid-cols-[1.25fr_0.75fr]">
+      <div class="p-6 lg:p-8">
+        <div class="flex flex-wrap items-center gap-2">
+          <%= status_pill(@lifecycle.generated? ? @lifecycle.latest_batch.status : "needs_review") %>
+          <span class="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-800 ring-1 ring-inset ring-blue-200">Employee lifecycle</span>
+          <span class="rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-800 ring-1 ring-inset ring-indigo-200">HRIS sync</span>
+        </div>
+
+        <h1 class="mt-5 text-4xl font-semibold tracking-tight text-slate-950">Employee lifecycle command center</h1>
+        <p class="mt-3 max-w-3xl text-base leading-7 text-slate-600">
+          Review employee changes, terminations, transfers, compensation updates, final-pay risk, benefits impact, and Vitable-ready HRIS sync batches for <%= @lifecycle.employer&.name || "your employer portfolio" %>.
+        </p>
+
+        <div class="mt-6 flex flex-wrap gap-3">
+          <%= link_to "Workforce", workforce_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
+          <%= link_to "Onboarding", onboarding_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
+          <%= link_to "Payroll", payroll_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
+          <%= button_to "Generate lifecycle sync", generate_lifecycle_sync_batch_path, method: :post, params: { requested_by: "ops_console" }, class: "rounded-md bg-slate-950 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-slate-800" %>
+        </div>
+      </div>
+
+      <aside class="border-t border-slate-200 bg-slate-950 p-6 text-white xl:border-l xl:border-t-0 xl:p-8">
+        <p class="text-xs font-semibold uppercase tracking-[0.2em] text-blue-300">Latest sync batch</p>
+        <% if @lifecycle.latest_batch.present? %>
+          <p class="mt-6 break-all font-mono text-sm font-semibold"><%= @lifecycle.latest_batch.batch_id %></p>
+          <p class="mt-3 text-sm text-slate-300">Generated <%= time_ago_in_words(@lifecycle.latest_batch.generated_at) %> ago by <%= @lifecycle.latest_batch.requested_by %></p>
+          <div class="mt-6 grid grid-cols-2 gap-3">
+            <div class="rounded-md bg-white/10 p-4">
+              <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Events</p>
+              <p class="mt-2 text-2xl font-semibold"><%= compact_number(@lifecycle.latest_batch.event_count) %></p>
+            </div>
+            <div class="rounded-md bg-white/10 p-4">
+              <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Holdbacks</p>
+              <p class="mt-2 text-2xl font-semibold"><%= compact_number(@lifecycle.latest_batch.holdback_count) %></p>
+            </div>
+          </div>
+          <div class="mt-5 grid grid-cols-2 gap-3">
+            <div class="rounded-md bg-white/10 p-4">
+              <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Payroll</p>
+              <p class="mt-2 text-2xl font-semibold"><%= compact_number(@lifecycle.latest_batch.payroll_impact_count) %></p>
+            </div>
+            <div class="rounded-md bg-white/10 p-4">
+              <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Benefits</p>
+              <p class="mt-2 text-2xl font-semibold"><%= compact_number(@lifecycle.latest_batch.benefit_impact_count) %></p>
+            </div>
+          </div>
+        <% else %>
+          <p class="mt-6 text-3xl font-semibold tracking-tight">No sync batch</p>
+          <p class="mt-2 text-sm leading-6 text-slate-300">Approve employee lifecycle events before generating a Vitable-ready sync batch.</p>
+        <% end %>
+      </aside>
+    </div>
+  </div>
+
+  <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+    <% @lifecycle.metrics.each do |metric| %>
+      <article class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <div class="flex items-center justify-between gap-3">
+          <p class="text-sm font-medium text-slate-500"><%= metric.label %></p>
+          <span class="h-2.5 w-2.5 shrink-0 rounded-full <%= metric.accent %>"></span>
+        </div>
+        <p class="mt-4 text-3xl font-semibold tracking-tight text-slate-950"><%= compact_number(metric.value) %></p>
+        <div class="mt-2 flex flex-wrap items-center gap-2">
+          <%= status_pill(metric.status) %>
+          <p class="text-sm text-slate-500"><%= metric.hint %></p>
+        </div>
+      </article>
+    <% end %>
+  </div>
+
+  <div class="grid gap-6 xl:grid-cols-[1.12fr_0.88fr]">
+    <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="border-b border-slate-100 px-5 py-4">
+        <h2 class="text-base font-semibold text-slate-950">Lifecycle review queue</h2>
+        <p class="text-sm text-slate-500">Approve employee changes before they can enter a local Vitable sync batch.</p>
+      </div>
+      <div class="divide-y divide-slate-100">
+        <% @lifecycle.events.first(10).each do |event| %>
+          <div class="px-5 py-4">
+            <div class="flex flex-wrap items-start justify-between gap-4">
+              <div class="min-w-0">
+                <div class="flex flex-wrap items-center gap-2">
+                  <%= link_to event.employee_name, employee_path(event.employee_id), class: "font-semibold text-slate-950 hover:text-cyan-700" %>
+                  <%= status_pill(event.status) %>
+                  <span class="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700"><%= event.event_type.humanize %></span>
+                </div>
+                <p class="mt-1 text-sm text-slate-500"><%= event.department_name %> · <%= event.location_name %> · effective <%= event.effective_on.strftime("%b %-d, %Y") %></p>
+                <p class="mt-2 text-sm leading-6 text-slate-600"><%= event.summary %></p>
+                <div class="mt-3 flex flex-wrap gap-2">
+                  <span class="rounded-md bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-600">Payroll: <%= event.payroll_impact.humanize %></span>
+                  <span class="rounded-md bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-600">Benefits: <%= event.benefits_impact.humanize %></span>
+                  <span class="rounded-md bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-600">Compliance: <%= event.compliance_impact.humanize %></span>
+                </div>
+              </div>
+              <div class="text-right">
+                <%= status_pill(event.remote_pending? ? "remote_pending" : "synced") %>
+                <p class="mt-1 max-w-40 truncate text-xs text-slate-500"><%= event.remote_employee_id.presence || "Create on sync" %></p>
+              </div>
+            </div>
+            <% if event.draft? %>
+              <div class="mt-4">
+                <%= button_to "Approve change", approve_lifecycle_event_path(event.id), method: :post, params: { reviewed_by: "ops_console" }, class: "rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700" %>
+              </div>
+            <% end %>
+          </div>
+        <% end %>
+
+        <% if @lifecycle.events.empty? %>
+          <div class="p-5">
+            <p class="font-semibold text-slate-950">No lifecycle events</p>
+            <p class="mt-2 text-sm leading-6 text-slate-600">Employee changes, transfers, compensation events, and terminations will appear here.</p>
+          </div>
+        <% end %>
+      </div>
+    </section>
+
+    <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="border-b border-slate-100 px-5 py-4">
+        <h2 class="text-base font-semibold text-slate-950">Lifecycle impact checks</h2>
+        <p class="text-sm text-slate-500">Payroll, benefits, compliance, and integration checks before employee changes move.</p>
+      </div>
+      <div class="divide-y divide-slate-100">
+        <% @lifecycle.impact_items.each do |item| %>
+          <div class="p-5">
+            <div class="flex flex-wrap items-start justify-between gap-3">
+              <div class="min-w-0">
+                <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400"><%= item.owner %> · <%= item.severity %></p>
+                <h3 class="mt-2 text-base font-semibold text-slate-950"><%= item.title %></h3>
+              </div>
+              <%= status_pill(item.status) %>
+            </div>
+            <p class="mt-3 text-sm leading-6 text-slate-600"><%= item.detail %></p>
+            <%= link_to "Open workflow", item.action_path, class: "mt-4 inline-flex text-sm font-semibold text-cyan-700 hover:text-cyan-900" %>
+          </div>
+        <% end %>
+      </div>
+    </section>
+  </div>
+
+  <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div class="border-b border-slate-100 px-5 py-4">
+      <h2 class="text-base font-semibold text-slate-950">Employee change ledger</h2>
+      <p class="text-sm text-slate-500">Audit trail of lifecycle events with payroll, benefits, compliance, and Vitable mapping.</p>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="min-w-full divide-y divide-slate-100 text-sm">
+        <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <tr>
+            <th class="px-5 py-3">Employee</th>
+            <th class="px-5 py-3">Event</th>
+            <th class="px-5 py-3">Effective</th>
+            <th class="px-5 py-3">Payroll</th>
+            <th class="px-5 py-3">Benefits</th>
+            <th class="px-5 py-3">Compliance</th>
+            <th class="px-5 py-3">Status</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          <% @lifecycle.events.each do |event| %>
+            <tr class="hover:bg-slate-50">
+              <td class="px-5 py-4">
+                <%= link_to event.employee_name, employee_path(event.employee_id), class: "font-semibold text-slate-950 hover:text-cyan-700" %>
+                <p class="mt-1 text-xs text-slate-500"><%= event.employee_title.presence || "Role pending" %></p>
+              </td>
+              <td class="px-5 py-4">
+                <p class="font-medium text-slate-700"><%= event.event_type.humanize %></p>
+                <p class="mt-1 max-w-64 truncate text-xs text-slate-500"><%= event.summary %></p>
+              </td>
+              <td class="px-5 py-4 text-slate-600"><%= event.effective_on.strftime("%b %-d, %Y") %></td>
+              <td class="px-5 py-4 text-slate-600"><%= event.payroll_impact.humanize %></td>
+              <td class="px-5 py-4 text-slate-600"><%= event.benefits_impact.humanize %></td>
+              <td class="px-5 py-4 text-slate-600"><%= event.compliance_impact.humanize %></td>
+              <td class="px-5 py-4"><%= status_pill(event.status) %></td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div class="border-b border-slate-100 px-5 py-4">
+      <h2 class="text-base font-semibold text-slate-950">Lifecycle sync ledger</h2>
+      <p class="text-sm text-slate-500">Included HRIS/Vitable event lines and holdbacks from the latest lifecycle batch.</p>
+    </div>
+    <% if @lifecycle.latest_batch.present? %>
+      <div class="grid divide-y divide-slate-100 xl:grid-cols-[1fr_0.9fr] xl:divide-x xl:divide-y-0">
+        <div class="min-w-0">
+          <div class="border-b border-slate-100 px-5 py-3">
+            <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Included changes</p>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-slate-100 text-sm">
+              <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th class="px-5 py-3">Employee</th>
+                  <th class="px-5 py-3">Event</th>
+                  <th class="px-5 py-3">Effective</th>
+                  <th class="px-5 py-3">Impact</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100">
+                <% @lifecycle.batch_lines.each do |line| %>
+                  <tr class="hover:bg-slate-50">
+                    <td class="px-5 py-4">
+                      <p class="font-semibold text-slate-950"><%= line.employee_name %></p>
+                      <p class="mt-1 max-w-44 truncate text-xs text-slate-500"><%= line.remote_employee_id %></p>
+                    </td>
+                    <td class="px-5 py-4 text-slate-600"><%= line.event_type.humanize %></td>
+                    <td class="px-5 py-4 text-slate-600"><%= line.effective_on.strftime("%b %-d, %Y") %></td>
+                    <td class="px-5 py-4 text-slate-600"><%= line.payroll_impact.humanize %> · <%= line.benefits_impact.humanize %></td>
+                  </tr>
+                <% end %>
+                <% if @lifecycle.batch_lines.empty? %>
+                  <tr>
+                    <td colspan="4" class="px-5 py-5 text-sm text-slate-600">No approved lifecycle events were included.</td>
+                  </tr>
+                <% end %>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="min-w-0">
+          <div class="border-b border-slate-100 px-5 py-3">
+            <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Holdbacks</p>
+          </div>
+          <div class="divide-y divide-slate-100">
+            <% @lifecycle.batch_holdbacks.each do |holdback| %>
+              <div class="p-5">
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                  <div class="min-w-0">
+                    <p class="font-semibold text-slate-950"><%= holdback.employee_name %></p>
+                    <p class="mt-1 text-sm text-slate-500"><%= holdback.event_type.humanize %> · effective <%= holdback.effective_on.strftime("%b %-d, %Y") %></p>
+                  </div>
+                  <%= status_pill(holdback.status) %>
+                </div>
+                <p class="mt-3 text-sm leading-6 text-slate-600"><%= holdback.reason %></p>
+              </div>
+            <% end %>
+            <% if @lifecycle.batch_holdbacks.empty? %>
+              <div class="p-5">
+                <p class="font-semibold text-slate-950">No holdbacks</p>
+                <p class="mt-2 text-sm leading-6 text-slate-600">All approved lifecycle events were included in the latest batch.</p>
+              </div>
+            <% end %>
+          </div>
+        </div>
+      </div>
+    <% else %>
+      <div class="p-5">
+        <p class="font-semibold text-slate-950">No generated lifecycle batch</p>
+        <p class="mt-2 text-sm leading-6 text-slate-600">Approved changes and holdbacks will appear here after generation.</p>
+      </div>
+    <% end %>
+  </section>
+</section>

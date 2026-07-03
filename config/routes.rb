@@ -16,6 +16,9 @@ Rails.application.routes.draw do
   end
 
   get "workforce", to: "operations#workforce"
+  get "lifecycle", to: "lifecycle#show"
+  post "lifecycle/events/:id/approve", to: "lifecycle#approve_event", as: :approve_lifecycle_event
+  post "lifecycle/sync_batch", to: "lifecycle#generate_batch", as: :generate_lifecycle_sync_batch
   get "company/setup", to: "company_setup#show", as: :company_setup
   post "company/setup/:step_key/complete", to: "company_setup#complete_step", as: :complete_company_setup_step
   get "onboarding", to: "onboarding#show"

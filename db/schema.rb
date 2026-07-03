@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_03_140000) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_03_150000) do
   create_table "api_request_logs", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.integer "duration_ms"
@@ -152,6 +152,24 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_03_140000) do
     t.index ["employee_id", "document_type"], name: "index_employee_documents_on_employee_id_and_document_type"
     t.index ["employee_id"], name: "index_employee_documents_on_employee_id"
     t.index ["status", "expires_on"], name: "index_employee_documents_on_status_and_expires_on"
+  end
+
+  create_table "employee_lifecycle_events", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.date "effective_on", null: false
+    t.integer "employee_id", null: false
+    t.string "event_type", null: false
+    t.json "metadata", default: {}, null: false
+    t.datetime "reviewed_at"
+    t.string "source", default: "ops_console", null: false
+    t.string "status", default: "draft", null: false
+    t.string "summary", null: false
+    t.datetime "synced_at"
+    t.datetime "updated_at", null: false
+    t.index ["employee_id", "effective_on"], name: "idx_on_employee_id_effective_on_68cdb12e02"
+    t.index ["employee_id"], name: "index_employee_lifecycle_events_on_employee_id"
+    t.index ["event_type"], name: "index_employee_lifecycle_events_on_event_type"
+    t.index ["status", "effective_on"], name: "index_employee_lifecycle_events_on_status_and_effective_on"
   end
 
   create_table "employees", force: :cascade do |t|
@@ -429,6 +447,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_03_140000) do
   add_foreign_key "departments", "employers"
   add_foreign_key "dependents", "employees"
   add_foreign_key "employee_documents", "employees"
+  add_foreign_key "employee_lifecycle_events", "employees"
   add_foreign_key "employees", "departments"
   add_foreign_key "employees", "employers"
   add_foreign_key "employees", "work_locations"

@@ -17,7 +17,7 @@ module ApplicationHelper
     palette = case normalized
     when "active", "available", "accepted", "approved", "complete", "processed", "succeeded", "finalized", "ready", "connected", "verified", "paid", "eligible", "enrolled", "synced"
       "bg-emerald-50 text-emerald-700 ring-emerald-200"
-    when "pending", "requested", "received", "onboarding", "estimated", "open", "running", "in_progress", "scheduled", "remote_pending"
+    when "pending", "requested", "received", "onboarding", "estimated", "open", "running", "in_progress", "scheduled", "remote_pending", "sync_queued"
       "bg-cyan-50 text-cyan-700 ring-cyan-200"
     when "needs_credentials", "waiting_on_enrollment", "needs_review", "draft", "not_synced", "waived", "unmatched_organization", "missing"
       "bg-amber-50 text-amber-800 ring-amber-200"

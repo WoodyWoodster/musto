@@ -50,6 +50,31 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     time_start = @payroll_run.period_start_on.in_time_zone.change(hour: 9, min: 0)
     @approved_time_entry = @employee.time_entries.create!(work_date: @payroll_run.period_start_on, clock_in_at: time_start, clock_out_at: time_start + 8.hours, break_minutes: 30, source: "web", status: "approved", approved_at: 1.hour.ago, reviewed_at: 1.hour.ago, notes: "Regular shift")
     @submitted_time_entry = @employee.time_entries.create!(work_date: @payroll_run.period_start_on + 1.day, clock_in_at: time_start + 1.day, clock_out_at: time_start + 1.day + 9.hours, break_minutes: 45, source: "mobile", status: "submitted", notes: "Needs manager review")
+    @lifecycle_event = @employee.employee_lifecycle_events.create!(
+      event_type: "compensation_change",
+      effective_on: Date.current + 14.days,
+      summary: "Casey Ng base compensation adjustment for the next payroll period.",
+      status: "draft",
+      metadata: {
+        changes: { compensation_cents: { from: 115_000_00, to: 122_000_00 } },
+        payroll_impact: "pay_rate_update",
+        benefits_impact: "none",
+        compliance_impact: "none"
+      }
+    )
+    @approved_lifecycle_event = @employee.employee_lifecycle_events.create!(
+      event_type: "termination",
+      effective_on: Date.current + 30.days,
+      summary: "Casey Ng planned separation with final pay and benefits offboarding.",
+      status: "approved",
+      reviewed_at: 1.day.ago,
+      metadata: {
+        changes: { employment_status: { from: "active", to: "terminated" } },
+        payroll_impact: "final_pay",
+        benefits_impact: "end_coverage",
+        compliance_impact: "cobra_review"
+      }
+    )
     @contractor = @employer.contractors.create!(
       first_name: "Devon",
       last_name: "Stone",
@@ -133,6 +158,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       root_path,
       company_setup_path,
       workforce_path,
+      lifecycle_path,
       onboarding_path,
       time_off_path,
       timesheets_path,
@@ -162,6 +188,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     dashboard = DashboardQuery.new.call
     company = Company::SetupQuery.new.call
     workforce = Operations::WorkforceQuery.new.call
+    lifecycle = Lifecycle::CommandCenterQuery.new.call
     payroll = Operations::PayrollQuery.new.call
     onboarding = Onboarding::CommandCenterQuery.new.call
     time_off = TimeOff::CommandCenterQuery.new.call
@@ -182,6 +209,10 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_instance_of Company::SetupStepDto, company.steps.first
     assert_instance_of Company::MetricDto, company.metrics.first
     assert_instance_of Operations::WorkforceEmployeeDto, workforce.fetch(:employees).first
+    assert_instance_of Lifecycle::CenterDto, lifecycle
+    assert_instance_of Lifecycle::MetricDto, lifecycle.metrics.first
+    assert_instance_of Lifecycle::EventDto, lifecycle.events.first
+    assert_instance_of Lifecycle::ImpactItemDto, lifecycle.impact_items.first
     assert_instance_of Operations::PayrollRunDto, payroll.fetch(:payroll_runs).first
     assert_instance_of Onboarding::CommandCenterDto, onboarding
     assert_instance_of Onboarding::EmployeeReadinessDto, onboarding.readiness.first
@@ -361,6 +392,57 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     step = @employer.settings.fetch("setup_steps").fetch("launch_review")
     assert_equal "ops_console", step.fetch("completed_by")
     assert_not_nil step.fetch("completed_at")
+  end
+
+  test "lifecycle command center exposes employee change DTOs" do
+    detail = Lifecycle::CommandCenterQuery.new.call
+
+    assert_instance_of Lifecycle::CenterDto, detail
+    assert_instance_of Lifecycle::MetricDto, detail.metrics.first
+    assert_instance_of Lifecycle::EventDto, detail.events.first
+    assert_instance_of Lifecycle::ImpactItemDto, detail.impact_items.first
+    assert detail.pending_events.any? { |event| event.id == @lifecycle_event.id }
+    assert detail.approved_events.any? { |event| event.id == @approved_lifecycle_event.id }
+
+    get lifecycle_path
+
+    assert_response :success
+    assert_select "h1", "Employee lifecycle command center"
+    assert_select "h2", "Lifecycle review queue"
+    assert_select "h2", "Lifecycle impact checks"
+    assert_select "h2", "Employee change ledger"
+    assert_select "h2", "Lifecycle sync ledger"
+  end
+
+  test "approves a lifecycle event through command action" do
+    post approve_lifecycle_event_path(@lifecycle_event), params: { reviewed_by: "ops_console" }
+
+    assert_redirected_to lifecycle_path
+    @lifecycle_event.reload
+    assert_equal "approved", @lifecycle_event.status
+    assert_equal "ops_console", @lifecycle_event.metadata.fetch("reviewed_by")
+    assert_not_nil @lifecycle_event.reviewed_at
+  end
+
+  test "generates a lifecycle sync batch through command action" do
+    post generate_lifecycle_sync_batch_path
+
+    assert_redirected_to lifecycle_path
+    batch = @employer.reload.settings.fetch("lifecycle_sync_batch")
+    assert_match(/\Alifecycle_sync_#{@employer.id}_/, batch.fetch("batch_id"))
+    assert_equal "ops_console", batch.fetch("requested_by")
+    assert_equal 1, batch.fetch("totals").fetch("event_count")
+    assert_equal 1, batch.fetch("totals").fetch("employee_count")
+    assert_equal 1, batch.fetch("totals").fetch("holdback_count")
+    assert_equal 1, batch.fetch("totals").fetch("benefit_impact_count")
+    assert_equal 1, batch.fetch("totals").fetch("payroll_impact_count")
+    assert_equal @approved_lifecycle_event.id, batch.fetch("events").first.fetch("event_id")
+    assert_equal "sync_queued", @approved_lifecycle_event.reload.status
+
+    detail = Lifecycle::CommandCenterQuery.new.call
+    assert_instance_of Lifecycle::SyncBatchDto, detail.latest_batch
+    assert_instance_of Lifecycle::SyncLineDto, detail.batch_lines.first
+    assert_instance_of Lifecycle::SyncHoldbackDto, detail.batch_holdbacks.first
   end
 
   test "onboarding command center exposes readiness and review DTOs" do

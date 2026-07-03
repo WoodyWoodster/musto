@@ -5,6 +5,7 @@ class Employee < ApplicationRecord
 
   has_many :enrollments, dependent: :destroy
   has_many :dependents, dependent: :destroy
+  has_many :employee_lifecycle_events, dependent: :destroy
   has_many :payroll_deductions, dependent: :destroy
   has_many :benefit_plans, through: :enrollments
   has_many :onboarding_tasks, dependent: :destroy
