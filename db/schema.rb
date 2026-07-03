@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_03_193000) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_03_194500) do
   create_table "api_request_logs", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.integer "duration_ms"
@@ -478,6 +478,28 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_03_193000) do
     t.index ["payroll_run_id"], name: "index_payroll_adjustments_on_payroll_run_id"
   end
 
+  create_table "payroll_approval_steps", force: :cascade do |t|
+    t.datetime "completed_at"
+    t.string "completed_by"
+    t.datetime "created_at", null: false
+    t.datetime "due_at", null: false
+    t.string "key", null: false
+    t.json "metadata", default: {}, null: false
+    t.string "owner", null: false
+    t.integer "payroll_run_id", null: false
+    t.integer "payroll_schedule_id"
+    t.integer "position", default: 0, null: false
+    t.string "severity", default: "medium", null: false
+    t.string "status", default: "open", null: false
+    t.string "title", null: false
+    t.datetime "updated_at", null: false
+    t.index ["payroll_run_id", "key"], name: "index_payroll_approval_steps_on_payroll_run_id_and_key", unique: true
+    t.index ["payroll_run_id"], name: "index_payroll_approval_steps_on_payroll_run_id"
+    t.index ["payroll_schedule_id"], name: "index_payroll_approval_steps_on_payroll_schedule_id"
+    t.index ["position", "due_at"], name: "index_payroll_approval_steps_on_position_and_due_at"
+    t.index ["status", "due_at"], name: "index_payroll_approval_steps_on_status_and_due_at"
+  end
+
   create_table "payroll_deductions", force: :cascade do |t|
     t.integer "amount_cents", default: 0, null: false
     t.string "code", null: false
@@ -510,6 +532,26 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_03_193000) do
     t.index ["employer_id", "pay_date"], name: "index_payroll_runs_on_employer_id_and_pay_date"
     t.index ["employer_id", "status"], name: "index_payroll_runs_on_employer_id_and_status"
     t.index ["employer_id"], name: "index_payroll_runs_on_employer_id"
+  end
+
+  create_table "payroll_schedules", force: :cascade do |t|
+    t.datetime "approval_deadline_at", null: false
+    t.string "cadence", null: false
+    t.datetime "created_at", null: false
+    t.integer "employer_id", null: false
+    t.datetime "funding_deadline_at", null: false
+    t.json "metadata", default: {}, null: false
+    t.string "name", null: false
+    t.date "next_pay_date", null: false
+    t.date "next_period_end_on", null: false
+    t.date "next_period_start_on", null: false
+    t.date "period_anchor_on", null: false
+    t.string "status", default: "active", null: false
+    t.string "timezone", default: "America/Los_Angeles", null: false
+    t.datetime "updated_at", null: false
+    t.index ["employer_id", "name"], name: "index_payroll_schedules_on_employer_id_and_name", unique: true
+    t.index ["employer_id", "status", "next_pay_date"], name: "idx_on_employer_id_status_next_pay_date_a9008d209f"
+    t.index ["employer_id"], name: "index_payroll_schedules_on_employer_id"
   end
 
   create_table "sync_runs", force: :cascade do |t|
@@ -654,10 +696,13 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_03_193000) do
   add_foreign_key "pay_statements", "payroll_runs"
   add_foreign_key "payroll_adjustments", "employees"
   add_foreign_key "payroll_adjustments", "payroll_runs"
+  add_foreign_key "payroll_approval_steps", "payroll_runs"
+  add_foreign_key "payroll_approval_steps", "payroll_schedules"
   add_foreign_key "payroll_deductions", "employees"
   add_foreign_key "payroll_deductions", "enrollments"
   add_foreign_key "payroll_deductions", "payroll_runs"
   add_foreign_key "payroll_runs", "employers"
+  add_foreign_key "payroll_schedules", "employers"
   add_foreign_key "sync_runs", "integration_connections"
   add_foreign_key "time_entries", "employees"
   add_foreign_key "time_off_policies", "employers"

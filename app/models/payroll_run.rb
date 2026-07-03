@@ -4,6 +4,7 @@ class PayrollRun < ApplicationRecord
   has_many :payroll_deductions, dependent: :destroy
   has_many :payroll_adjustments, dependent: :destroy
   has_many :pay_statements, dependent: :destroy
+  has_many :payroll_approval_steps, dependent: :destroy
 
   validates :period_start_on, :period_end_on, :pay_date, :status, presence: true
   validates :gross_pay_cents, numericality: { greater_than_or_equal_to: 0 }

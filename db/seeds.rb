@@ -509,6 +509,8 @@ employees.each_with_index do |employee, employee_index|
   end
 end
 
+PayrollCalendar::CalendarRepository.new(employer:).generate_checklist(requested_by: "seed_data")
+
 contractors = [
   [ "Devon", "Stone", "devon.stone@example.com", "Stone Ops LLC", "company", "active", "complete", "verified", 9_500 ],
   [ "Kai", "Mendez", "kai.mendez@example.com", nil, "individual", "onboarding", "missing", "missing", 7_500 ],

@@ -53,6 +53,8 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     @waivable_deduction = @payroll_run.payroll_deductions.create!(employee: @employee, enrollment: @waivable_enrollment, code: "VITABLE_VISION", amount_cents: 0, status: "waiting_on_enrollment")
     @payroll_adjustment = @payroll_run.payroll_adjustments.create!(employee: @employee, adjustment_type: "bonus", description: "Quarterly performance bonus", amount_cents: 1_500_00, taxable: true)
     @pay_statement = @payroll_run.pay_statements.create!(employee: @employee, statement_number: "PS-#{@payroll_run.id}-#{@employee.id}", period_start_on: @payroll_run.period_start_on, period_end_on: @payroll_run.period_end_on, pay_date: @payroll_run.pay_date, gross_pay_cents: 4_791_66, adjustment_cents: @payroll_adjustment.amount_cents, deduction_cents: 9_900, tax_cents: 86_250, net_pay_cents: 5_345_16)
+    @payroll_schedule = @employer.payroll_schedules.create!(name: "Primary payroll schedule", cadence: "biweekly", period_anchor_on: @payroll_run.period_start_on, next_period_start_on: @payroll_run.period_start_on, next_period_end_on: @payroll_run.period_end_on, next_pay_date: @payroll_run.pay_date, approval_deadline_at: @payroll_run.pay_date.in_time_zone.change(hour: 12) - 2.days, funding_deadline_at: @payroll_run.pay_date.in_time_zone.change(hour: 14) - 1.day)
+    @payroll_approval_step = @payroll_run.payroll_approval_steps.create!(payroll_schedule: @payroll_schedule, key: "adjustment_review", title: "Certify payroll adjustments", owner: "Payroll", status: "open", due_at: @payroll_schedule.approval_deadline_at - 4.hours, position: 2, metadata: { detail: "One adjustment needs payroll approval.", count: 1, amount_cents: @payroll_adjustment.amount_cents })
     @benefit_invoice = @employer.benefit_invoices.create!(invoice_number: "VIT-#{@employer.id}-#{Date.current.strftime("%Y%m")}", carrier: "Vitable", period_start_on: Date.current.beginning_of_month, period_end_on: Date.current.end_of_month, due_on: Date.current.end_of_month + 10.days, status: "needs_review", total_premium_cents: 15_400, employee_contribution_cents: 9_900, employer_contribution_cents: 5_500, variance_cents: 1_000)
     @benefit_invoice_line = @benefit_invoice.benefit_invoice_lines.create!(employee: @employee, benefit_plan: @plan, enrollment: @enrollment, coverage_level: "employee", amount_cents: 9_900, expected_premium_cents: 9_900, expected_payroll_deduction_cents: 9_900, employee_contribution_cents: 9_900, employer_contribution_cents: 0, variance_cents: 0, status: "matched")
     @benefit_invoice_variance_line = @benefit_invoice.benefit_invoice_lines.create!(employee: @employee, benefit_plan: @pending_plan, enrollment: @pending_enrollment, coverage_level: "employee", amount_cents: 5_500, expected_premium_cents: 4_500, expected_payroll_deduction_cents: 0, employee_contribution_cents: 0, employer_contribution_cents: 5_500, variance_cents: 1_000, status: "variance")
@@ -179,6 +181,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       contractors_path,
       compensation_path,
       taxes_path,
+      payroll_calendar_path,
       payroll_funding_path,
       pay_statements_path,
       benefits_billing_path,
@@ -208,6 +211,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     workforce = Operations::WorkforceQuery.new.call
     lifecycle = Lifecycle::CommandCenterQuery.new.call
     payroll = Operations::PayrollQuery.new.call
+    payroll_calendar = PayrollCalendar::CenterQuery.new.call
     onboarding = Onboarding::CommandCenterQuery.new.call
     documents = Documents::CenterQuery.new.call
     time_off = TimeOff::CommandCenterQuery.new.call
@@ -238,6 +242,13 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_instance_of Lifecycle::EventDto, lifecycle.events.first
     assert_instance_of Lifecycle::ImpactItemDto, lifecycle.impact_items.first
     assert_instance_of Operations::PayrollRunDto, payroll.fetch(:payroll_runs).first
+    assert_instance_of PayrollCalendar::CenterDto, payroll_calendar
+    assert_instance_of PayrollCalendar::MetricDto, payroll_calendar.metrics.first
+    assert_instance_of PayrollCalendar::ScheduleDto, payroll_calendar.schedule
+    assert_instance_of PayrollCalendar::RunDto, payroll_calendar.payroll_run
+    assert_instance_of PayrollCalendar::ApprovalStepDto, payroll_calendar.approval_steps.first
+    assert_instance_of PayrollCalendar::CalendarEventDto, payroll_calendar.calendar_events.first
+    assert_instance_of PayrollCalendar::RiskDto, payroll_calendar.risks.first
     assert_instance_of Onboarding::CommandCenterDto, onboarding
     assert_instance_of Onboarding::EmployeeReadinessDto, onboarding.readiness.first
     assert_instance_of Onboarding::TaskDto, onboarding.tasks.first
@@ -709,6 +720,62 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_instance_of Expenses::BatchDto, detail.latest_batch
     assert_instance_of Expenses::BatchLineDto, detail.batch_lines.first
     assert_instance_of Expenses::BatchHoldbackDto, detail.batch_holdbacks.first
+  end
+
+  test "payroll calendar center exposes approval control DTOs" do
+    detail = PayrollCalendar::CenterQuery.new.call
+
+    assert_instance_of PayrollCalendar::CenterDto, detail
+    assert_instance_of PayrollCalendar::MetricDto, detail.metrics.first
+    assert_instance_of PayrollCalendar::ScheduleDto, detail.schedule
+    assert_instance_of PayrollCalendar::RunDto, detail.payroll_run
+    assert_instance_of PayrollCalendar::ApprovalStepDto, detail.approval_steps.first
+    assert_instance_of PayrollCalendar::CalendarEventDto, detail.calendar_events.first
+    assert_instance_of PayrollCalendar::RiskDto, detail.risks.first
+    assert detail.incomplete_steps.any? { |step| step.id == @payroll_approval_step.id }
+
+    get payroll_calendar_path
+
+    assert_response :success
+    assert_select "h1", "Payroll calendar control center"
+    assert_select "h2", "Pay cycle control tower"
+    assert_select "h2", "Cutoff calendar"
+    assert_select "h2", "Approval checklist"
+    assert_select "h2", "Payroll risks"
+    assert_select "h2", "Checklist ledger"
+  end
+
+  test "generates payroll calendar approval checklist through command action" do
+    post generate_payroll_calendar_checklist_path
+
+    assert_redirected_to payroll_calendar_path
+    batch = @employer.reload.settings.fetch("payroll_calendar_checklist")
+    assert_match(/\Apayroll_calendar_#{@employer.id}_#{@payroll_run.id}_/, batch.fetch("batch_id"))
+    assert_equal "ops_console", batch.fetch("requested_by")
+    assert_equal 7, batch.fetch("totals").fetch("step_count")
+    assert_operator batch.fetch("totals").fetch("blocked_count"), :>, 0
+    assert_equal 7, @payroll_run.payroll_approval_steps.count
+
+    follow_redirect!
+
+    assert_response :success
+    assert_includes response.body, batch.fetch("batch_id")
+    assert_select "p", "Blocked"
+
+    detail = PayrollCalendar::CenterQuery.new.call
+    assert_instance_of PayrollCalendar::ChecklistDto, detail.latest_checklist
+    assert_instance_of PayrollCalendar::ChecklistLineDto, detail.checklist_lines.first
+  end
+
+  test "completes a payroll approval step through command action" do
+    post complete_payroll_approval_step_path(@payroll_approval_step), params: { completed_by: "ops_console" }
+
+    assert_redirected_to payroll_calendar_path
+    @payroll_approval_step.reload
+    assert_equal "completed", @payroll_approval_step.status
+    assert_equal "ops_console", @payroll_approval_step.completed_by
+    assert_equal "ops_console", @payroll_approval_step.metadata.fetch("completed_by")
+    assert_not_nil @payroll_approval_step.completed_at
   end
 
   test "payroll funding center exposes direct deposit DTOs" do

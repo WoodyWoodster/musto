@@ -8,6 +8,7 @@ class Employer < ApplicationRecord
   has_many :benefit_plans, dependent: :destroy
   has_many :benefit_invoices, dependent: :destroy
   has_many :open_enrollment_campaigns, dependent: :destroy
+  has_many :payroll_schedules, dependent: :destroy
   has_many :payroll_runs, dependent: :destroy
   has_many :employer_bank_accounts, dependent: :destroy
   has_many :enrollments, through: :employees

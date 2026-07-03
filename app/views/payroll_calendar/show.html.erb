@@ -1,0 +1,268 @@
+<section class="space-y-7">
+  <div class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div class="grid xl:grid-cols-[1.2fr_0.8fr]">
+      <div class="p-6 lg:p-8">
+        <div class="flex flex-wrap items-center gap-2">
+          <%= status_pill(@calendar.ready_for_final_approval? ? "ready" : "needs_review") %>
+          <span class="rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-800 ring-1 ring-inset ring-indigo-200">Payroll calendar</span>
+          <span class="rounded-full bg-cyan-50 px-3 py-1 text-xs font-semibold text-cyan-800 ring-1 ring-inset ring-cyan-200">Approval controls</span>
+        </div>
+
+        <h1 class="mt-5 text-4xl font-semibold tracking-tight text-slate-950">Payroll calendar control center</h1>
+        <p class="mt-3 max-w-3xl text-base leading-7 text-slate-600">
+          Coordinate payroll cutoffs, manager approvals, Vitable deduction readiness, ACH funding, and final run approval for <%= @calendar.employer&.name || "your employer portfolio" %>.
+        </p>
+
+        <div class="mt-6 flex flex-wrap gap-3">
+          <%= link_to "Payroll readiness", payroll_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
+          <%= link_to "Funding", payroll_funding_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
+          <%= link_to "Timesheets", timesheets_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
+          <%= link_to "Pay statements", pay_statements_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
+          <%= button_to "Generate checklist", generate_payroll_calendar_checklist_path, method: :post, params: { requested_by: "ops_console" }, class: "rounded-md bg-slate-950 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-slate-800" %>
+        </div>
+      </div>
+
+      <aside class="border-t border-slate-200 bg-slate-950 p-6 text-white xl:border-l xl:border-t-0 xl:p-8">
+        <p class="text-xs font-semibold uppercase tracking-[0.2em] text-sky-300">Pay cycle</p>
+        <% if @calendar.schedule.present? %>
+          <div class="mt-6 flex flex-wrap items-center gap-2">
+            <%= status_pill(@calendar.schedule.status) %>
+            <span class="rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-slate-200"><%= @calendar.schedule.cadence.humanize %></span>
+          </div>
+          <p class="mt-5 text-3xl font-semibold tracking-tight"><%= @calendar.schedule.next_pay_date.strftime("%b %-d") %></p>
+          <p class="mt-2 text-sm leading-6 text-slate-300"><%= @calendar.schedule.name %> · <%= @calendar.schedule.next_period_start_on.strftime("%b %-d") %> to <%= @calendar.schedule.next_period_end_on.strftime("%b %-d, %Y") %></p>
+          <div class="mt-6 grid grid-cols-2 gap-3">
+            <div class="rounded-md bg-white/10 p-4">
+              <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Approval cutoff</p>
+              <p class="mt-2 text-sm font-semibold"><%= @calendar.schedule.approval_deadline_at.strftime("%b %-d, %-l:%M %p") %></p>
+            </div>
+            <div class="rounded-md bg-white/10 p-4">
+              <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Funding cutoff</p>
+              <p class="mt-2 text-sm font-semibold"><%= @calendar.schedule.funding_deadline_at.strftime("%b %-d, %-l:%M %p") %></p>
+            </div>
+          </div>
+        <% else %>
+          <p class="mt-6 text-3xl font-semibold tracking-tight">No schedule</p>
+          <p class="mt-2 text-sm leading-6 text-slate-300">Generate a checklist to create the primary payroll schedule.</p>
+        <% end %>
+      </aside>
+    </div>
+  </div>
+
+  <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+    <% @calendar.metrics.each do |metric| %>
+      <article class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <div class="flex items-center justify-between gap-3">
+          <p class="text-sm font-medium text-slate-500"><%= metric.label %></p>
+          <span class="h-2.5 w-2.5 shrink-0 rounded-full <%= metric.accent %>"></span>
+        </div>
+        <p class="mt-4 text-3xl font-semibold tracking-tight text-slate-950"><%= metric.format == "money" ? money_cents(metric.value) : compact_number(metric.value) %></p>
+        <div class="mt-2 flex flex-wrap items-center gap-2">
+          <%= status_pill(metric.status) %>
+          <p class="text-sm text-slate-500"><%= metric.hint %></p>
+        </div>
+      </article>
+    <% end %>
+  </div>
+
+  <div class="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
+    <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="border-b border-slate-100 px-5 py-4">
+        <h2 class="text-base font-semibold text-slate-950">Pay cycle control tower</h2>
+        <p class="text-sm text-slate-500">Current run value, payroll period, statement coverage, and lock status.</p>
+      </div>
+      <% if @calendar.payroll_run.present? %>
+        <div class="p-5">
+          <div class="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p class="text-sm font-semibold text-slate-500">Current payroll run</p>
+              <h3 class="mt-2 text-2xl font-semibold tracking-tight text-slate-950"><%= @calendar.payroll_run.pay_date.strftime("%B %-d, %Y") %></h3>
+              <p class="mt-2 text-sm text-slate-500"><%= @calendar.payroll_run.period_start_on.strftime("%b %-d") %> to <%= @calendar.payroll_run.period_end_on.strftime("%b %-d, %Y") %></p>
+            </div>
+            <%= status_pill(@calendar.payroll_run.status) %>
+          </div>
+          <dl class="mt-6 grid grid-cols-2 gap-2 md:grid-cols-4">
+            <div class="rounded-md bg-slate-50 px-3 py-4">
+              <dt class="text-xs font-medium text-slate-500">Gross</dt>
+              <dd class="mt-2 text-lg font-semibold text-slate-950"><%= money_cents(@calendar.payroll_run.gross_pay_cents) %></dd>
+            </div>
+            <div class="rounded-md bg-slate-50 px-3 py-4">
+              <dt class="text-xs font-medium text-slate-500">Deductions</dt>
+              <dd class="mt-2 text-lg font-semibold text-amber-700"><%= money_cents(@calendar.payroll_run.deduction_cents) %></dd>
+            </div>
+            <div class="rounded-md bg-slate-50 px-3 py-4">
+              <dt class="text-xs font-medium text-slate-500">Net</dt>
+              <dd class="mt-2 text-lg font-semibold text-indigo-700"><%= money_cents(@calendar.payroll_run.estimated_net_pay_cents) %></dd>
+            </div>
+            <div class="rounded-md bg-slate-50 px-3 py-4">
+              <dt class="text-xs font-medium text-slate-500">Statements</dt>
+              <dd class="mt-2 text-lg font-semibold text-slate-950"><%= compact_number(@calendar.payroll_run.statement_count) %></dd>
+            </div>
+          </dl>
+          <div class="mt-5 flex flex-wrap gap-3">
+            <%= link_to "Open run", payroll_run_path(@calendar.payroll_run.id), class: "text-sm font-semibold text-cyan-700 hover:text-cyan-900" %>
+            <%= link_to "Benefits export", payroll_run_benefits_export_path(@calendar.payroll_run.id), class: "text-sm font-semibold text-cyan-700 hover:text-cyan-900" %>
+          </div>
+        </div>
+      <% else %>
+        <div class="p-5">
+          <p class="font-semibold text-slate-950">No payroll run</p>
+          <p class="mt-2 text-sm leading-6 text-slate-600">Generate a checklist to create a schedule-backed estimated run.</p>
+        </div>
+      <% end %>
+    </section>
+
+    <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="border-b border-slate-100 px-5 py-4">
+        <h2 class="text-base font-semibold text-slate-950">Cutoff calendar</h2>
+        <p class="text-sm text-slate-500">Approval, funding, benefits export, and payday deadlines in order.</p>
+      </div>
+      <div class="divide-y divide-slate-100">
+        <% @calendar.calendar_events.each do |event| %>
+          <div class="flex items-start gap-4 p-5">
+            <div class="mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-slate-950 text-xs font-semibold text-white"><%= event.event_at.strftime("%d") %></div>
+            <div class="min-w-0 flex-1">
+              <div class="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400"><%= event.owner %> · <%= event.kind.humanize %></p>
+                  <h3 class="mt-2 font-semibold text-slate-950"><%= event.title %></h3>
+                </div>
+                <%= status_pill(event.status) %>
+              </div>
+              <p class="mt-2 text-sm leading-6 text-slate-600"><%= event.detail %></p>
+              <p class="mt-2 text-xs font-semibold uppercase tracking-wide text-slate-400"><%= event.event_at.strftime("%b %-d, %-l:%M %p") %></p>
+            </div>
+          </div>
+        <% end %>
+        <% if @calendar.calendar_events.empty? %>
+          <div class="p-5">
+            <p class="font-semibold text-slate-950">No calendar events</p>
+            <p class="mt-2 text-sm leading-6 text-slate-600">Generate a payroll checklist to populate cutoff events.</p>
+          </div>
+        <% end %>
+      </div>
+    </section>
+  </div>
+
+  <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div class="border-b border-slate-100 px-5 py-4">
+      <h2 class="text-base font-semibold text-slate-950">Approval checklist</h2>
+      <p class="text-sm text-slate-500">Cross-functional payroll controls, owners, due dates, blocker counts, and completion actions.</p>
+    </div>
+    <div class="grid gap-px bg-slate-100 md:grid-cols-2 xl:grid-cols-3">
+      <% @calendar.approval_steps.each do |step| %>
+        <article class="bg-white p-5">
+          <div class="flex items-start justify-between gap-3">
+            <div>
+              <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400"><%= step.owner %> · <%= step.severity %></p>
+              <h3 class="mt-2 font-semibold text-slate-950"><%= step.title %></h3>
+            </div>
+            <%= status_pill(step.overdue? ? "overdue" : step.status) %>
+          </div>
+          <p class="mt-3 text-sm leading-6 text-slate-600"><%= step.detail %></p>
+          <div class="mt-4 grid grid-cols-2 gap-2 text-center">
+            <div class="rounded-md bg-slate-50 px-2 py-3">
+              <p class="text-xs text-slate-500">Records</p>
+              <p class="mt-1 text-lg font-semibold text-slate-950"><%= compact_number(step.count) %></p>
+            </div>
+            <div class="rounded-md bg-slate-50 px-2 py-3">
+              <p class="text-xs text-slate-500">Exposure</p>
+              <p class="mt-1 text-lg font-semibold text-slate-950"><%= money_cents(step.amount_cents) %></p>
+            </div>
+          </div>
+          <div class="mt-4 flex flex-wrap items-center justify-between gap-3">
+            <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Due <%= step.due_at.strftime("%b %-d, %-l:%M %p") %></p>
+            <% if step.completable? %>
+              <%= button_to "Complete", complete_payroll_approval_step_path(step.id), method: :post, params: { completed_by: "ops_console" }, class: "rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700" %>
+            <% else %>
+              <span class="text-sm font-medium text-slate-500"><%= step.completed? ? "Completed" : "Resolve blocker" %></span>
+            <% end %>
+          </div>
+        </article>
+      <% end %>
+      <% if @calendar.approval_steps.empty? %>
+        <div class="bg-white p-5 md:col-span-2 xl:col-span-3">
+          <p class="font-semibold text-slate-950">No approval checklist</p>
+          <p class="mt-2 text-sm leading-6 text-slate-600">Generate the checklist to create owner-specific payroll controls for the current run.</p>
+        </div>
+      <% end %>
+    </div>
+  </section>
+
+  <div class="grid gap-6 xl:grid-cols-[1fr_0.9fr]">
+    <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="border-b border-slate-100 px-5 py-4">
+        <h2 class="text-base font-semibold text-slate-950">Payroll risks</h2>
+        <p class="text-sm text-slate-500">Blockers that can delay payroll approval, ACH funding, or employee pay statements.</p>
+      </div>
+      <div class="divide-y divide-slate-100">
+        <% @calendar.risks.each do |risk| %>
+          <div class="p-5">
+            <div class="flex flex-wrap items-start justify-between gap-3">
+              <div class="min-w-0">
+                <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400"><%= risk.owner %> · <%= risk.severity %></p>
+                <h3 class="mt-2 text-base font-semibold text-slate-950"><%= risk.title %></h3>
+              </div>
+              <%= status_pill(risk.status) %>
+            </div>
+            <p class="mt-3 text-sm leading-6 text-slate-600"><%= risk.detail %></p>
+            <div class="mt-4 flex flex-wrap items-center justify-between gap-3">
+              <span class="rounded-md bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700"><%= compact_number(risk.count) %> records · <%= money_cents(risk.amount_cents) %></span>
+              <%= link_to "Open workflow", risk.action_path, class: "text-sm font-semibold text-cyan-700 hover:text-cyan-900" %>
+            </div>
+          </div>
+        <% end %>
+      </div>
+    </section>
+
+    <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="border-b border-slate-100 px-5 py-4">
+        <h2 class="text-base font-semibold text-slate-950">Checklist ledger</h2>
+        <p class="text-sm text-slate-500">Latest generated control batch and persisted line-level state.</p>
+      </div>
+      <% if @calendar.latest_checklist.present? %>
+        <div class="border-b border-slate-100 bg-slate-50 p-5">
+          <div class="flex flex-wrap items-center gap-2">
+            <%= status_pill(@calendar.latest_checklist.status) %>
+            <span class="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600 ring-1 ring-inset ring-slate-200">Checklist batch</span>
+          </div>
+          <p class="mt-3 break-all font-mono text-sm font-semibold text-slate-950"><%= @calendar.latest_checklist.batch_id %></p>
+          <p class="mt-2 text-sm text-slate-500">Generated <%= time_ago_in_words(@calendar.latest_checklist.generated_at) %> ago by <%= @calendar.latest_checklist.requested_by %></p>
+          <div class="mt-4 grid grid-cols-3 gap-2 text-center">
+            <div class="rounded-md bg-white px-3 py-3 shadow-sm ring-1 ring-inset ring-slate-200">
+              <p class="text-xs text-slate-500">Steps</p>
+              <p class="mt-1 text-lg font-semibold text-slate-950"><%= compact_number(@calendar.latest_checklist.step_count) %></p>
+            </div>
+            <div class="rounded-md bg-white px-3 py-3 shadow-sm ring-1 ring-inset ring-slate-200">
+              <p class="text-xs text-slate-500">Blocked</p>
+              <p class="mt-1 text-lg font-semibold text-slate-950"><%= compact_number(@calendar.latest_checklist.blocked_count) %></p>
+            </div>
+            <div class="rounded-md bg-white px-3 py-3 shadow-sm ring-1 ring-inset ring-slate-200">
+              <p class="text-xs text-slate-500">Done</p>
+              <p class="mt-1 text-lg font-semibold text-slate-950"><%= compact_number(@calendar.latest_checklist.completed_count) %></p>
+            </div>
+          </div>
+        </div>
+        <div class="divide-y divide-slate-100">
+          <% @calendar.checklist_lines.each do |line| %>
+            <div class="p-5">
+              <div class="flex flex-wrap items-start justify-between gap-3">
+                <div class="min-w-0">
+                  <p class="font-semibold text-slate-950"><%= line.title %></p>
+                  <p class="mt-1 text-sm text-slate-500"><%= line.owner %> · due <%= line.due_at.strftime("%b %-d, %-l:%M %p") %></p>
+                </div>
+                <%= status_pill(line.status) %>
+              </div>
+              <p class="mt-3 text-sm leading-6 text-slate-600"><%= line.detail %></p>
+            </div>
+          <% end %>
+        </div>
+      <% else %>
+        <div class="p-5">
+          <p class="font-semibold text-slate-950">No checklist batch</p>
+          <p class="mt-2 text-sm leading-6 text-slate-600">Generate the approval checklist to persist the latest payroll control ledger.</p>
+        </div>
+      <% end %>
+    </section>
+  </div>
+</section>
