@@ -1,5 +1,6 @@
 class Dependent < ApplicationRecord
   belongs_to :employee
+  has_many :dependent_verifications, dependent: :destroy
 
   validates :first_name, :last_name, :relationship, :enrollment_status, :eligibility_status, presence: true
   validates :vitable_id, uniqueness: { scope: :employee_id }, allow_blank: true

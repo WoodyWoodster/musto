@@ -20,6 +20,8 @@ class Employer < ApplicationRecord
   has_many :compensation_changes, dependent: :destroy
   has_many :employer_bank_accounts, dependent: :destroy
   has_many :enrollments, through: :employees
+  has_many :dependents, through: :employees
+  has_many :dependent_verifications, through: :dependents
   has_many :time_off_policies, dependent: :destroy
   has_many :time_off_requests, through: :employees
   has_many :time_off_accruals, through: :employees

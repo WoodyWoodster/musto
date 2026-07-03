@@ -99,6 +99,11 @@ Rails.application.routes.draw do
   post "benefits/billing/invoices/:id/approve", to: "benefits_billing#approve_invoice", as: :approve_benefit_invoice
   get "benefits/eligibility", to: "benefits_eligibility#show", as: :benefits_eligibility
   post "benefits/eligibility/batch", to: "benefits_eligibility#generate_batch", as: :generate_benefits_eligibility_batch
+  get "benefits/dependents", to: "benefits_dependent_verifications#show", as: :benefits_dependent_verifications
+  post "benefits/dependents/request_batch", to: "benefits_dependent_verifications#request_batch", as: :request_dependent_verifications
+  post "benefits/dependents/packet", to: "benefits_dependent_verifications#generate_packet", as: :generate_dependent_verification_packet
+  post "benefits/dependents/verifications/:id/approve", to: "benefits_dependent_verifications#approve", as: :approve_dependent_verification
+  post "benefits/dependents/verifications/:id/reject", to: "benefits_dependent_verifications#reject", as: :reject_dependent_verification
   get "benefits/reconciliation", to: "benefits_reconciliations#show", as: :benefits_reconciliation
   post "benefits/reconciliation/:enrollment_id/resolve", to: "benefits_reconciliations#resolve", as: :resolve_benefits_reconciliation_item
   get "compliance", to: "operations#compliance"

@@ -632,6 +632,32 @@ employees.each_with_index do |employee, index|
   end
 end
 
+employer.dependents.includes(employee: [ :employee_documents ]).each_with_index do |dependent, index|
+  document = dependent.employee.employee_documents.find { |item| item.document_type == "benefits" }
+  verification = dependent.dependent_verifications.find_or_initialize_by(
+    verification_type: dependent.relationship.in?([ "child", "step_child" ]) ? "birth_certificate" : "relationship_proof"
+  )
+  status = case index
+  when 0, 1 then "approved"
+  when 2 then "needs_review"
+  when 3 then "rejected"
+  else "requested"
+  end
+  verification.assign_attributes(
+    employee_document: status == "requested" ? nil : document,
+    status:,
+    requested_on: Date.current - 10.days,
+    due_on: Date.current + (index + 4).days,
+    reviewed_at: status.in?([ "approved", "rejected" ]) ? 2.days.ago : nil,
+    reviewed_by: status.in?([ "approved", "rejected" ]) ? "seed_data" : nil,
+    issue_code: status == "rejected" ? "document_mismatch" : nil,
+    note: status == "rejected" ? "Document relationship did not match the dependent profile." : nil,
+    metadata: { source: "seeded_dependent_verification", channel: "employee_portal" }
+  )
+  verification.save!
+  dependent.update!(enrollment_status: "enrolled", eligibility_status: "eligible") if status == "approved"
+end
+
 pto = employer.time_off_policies.find_or_initialize_by(name: "Flexible PTO")
 pto.assign_attributes(accrual_method: "annual_grant", annual_hours: 160, carryover_hours: 40, paid: true, status: "active")
 pto.save!

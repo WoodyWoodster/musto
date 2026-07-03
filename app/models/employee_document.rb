@@ -1,5 +1,6 @@
 class EmployeeDocument < ApplicationRecord
   belongs_to :employee
+  has_many :dependent_verifications, dependent: :nullify
 
   validates :title, :document_type, :status, presence: true
 

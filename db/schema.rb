@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_03_233000) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_03_234500) do
   create_table "api_request_logs", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.integer "duration_ms"
@@ -235,6 +235,26 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_03_233000) do
     t.index ["employer_id", "code"], name: "index_departments_on_employer_id_and_code", unique: true
     t.index ["employer_id"], name: "index_departments_on_employer_id"
     t.index ["manager_id"], name: "index_departments_on_manager_id"
+  end
+
+  create_table "dependent_verifications", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.integer "dependent_id", null: false
+    t.date "due_on", null: false
+    t.integer "employee_document_id"
+    t.string "issue_code"
+    t.json "metadata", default: {}, null: false
+    t.text "note"
+    t.date "requested_on", null: false
+    t.datetime "reviewed_at"
+    t.string "reviewed_by"
+    t.string "status", default: "requested", null: false
+    t.datetime "updated_at", null: false
+    t.string "verification_type", null: false
+    t.index ["dependent_id", "verification_type"], name: "idx_on_dependent_id_verification_type_6718ab903f", unique: true
+    t.index ["dependent_id"], name: "index_dependent_verifications_on_dependent_id"
+    t.index ["employee_document_id"], name: "index_dependent_verifications_on_employee_document_id"
+    t.index ["status", "due_on"], name: "index_dependent_verifications_on_status_and_due_on"
   end
 
   create_table "dependents", force: :cascade do |t|
@@ -996,6 +1016,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_03_233000) do
   add_foreign_key "contractors", "employers"
   add_foreign_key "departments", "employees", column: "manager_id"
   add_foreign_key "departments", "employers"
+  add_foreign_key "dependent_verifications", "dependents"
+  add_foreign_key "dependent_verifications", "employee_documents"
   add_foreign_key "dependents", "employees"
   add_foreign_key "employee_bank_accounts", "employees"
   add_foreign_key "employee_change_requests", "employees"

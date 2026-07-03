@@ -46,6 +46,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     @pending_document = @employee.employee_documents.create!(title: "Benefits disclosure", document_type: "benefits", status: "pending", expires_on: Date.current + 30.days, requested_at: 2.days.ago)
     @complete_document = @employee.employee_documents.create!(title: "W-4", document_type: "tax", status: "complete", issued_on: Date.current, verified_at: 1.day.ago)
     @expiring_document = @employee.employee_documents.create!(title: "Handbook acknowledgment", document_type: "policy", status: "complete", issued_on: Date.current - 1.year, expires_on: Date.current + 10.days, verified_at: 1.year.ago)
+    @dependent_verification = @dependent.dependent_verifications.create!(employee_document: @pending_document, verification_type: "relationship_proof", status: "needs_review", requested_on: Date.current - 5.days, due_on: Date.current + 9.days)
     @profile_change_request = @employee.employee_change_requests.create!(
       request_type: "profile_update",
       title: "Update preferred name",
@@ -280,6 +281,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       benefits_plan_admin_path,
       benefits_open_enrollment_path,
       benefits_eligibility_path,
+      benefits_dependent_verifications_path,
       benefits_reconciliation_path,
       enrollment_path(@pending_enrollment),
       compliance_path,
@@ -328,6 +330,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     plan_admin = Benefits::PlanAdministrationQuery.new.call
     open_enrollment = OpenEnrollment::CenterQuery.new.call
     eligibility = Benefits::EligibilityQuery.new.call
+    dependent_verifications = Benefits::DependentVerificationQuery.new.call
     reconciliation = Benefits::ReconciliationQuery.new.call
     compliance = Operations::ComplianceQuery.new.call
     integrations = Operations::IntegrationsQuery.new.call
@@ -472,6 +475,11 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_instance_of Benefits::EligibilityMemberDto, eligibility.members.first
     assert_instance_of Benefits::EligibilityDependentDto, eligibility.dependents.first
     assert_instance_of Benefits::EligibilityIssueDto, eligibility.issues.first
+    assert_instance_of Benefits::DependentVerificationCenterDto, dependent_verifications
+    assert_instance_of Benefits::DependentVerificationMetricDto, dependent_verifications.metrics.first
+    assert_instance_of Benefits::DependentVerificationDependentDto, dependent_verifications.dependents.first
+    assert_instance_of Benefits::DependentVerificationRecordDto, dependent_verifications.verifications.first
+    assert_instance_of Benefits::DependentVerificationIssueDto, dependent_verifications.issues.first
     assert_instance_of Benefits::ReconciliationDetailDto, reconciliation
     assert_instance_of Operations::ComplianceCaseDto, compliance.fetch(:cases).first
     assert_instance_of Operations::IntegrationConnectionDto, integrations.fetch(:connections).first
@@ -2029,6 +2037,98 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_instance_of Benefits::EligibilityBatchDto, detail.latest_batch
     assert_instance_of Benefits::EligibilityBatchMemberDto, detail.batch_members.first
     assert_instance_of Benefits::EligibilityBatchHoldbackDto, detail.batch_holdbacks.first
+  end
+
+  test "dependent verification center exposes dependent readiness DTOs" do
+    @pending_document.update!(status: "complete", verified_at: 1.hour.ago)
+    detail = Benefits::DependentVerificationQuery.new.call
+
+    assert_instance_of Benefits::DependentVerificationCenterDto, detail
+    assert_instance_of Benefits::DependentVerificationMetricDto, detail.metrics.first
+    assert_instance_of Benefits::DependentVerificationDependentDto, detail.dependents.first
+    assert_instance_of Benefits::DependentVerificationRecordDto, detail.verifications.first
+    assert_instance_of Benefits::DependentVerificationIssueDto, detail.issues.first
+    assert detail.reviewable_verifications.any? { |verification| verification.id == @dependent_verification.id }
+
+    get benefits_dependent_verifications_path
+
+    assert_response :success
+    assert_select "h1", "Dependent verification center"
+    assert_select "h2", "Dependent roster"
+    assert_select "h2", "Readiness issues"
+    assert_select "h2", "Verification review queue"
+    assert_select "h2", "Packet dependents"
+    assert_select "h2", "Packet holdbacks"
+  end
+
+  test "requests missing dependent verifications through command action" do
+    assert_difference -> { DependentVerification.count }, 1 do
+      post request_dependent_verifications_path, params: { requested_by: "benefits_admin" }
+    end
+
+    assert_redirected_to benefits_dependent_verifications_path
+    verification = @dependent_holdback.dependent_verifications.sole
+    assert_equal "birth_certificate", verification.verification_type
+    assert_equal "requested", verification.status
+    assert_equal "benefits_admin", verification.metadata.fetch("requested_by")
+    assert_equal "dependent_verification_center", verification.metadata.fetch("requested_from")
+  end
+
+  test "approves a dependent verification through command action" do
+    @pending_document.update!(status: "complete", verified_at: 1.hour.ago)
+
+    post approve_dependent_verification_path(@dependent_verification), params: { reviewed_by: "benefits_admin" }
+
+    assert_redirected_to benefits_dependent_verifications_path
+    @dependent_verification.reload
+    @dependent.reload
+    assert_equal "approved", @dependent_verification.status
+    assert_equal "benefits_admin", @dependent_verification.reviewed_by
+    assert_equal "enrolled", @dependent.enrollment_status
+    assert_equal "eligible", @dependent.eligibility_status
+  end
+
+  test "rejects a dependent verification through command action" do
+    verification = @dependent_holdback.dependent_verifications.create!(
+      employee_document: @pending_document,
+      verification_type: "birth_certificate",
+      status: "needs_review",
+      requested_on: Date.current - 3.days,
+      due_on: Date.current + 11.days
+    )
+
+    post reject_dependent_verification_path(verification), params: { reviewed_by: "benefits_admin", issue_code: "document_mismatch", note: "Document mismatch" }
+
+    assert_redirected_to benefits_dependent_verifications_path
+    verification.reload
+    @dependent_holdback.reload
+    assert_equal "rejected", verification.status
+    assert_equal "benefits_admin", verification.reviewed_by
+    assert_equal "document_mismatch", verification.issue_code
+    assert_equal "Document mismatch", verification.note
+    assert_equal "needs_review", @dependent_holdback.eligibility_status
+  end
+
+  test "generates a dependent verification packet with ready dependents and holdbacks" do
+    @pending_document.update!(status: "complete", verified_at: 1.hour.ago)
+    @dependent_verification.update!(status: "approved", reviewed_at: 1.hour.ago, reviewed_by: "benefits_admin")
+
+    post generate_dependent_verification_packet_path, params: { requested_by: "benefits_admin" }
+
+    assert_redirected_to benefits_dependent_verifications_path
+    packet = @employer.reload.settings.fetch("dependent_verification_packet")
+    assert_match(/\Adependent_verification_#{@employer.id}_/, packet.fetch("packet_id"))
+    assert_equal "benefits_admin", packet.fetch("requested_by")
+    assert_equal 2, packet.fetch("totals").fetch("dependent_count")
+    assert_equal 1, packet.fetch("totals").fetch("ready_count")
+    assert_equal 1, packet.fetch("totals").fetch("holdback_count")
+    assert_equal @dependent.id, packet.fetch("dependents").first.fetch("dependent_id")
+    assert_equal @dependent_holdback.id, packet.fetch("holdbacks").first.fetch("dependent_id")
+
+    detail = Benefits::DependentVerificationQuery.new.call
+    assert_instance_of Benefits::DependentVerificationPacketDto, detail.packet
+    assert_instance_of Benefits::DependentVerificationPacketLineDto, detail.packet_lines.first
+    assert_instance_of Benefits::DependentVerificationIssueDto, detail.packet_holdbacks.first
   end
 
   test "benefits reconciliation workspace exposes deduction exception DTOs" do
