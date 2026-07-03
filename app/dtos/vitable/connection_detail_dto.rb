@@ -39,7 +39,7 @@ module Vitable
         api_key_reference: record.api_key_reference,
         webhook_secret_reference: record.webhook_secret_reference,
         credentials_present: record.credentials_present?,
-        webhook_secret_present: record.webhook_secret_reference.present? && ENV.fetch(record.webhook_secret_reference, nil).present?,
+        webhook_secret_present: record.webhook_secret_present?,
         last_synced_at: record.last_synced_at,
         metadata:,
         metrics: metrics(record, webhook_events, sync_runs, request_logs),
@@ -87,8 +87,8 @@ module Vitable
         ),
         ConnectionHealthCheckDto.new(
           label: "Webhook secret reference",
-          status: record.webhook_secret_reference.present? ? "ready" : "needs_review",
-          detail: record.webhook_secret_reference.presence || "Add a webhook secret env var reference before accepting signed production webhooks"
+          status: webhook_secret_status(record),
+          detail: webhook_secret_detail(record)
         ),
         ConnectionHealthCheckDto.new(
           label: "Organization routing",
@@ -114,6 +114,16 @@ module Vitable
           last_seen_at: matching_events.map(&:created_at).compact.max
         )
       end
+    end
+
+    def self.webhook_secret_status(record)
+      record.webhook_secret_present? ? "ready" : "needs_review"
+    end
+
+    def self.webhook_secret_detail(record)
+      return "#{record.webhook_secret_reference} is available to verify webhook signatures" if record.webhook_secret_present?
+
+      record.webhook_secret_reference.presence || "Add a webhook secret env var reference before accepting signed production webhooks"
     end
 
     def self.timeline(webhook_events, sync_runs, request_logs)
@@ -148,6 +158,6 @@ module Vitable
       ].compact.sort_by(&:timestamp).reverse
     end
 
-    private_class_method :metrics, :health_checks, :endpoint_coverage, :timeline
+    private_class_method :metrics, :health_checks, :endpoint_coverage, :webhook_secret_status, :webhook_secret_detail, :timeline
   end
 end

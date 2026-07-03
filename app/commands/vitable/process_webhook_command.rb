@@ -1,14 +1,15 @@
 module Vitable
   class ProcessWebhookCommand < ApplicationCommand
-    def initialize(payload:, repository: IntegrationRepository.new)
+    def initialize(payload:, repository: IntegrationRepository.new, signature_verification: WebhookSignatureVerificationDto.skipped)
       @payload = payload
       @repository = repository
+      @signature_verification = signature_verification
     end
 
     def call
       dto = WebhookEventDto.from_payload(@payload)
       connection = @repository.connection_for_organization_external_id(dto.organization_external_id)
-      event = @repository.persist_event(dto, connection)
+      event = @repository.persist_event(dto, connection, signature_verification: @signature_verification)
 
       return success(record: event, value: "duplicate") if event.processed?
 

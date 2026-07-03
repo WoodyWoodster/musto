@@ -62,10 +62,10 @@ module Vitable
       WebhookEvent.find_by(event_id:)
     end
 
-    def persist_event(dto, connection)
+    def persist_event(dto, connection, signature_verification: nil)
       existing_event = find_event(dto.event_id)
       if existing_event
-        existing_event.update!(integration_connection: connection) if existing_event.integration_connection.blank? && connection.present?
+        existing_event.update!(existing_event_attributes(existing_event, connection, signature_verification))
         return existing_event
       end
 
@@ -73,6 +73,7 @@ module Vitable
         event.assign_attributes(dto.to_event_attributes)
         event.integration_connection = connection
         event.status = "received"
+        event.metadata = event_metadata(event.metadata, signature_verification)
       end
     end
 
@@ -202,6 +203,18 @@ module Vitable
         metadata: connection.metadata.to_h.merge(last_verification: verification)
       )
       connection
+    end
+
+    def existing_event_attributes(event, connection, signature_verification)
+      attributes = { metadata: event_metadata(event.metadata, signature_verification) }
+      attributes[:integration_connection] = connection if event.integration_connection.blank? && connection.present?
+      attributes
+    end
+
+    def event_metadata(metadata, signature_verification)
+      return metadata.to_h unless signature_verification
+
+      metadata.to_h.merge("signature_verification" => signature_verification.to_metadata)
     end
   end
 end

@@ -12,6 +12,8 @@ module Vitable
     :processed_at,
     :error_message,
     :payload,
+    :signature_status,
+    :signature_detail,
     :connection,
     :sync_runs,
     :request_logs,
@@ -32,6 +34,8 @@ module Vitable
         processed_at: record.processed_at,
         error_message: record.error_message,
         payload: record.payload || {},
+        signature_status: signature_metadata(record).fetch("status", "not_recorded"),
+        signature_detail: signature_metadata(record).fetch("detail", "Signature verification was not recorded for this event."),
         connection: record.integration_connection && Operations::IntegrationConnectionDto.from_record(record.integration_connection),
         sync_runs: sync_runs.map { |sync| Operations::SyncRunDto.from_record(sync) },
         request_logs: request_logs.map { |log| Operations::ApiRequestLogDto.from_record(log) },
@@ -68,6 +72,11 @@ module Vitable
           detail: connection&.credentials_present? ? "#{connection.api_key_reference} is configured" : "#{connection&.api_key_reference || "Vitable API key"} is not configured"
         ),
         WebhookPreflightCheckDto.new(
+          label: "Signature verification",
+          status: signature_status_for(record),
+          detail: signature_metadata(record).fetch("detail", "No signature metadata was captured.")
+        ),
+        WebhookPreflightCheckDto.new(
           label: "Processing state",
           status: record.processed? ? "processed" : record.status,
           detail: record.processed? ? "Processed #{record.processed_at.strftime('%b %-d, %I:%M %p')}" : "Current status is #{record.status.humanize.downcase}"
@@ -80,7 +89,7 @@ module Vitable
         WebhookTimelineItemDto.new(
           type: "Webhook",
           title: record.event_name,
-          subtitle: "#{record.resource_type} #{record.resource_id}",
+          subtitle: "#{record.resource_type} #{record.resource_id} · signature #{signature_metadata(record).fetch("status", "not_recorded").humanize.downcase}",
           status: record.status,
           timestamp: record.created_at
         ),
@@ -112,6 +121,18 @@ module Vitable
       ].compact.sort_by(&:timestamp).reverse
     end
 
-    private_class_method :preflight_checks, :timeline
+    def self.signature_metadata(record)
+      record.metadata.to_h.fetch("signature_verification", {}).to_h
+    end
+
+    def self.signature_status_for(record)
+      case signature_metadata(record).fetch("status", "not_recorded")
+      when "verified" then "verified"
+      when "missing_signature", "signature_invalid" then "failed"
+      else "needs_review"
+      end
+    end
+
+    private_class_method :preflight_checks, :timeline, :signature_metadata, :signature_status_for
   end
 end

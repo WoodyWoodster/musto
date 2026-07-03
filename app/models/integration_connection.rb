@@ -17,4 +17,12 @@ class IntegrationConnection < ApplicationRecord
   def credentials_present?
     api_key.present?
   end
+
+  def webhook_secret
+    ENV.fetch(webhook_secret_reference, nil) if webhook_secret_reference.present?
+  end
+
+  def webhook_secret_present?
+    webhook_secret.present?
+  end
 end

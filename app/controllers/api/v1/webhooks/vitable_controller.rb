@@ -5,16 +5,24 @@ module Api
         protect_from_forgery with: :null_session
 
         def create
-          result = Vitable::ProcessWebhookCommand.new(payload: webhook_payload).call
+          request_dto = Vitable::WebhookRequestDto.from_request(request, webhook_payload)
+          signature = Vitable::WebhookSignatureVerifier.new.verify(request_dto)
+          return render_signature_rejection(signature) if signature.rejected?
+
+          result = Vitable::ProcessWebhookCommand.new(payload: request_dto.payload, signature_verification: signature).call
 
           if result.success?
-            render json: { status: "accepted", event_id: result.record&.event_id, outcome: result.value }, status: :accepted
+            render json: { status: "accepted", event_id: result.record&.event_id, outcome: result.value, signature: signature.status }, status: :accepted
           else
             render json: { status: "rejected", errors: result.errors }, status: :unprocessable_entity
           end
         end
 
         private
+
+        def render_signature_rejection(signature)
+          render json: { status: "rejected", errors: signature.detail, signature: signature.status }, status: :unauthorized
+        end
 
         def webhook_payload
           params.except(:controller, :action, :vitable).permit!.to_h

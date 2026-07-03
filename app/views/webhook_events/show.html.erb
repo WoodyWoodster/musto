@@ -57,6 +57,7 @@
       ["Resource", "#{@webhook_event.resource_type.humanize} #{@webhook_event.resource_id}", "bg-cyan-500"],
       ["Sync runs", @webhook_event.sync_runs.count, "bg-indigo-500"],
       ["API logs", @webhook_event.request_logs.count, "bg-amber-500"],
+      ["Signature", @webhook_event.signature_status.humanize, "bg-pink-500"],
       ["Processed", @webhook_event.processed_at&.strftime("%b %-d, %I:%M %p") || "Not yet", "bg-emerald-500"]
     ].each do |label, value, accent| %>
       <article class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">

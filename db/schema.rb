@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_03_234500) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_04_000500) do
   create_table "api_request_logs", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.integer "duration_ms"
@@ -941,6 +941,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_03_234500) do
     t.string "event_id", null: false
     t.string "event_name", null: false
     t.integer "integration_connection_id"
+    t.json "metadata", default: {}, null: false
     t.datetime "occurred_at", null: false
     t.string "organization_external_id", null: false
     t.json "payload", default: {}, null: false

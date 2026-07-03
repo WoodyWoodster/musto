@@ -208,7 +208,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       status: "draft"
     )
     @compliance_case = @employer.compliance_cases.create!(employee: @employee, kind: "i9_reverification", severity: "high", due_on: Date.current + 5.days)
-    @connection = @organization.integration_connections.create!(provider: "vitable", environment: "production")
+    @connection = @organization.integration_connections.create!(provider: "vitable", environment: "production", webhook_secret_reference: "VITABLE_WEBHOOK_SECRET")
     @sync_run = @connection.sync_runs.create!(
       resource_type: "employee",
       operation: "fetch",
@@ -2166,6 +2166,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_select "h2", "Stored payload"
     assert_select "h2", "Event timeline"
     assert_select "h2", "Sync attempts"
+    assert_select "p", "Signature"
   end
 
   test "integration connection workspace exposes credential and coverage DTOs" do
@@ -2180,6 +2181,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_instance_of Vitable::WebhookSimulationEventOptionDto, detail.simulator.event_options.first
     assert_equal @sync_run.id, detail.sync_runs.first.id
     assert_equal @request_log.id, detail.request_logs.first.id
+    assert_not detail.webhook_secret_present
 
     get integration_connection_path(@connection)
 
@@ -2498,6 +2500,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal @organization.external_id, event.organization_external_id
     assert_equal "benefit_plan.updated", event.event_name
     assert_equal "needs_credentials", event.status
+    assert_equal "skipped", event.metadata.dig("signature_verification", "status")
     assert_equal "bpln_ops_primary_care", event.payload.fetch("resource_id")
   end
 
