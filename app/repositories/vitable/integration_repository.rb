@@ -42,6 +42,22 @@ module Vitable
       IntegrationConnection.find(id)
     end
 
+    def find_connection_with_organization(id)
+      IntegrationConnection.includes(:organization).find(id)
+    end
+
+    def connection_webhook_events(connection, limit: 12)
+      connection.webhook_events.order(created_at: :desc).limit(limit)
+    end
+
+    def connection_sync_runs(connection, limit: 12)
+      connection.sync_runs.recent_first.limit(limit)
+    end
+
+    def connection_request_logs(connection, limit: 12)
+      connection.api_request_logs.recent_first.limit(limit)
+    end
+
     def find_event(event_id)
       WebhookEvent.find_by(event_id:)
     end
@@ -80,6 +96,44 @@ module Vitable
 
     def mark_failed(event, errors)
       event.update!(status: "failed", error_message: Array(errors).join(", "))
+    end
+
+    def mark_connection_needs_credentials(connection)
+      update_connection_verification(
+        connection,
+        status: "needs_credentials",
+        verification: {
+          status: "needs_credentials",
+          message: "#{connection.api_key_reference} is not configured",
+          checked_at: Time.current.iso8601
+        }
+      )
+    end
+
+    def mark_connection_active(connection)
+      update_connection_verification(
+        connection,
+        status: "active",
+        last_synced_at: Time.current,
+        verification: {
+          status: "active",
+          message: "Credentials verified",
+          checked_at: Time.current.iso8601
+        }
+      )
+    end
+
+    def mark_connection_failed(connection, error)
+      update_connection_verification(
+        connection,
+        status: "failed",
+        verification: {
+          status: "failed",
+          message: error.message,
+          error_class: error.class.name,
+          checked_at: Time.current.iso8601
+        }
+      )
     end
 
     def replay_payload(event)
@@ -137,6 +191,17 @@ module Vitable
     def fail_sync_run(sync_run, error)
       sync_run&.update!(status: "failed", completed_at: Time.current, error_message: error.message)
       sync_run
+    end
+
+    private
+
+    def update_connection_verification(connection, status:, verification:, last_synced_at: connection.last_synced_at)
+      connection.update!(
+        status:,
+        last_synced_at:,
+        metadata: connection.metadata.to_h.merge(last_verification: verification)
+      )
+      connection
     end
   end
 end

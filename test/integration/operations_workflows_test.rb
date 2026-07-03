@@ -31,6 +31,24 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     @waivable_deduction = @payroll_run.payroll_deductions.create!(employee: @employee, enrollment: @waivable_enrollment, code: "VITABLE_VISION", amount_cents: 0, status: "waiting_on_enrollment")
     @compliance_case = @employer.compliance_cases.create!(employee: @employee, kind: "i9_reverification", severity: "high", due_on: Date.current + 5.days)
     @connection = @organization.integration_connections.create!(provider: "vitable", environment: "production")
+    @sync_run = @connection.sync_runs.create!(
+      resource_type: "employee",
+      operation: "fetch",
+      status: "failed",
+      started_at: 5.minutes.ago,
+      completed_at: 4.minutes.ago,
+      error_message: "Missing credentials",
+      stats: { resource_id: "empl_ops_123" }
+    )
+    @request_log = @connection.api_request_logs.create!(
+      operation: "resource.fetch",
+      method: "GET",
+      path: "/employees/empl_ops_123",
+      status_code: 401,
+      duration_ms: 42,
+      error_class: "VitableConnect::Errors::AuthenticationError",
+      error_message: "Unauthorized"
+    )
     @webhook_event = @connection.webhook_events.create!(
       event_id: "wevt_ops_employee_created",
       organization_external_id: @organization.external_id,
@@ -60,6 +78,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       enrollment_path(@pending_enrollment),
       compliance_path,
       integrations_path,
+      integration_connection_path(@connection),
       webhook_event_path(@webhook_event),
       employee_path(@employee)
     ].each do |path|
@@ -153,6 +172,41 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_select "h2", "Stored payload"
     assert_select "h2", "Event timeline"
     assert_select "h2", "Sync attempts"
+  end
+
+  test "integration connection workspace exposes credential and coverage DTOs" do
+    detail = Vitable::ConnectionDetailQuery.new.call(@connection.id)
+
+    assert_instance_of Vitable::ConnectionDetailDto, detail
+    assert_instance_of Vitable::ConnectionMetricDto, detail.metrics.first
+    assert_instance_of Vitable::ConnectionHealthCheckDto, detail.health_checks.first
+    assert_instance_of Vitable::EndpointCoverageDto, detail.endpoint_coverage.first
+    assert_instance_of Vitable::ConnectionTimelineItemDto, detail.timeline.first
+    assert_equal @sync_run.id, detail.sync_runs.first.id
+    assert_equal @request_log.id, detail.request_logs.first.id
+
+    get integration_connection_path(@connection)
+
+    assert_response :success
+    assert_select "h1", "#{@organization.name} Vitable connection"
+    assert_select "h2", "Readiness checks"
+    assert_select "h2", "Resource coverage"
+    assert_select "h2", "Connection timeline"
+    assert_select "h2", "Webhook queue"
+    assert_select "h2", "API request trail"
+  end
+
+  test "verifies integration connection credentials without leaking secrets" do
+    @connection.update!(status: "active", metadata: { existing: "value" })
+
+    post verify_credentials_integration_connection_path(@connection)
+
+    assert_redirected_to integration_connection_path(@connection)
+    @connection.reload
+    assert_equal "needs_credentials", @connection.status
+    assert_equal "value", @connection.metadata.fetch("existing")
+    assert_equal "needs_credentials", @connection.metadata.dig("last_verification", "status")
+    assert_match @connection.api_key_reference, @connection.metadata.dig("last_verification", "message")
   end
 
   test "replays webhook event through command action" do

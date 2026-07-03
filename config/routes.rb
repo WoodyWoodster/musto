@@ -10,6 +10,9 @@ Rails.application.routes.draw do
   resources :webhook_events, only: [ :show ] do
     post :replay, on: :member
   end
+  resources :integration_connections, only: [ :show ] do
+    post :verify_credentials, on: :member
+  end
 
   get "workforce", to: "operations#workforce"
   get "payroll", to: "operations#payroll"
