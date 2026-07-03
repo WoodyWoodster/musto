@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_03_220000) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_03_223000) do
   create_table "api_request_logs", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.integer "duration_ms"
@@ -717,6 +717,25 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_03_220000) do
     t.index ["status", "due_on"], name: "index_performance_reviews_on_status_and_due_on"
   end
 
+  create_table "shift_swap_requests", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.json "metadata", default: {}, null: false
+    t.text "reason"
+    t.integer "requester_id", null: false
+    t.datetime "reviewed_at"
+    t.string "reviewed_by"
+    t.string "status", default: "submitted", null: false
+    t.datetime "submitted_at"
+    t.integer "target_employee_id"
+    t.datetime "updated_at", null: false
+    t.integer "work_shift_id", null: false
+    t.index ["requester_id", "status"], name: "index_shift_swap_requests_on_requester_id_and_status"
+    t.index ["requester_id"], name: "index_shift_swap_requests_on_requester_id"
+    t.index ["status", "submitted_at"], name: "index_shift_swap_requests_on_status_and_submitted_at"
+    t.index ["target_employee_id"], name: "index_shift_swap_requests_on_target_employee_id"
+    t.index ["work_shift_id"], name: "index_shift_swap_requests_on_work_shift_id"
+  end
+
   create_table "sync_runs", force: :cascade do |t|
     t.datetime "completed_at"
     t.datetime "created_at", null: false
@@ -867,6 +886,31 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_03_220000) do
     t.index ["employer_id"], name: "index_work_locations_on_employer_id"
   end
 
+  create_table "work_shifts", force: :cascade do |t|
+    t.integer "break_minutes", default: 0, null: false
+    t.datetime "created_at", null: false
+    t.integer "department_id"
+    t.integer "employee_id"
+    t.integer "employer_id", null: false
+    t.datetime "ends_at", null: false
+    t.integer "hourly_rate_cents", default: 0, null: false
+    t.json "metadata", default: {}, null: false
+    t.text "notes"
+    t.datetime "published_at"
+    t.string "role", null: false
+    t.datetime "starts_at", null: false
+    t.string "status", default: "draft", null: false
+    t.datetime "updated_at", null: false
+    t.integer "work_location_id"
+    t.index ["department_id"], name: "index_work_shifts_on_department_id"
+    t.index ["employee_id", "starts_at"], name: "index_work_shifts_on_employee_id_and_starts_at"
+    t.index ["employee_id"], name: "index_work_shifts_on_employee_id"
+    t.index ["employer_id", "status"], name: "index_work_shifts_on_employer_id_and_status"
+    t.index ["employer_id"], name: "index_work_shifts_on_employer_id"
+    t.index ["starts_at", "ends_at"], name: "index_work_shifts_on_starts_at_and_ends_at"
+    t.index ["work_location_id"], name: "index_work_shifts_on_work_location_id"
+  end
+
   add_foreign_key "api_request_logs", "integration_connections"
   add_foreign_key "benefit_invoice_lines", "benefit_invoices"
   add_foreign_key "benefit_invoice_lines", "benefit_plans"
@@ -922,6 +966,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_03_220000) do
   add_foreign_key "performance_reviews", "employees"
   add_foreign_key "performance_reviews", "employees", column: "reviewer_id"
   add_foreign_key "performance_reviews", "performance_cycles"
+  add_foreign_key "shift_swap_requests", "employees", column: "requester_id"
+  add_foreign_key "shift_swap_requests", "employees", column: "target_employee_id"
+  add_foreign_key "shift_swap_requests", "work_shifts"
   add_foreign_key "sync_runs", "integration_connections"
   add_foreign_key "time_entries", "employees"
   add_foreign_key "time_off_policies", "employers"
@@ -932,4 +979,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_03_220000) do
   add_foreign_key "training_programs", "employers"
   add_foreign_key "webhook_events", "integration_connections"
   add_foreign_key "work_locations", "employers"
+  add_foreign_key "work_shifts", "departments"
+  add_foreign_key "work_shifts", "employees"
+  add_foreign_key "work_shifts", "employers"
+  add_foreign_key "work_shifts", "work_locations"
 end

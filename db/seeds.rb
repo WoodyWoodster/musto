@@ -624,6 +624,44 @@ sick.save!
   request.save!
 end
 
+[
+  [ employees.second, departments.fetch("RET"), locations.fetch("Philadelphia HQ"), "Retail floor lead", "published", 3, 8, 16, 30, 3_850, "Morning floor coverage" ],
+  [ employees.last, departments.fetch("RET"), locations.fetch("Denver Roastery"), "Cafe associate", "published", 4, 7, 15, 30, 2_650, "Cafe open and service" ],
+  [ employees.first, departments.fetch("OPS"), locations.fetch("Philadelphia HQ"), "Operations close", "draft", 5, 12, 20, 30, 6_350, "Close payroll exception queue" ],
+  [ nil, departments.fetch("RET"), locations.fetch("Denver Roastery"), "Cafe associate", "draft", 6, 10, 18, 30, 2_650, "Open coverage gap for Denver" ],
+  [ employees[4], departments.fetch("OPS"), locations.fetch("Denver Roastery"), "Roastery manager", "missed", 1, 6, 14, 30, 5_000, "Missed shift needs manager review" ],
+  [ employees.fourth, departments.fetch("FIN"), locations.fetch("Remote US"), "Payroll operations", "completed", -1, 9, 17, 30, 4_700, "Completed payroll prep coverage" ]
+].each do |employee, department, location, role, status, day_offset, start_hour, end_hour, break_minutes, hourly_rate_cents, notes|
+  starts_at = (Date.current + day_offset.days).in_time_zone.change(hour: start_hour, min: 0)
+  shift = employer.work_shifts.find_or_initialize_by(role:, starts_at:)
+  shift.assign_attributes(
+    employee:,
+    department:,
+    work_location: location,
+    status:,
+    ends_at: (Date.current + day_offset.days).in_time_zone.change(hour: end_hour, min: 0),
+    break_minutes:,
+    hourly_rate_cents:,
+    notes:,
+    published_at: status.in?([ "published", "completed", "missed" ]) ? 2.days.ago : nil,
+    metadata: { source: "seeded_schedule", manager: "store_ops" }
+  )
+  shift.save!
+end
+
+retail_shift = employer.work_shifts.find_by(role: "Retail floor lead")
+if retail_shift
+  swap = retail_shift.shift_swap_requests.find_or_initialize_by(requester: employees.second)
+  swap.assign_attributes(
+    target_employee: employees.last,
+    status: "submitted",
+    reason: "Jordan needs coverage for a benefits enrollment appointment.",
+    submitted_at: 10.hours.ago,
+    metadata: { source: "seeded_shift_swap", employee_portal: true }
+  )
+  swap.save!
+end
+
 current_run = employer.payroll_runs.find_or_initialize_by(
   period_start_on: Date.current.beginning_of_month,
   period_end_on: Date.current.end_of_month,

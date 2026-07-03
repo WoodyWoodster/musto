@@ -1,0 +1,276 @@
+<% latest_forecast = @schedule.latest_forecast %>
+
+<section class="space-y-7">
+  <div class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div class="grid xl:grid-cols-[1.18fr_0.82fr]">
+      <div class="p-6 lg:p-8">
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="rounded-full bg-teal-50 px-3 py-1 text-xs font-semibold text-teal-800 ring-1 ring-inset ring-teal-200">Workforce scheduling</span>
+          <span class="rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-800 ring-1 ring-inset ring-indigo-200">Coverage and labor forecast</span>
+          <%= status_pill(@schedule.open_shifts.any? ? "coverage_gap" : "ready") %>
+        </div>
+
+        <h1 class="mt-5 text-4xl font-semibold tracking-tight text-slate-950">Workforce scheduling center</h1>
+        <p class="mt-3 max-w-3xl text-base leading-7 text-slate-600">
+          Publish draft shifts, resolve coverage gaps, approve shift swaps, and generate payroll labor forecasts for <%= @schedule.employer&.name || "your employer portfolio" %>.
+        </p>
+
+        <div class="mt-6 flex flex-wrap gap-3">
+          <%= button_to "Publish schedule", publish_schedule_path, method: :post, params: { published_by: "ops_console" }, class: "rounded-md bg-slate-950 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-slate-800" %>
+          <%= button_to "Generate forecast", generate_schedule_forecast_path, method: :post, params: { requested_by: "ops_console" }, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
+          <%= link_to "Timesheets", timesheets_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
+          <%= link_to "Payroll", payroll_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
+        </div>
+      </div>
+
+      <aside class="border-t border-slate-200 bg-slate-950 p-6 text-white xl:border-l xl:border-t-0 xl:p-8">
+        <p class="text-xs font-semibold uppercase tracking-[0.2em] text-teal-300">Schedule window</p>
+        <p class="mt-5 text-3xl font-semibold tracking-tight"><%= Date.current.beginning_of_week.strftime("%b %-d") %> - <%= (Date.current.end_of_week + 14.days).strftime("%b %-d, %Y") %></p>
+        <p class="mt-2 text-sm leading-6 text-slate-300">Draft and published shifts in the active scheduling window feed coverage alerts and payroll labor forecasting.</p>
+        <div class="mt-6 grid grid-cols-2 gap-3">
+          <div class="rounded-md bg-white/10 p-4">
+            <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Shifts</p>
+            <p class="mt-2 text-2xl font-semibold"><%= compact_number(@schedule.shifts.count) %></p>
+          </div>
+          <div class="rounded-md bg-white/10 p-4">
+            <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Open</p>
+            <p class="mt-2 text-2xl font-semibold"><%= compact_number(@schedule.open_shifts.count) %></p>
+          </div>
+        </div>
+        <div class="mt-5 rounded-md bg-white/10 p-4">
+          <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Publish queue</p>
+          <p class="mt-2 text-lg font-semibold"><%= compact_number(@schedule.publishable_shifts.count) %> draft shifts</p>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+    <% @schedule.metrics.each do |metric| %>
+      <article class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <div class="flex items-center justify-between gap-3">
+          <p class="text-sm font-medium text-slate-500"><%= metric.label %></p>
+          <span class="h-2.5 w-2.5 shrink-0 rounded-full <%= metric.accent %>"></span>
+        </div>
+        <p class="mt-4 text-3xl font-semibold tracking-tight text-slate-950"><%= metric.format == "money" ? money_cents(metric.value) : compact_number(metric.value) %></p>
+        <div class="mt-2 flex flex-wrap items-center gap-2">
+          <%= status_pill(metric.status) %>
+          <p class="text-sm text-slate-500"><%= metric.hint %></p>
+        </div>
+      </article>
+    <% end %>
+  </div>
+
+  <div class="grid gap-6 xl:grid-cols-[1.04fr_0.96fr]">
+    <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="border-b border-slate-100 px-5 py-4">
+        <h2 class="text-base font-semibold text-slate-950">Scheduling issues</h2>
+        <p class="text-sm text-slate-500">Coverage, publish, swap, missed shift, and payroll forecast checks.</p>
+      </div>
+      <div class="divide-y divide-slate-100">
+        <% @schedule.issues.each do |issue| %>
+          <div class="p-5">
+            <div class="flex flex-wrap items-start justify-between gap-3">
+              <div class="min-w-0">
+                <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400"><%= issue.owner %> · <%= issue.severity %></p>
+                <h3 class="mt-2 text-base font-semibold text-slate-950"><%= issue.title %></h3>
+              </div>
+              <%= status_pill(issue.status) %>
+            </div>
+            <p class="mt-3 text-sm leading-6 text-slate-600"><%= issue.detail %></p>
+            <div class="mt-4 flex items-center justify-between gap-3">
+              <span class="rounded-md bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700"><%= compact_number(issue.count) %> records · <%= money_cents(issue.amount_cents) %></span>
+              <%= link_to "Open workflow", issue.action_path, class: "text-sm font-semibold text-cyan-700 hover:text-cyan-900" %>
+            </div>
+          </div>
+        <% end %>
+      </div>
+    </section>
+
+    <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="flex flex-col gap-2 border-b border-slate-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 class="text-base font-semibold text-slate-950">Swap queue</h2>
+          <p class="text-sm text-slate-500">Employee requests to move published shifts before payroll cutoff.</p>
+        </div>
+        <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700"><%= compact_number(@schedule.reviewable_swaps.count) %> reviewable</span>
+      </div>
+      <div class="divide-y divide-slate-100">
+        <% @schedule.swap_requests.each do |swap| %>
+          <div class="p-5">
+            <div class="flex flex-wrap items-start justify-between gap-3">
+              <div class="min-w-0">
+                <div class="flex flex-wrap items-center gap-2">
+                  <p class="font-semibold text-slate-950"><%= swap.requester_name %> to <%= swap.target_employee_name %></p>
+                  <%= status_pill(swap.status) %>
+                </div>
+                <p class="mt-1 text-sm text-slate-500"><%= swap.role %> · <%= swap.starts_at.strftime("%b %-d, %-l:%M %p") %></p>
+                <p class="mt-3 text-sm leading-6 text-slate-600"><%= swap.reason.presence || "No reason provided." %></p>
+              </div>
+              <% if swap.reviewable? %>
+                <%= button_to "Approve", approve_shift_swap_path(swap.id), method: :post, params: { reviewed_by: "ops_console" }, class: "rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700" %>
+              <% end %>
+            </div>
+          </div>
+        <% end %>
+        <% if @schedule.swap_requests.empty? %>
+          <div class="p-5 text-sm text-slate-600">No shift swap requests are currently open.</div>
+        <% end %>
+      </div>
+    </section>
+  </div>
+
+  <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div class="flex flex-col gap-2 border-b border-slate-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+      <div>
+        <h2 class="text-base font-semibold text-slate-950">Shift roster</h2>
+        <p class="text-sm text-slate-500">Upcoming draft, published, open, completed, and exception shifts.</p>
+      </div>
+      <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700"><%= compact_number(@schedule.shifts.count) %> shifts</span>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="min-w-full divide-y divide-slate-100 text-sm">
+        <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <tr>
+            <th class="px-5 py-3">Shift</th>
+            <th class="px-5 py-3">Employee</th>
+            <th class="px-5 py-3">Location</th>
+            <th class="px-5 py-3">Net hours</th>
+            <th class="px-5 py-3">Labor</th>
+            <th class="px-5 py-3">Readiness</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          <% @schedule.shifts.each do |shift| %>
+            <tr class="hover:bg-slate-50">
+              <td class="px-5 py-4">
+                <div class="flex flex-wrap items-center gap-2">
+                  <p class="font-semibold text-slate-950"><%= shift.role %></p>
+                  <%= status_pill(shift.status) %>
+                </div>
+                <p class="mt-1 text-xs text-slate-500"><%= shift.starts_at.strftime("%a, %b %-d") %> · <%= shift.starts_at.strftime("%-l:%M %p") %> - <%= shift.ends_at.strftime("%-l:%M %p") %></p>
+              </td>
+              <td class="px-5 py-4">
+                <% if shift.employee_id.present? %>
+                  <%= link_to shift.employee_name, employee_path(shift.employee_id), class: "font-semibold text-slate-950 hover:text-cyan-700" %>
+                  <p class="mt-1 text-xs text-slate-500"><%= shift.employee_title.presence || "Role pending" %></p>
+                <% else %>
+                  <p class="font-semibold text-rose-700">Open shift</p>
+                  <p class="mt-1 text-xs text-slate-500">Needs assignment</p>
+                <% end %>
+              </td>
+              <td class="px-5 py-4 text-slate-600">
+                <%= shift.location_name || "No location" %>
+                <p class="mt-1 text-xs text-slate-500"><%= shift.department_name || "Unassigned department" %></p>
+              </td>
+              <td class="px-5 py-4 text-slate-600"><%= number_with_precision(shift.net_minutes / 60.0, precision: 1) %>h</td>
+              <td class="px-5 py-4">
+                <p class="font-semibold text-slate-950"><%= money_cents(shift.labor_cost_cents) %></p>
+                <p class="mt-1 text-xs text-slate-500"><%= money_cents(shift.hourly_rate_cents) %>/hr</p>
+              </td>
+              <td class="px-5 py-4">
+                <%= status_pill(shift.readiness_status) %>
+                <p class="mt-1 max-w-56 text-xs text-slate-500"><%= shift.readiness_reason %></p>
+              </td>
+            </tr>
+          <% end %>
+          <% if @schedule.shifts.empty? %>
+            <tr>
+              <td colspan="6" class="px-5 py-5 text-sm text-slate-600">No shifts exist in the active scheduling window.</td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div class="border-b border-slate-100 px-5 py-4">
+      <h2 class="text-base font-semibold text-slate-950">Payroll forecast ledger</h2>
+      <p class="text-sm text-slate-500">Published payable shifts included in the latest forecast and holdbacks excluded from payroll planning.</p>
+    </div>
+    <% if latest_forecast.present? %>
+      <div class="grid gap-4 border-b border-slate-100 bg-slate-50 px-5 py-4 lg:grid-cols-[1.15fr_0.85fr]">
+        <div class="min-w-0">
+          <div class="flex flex-wrap items-center gap-2">
+            <%= status_pill(latest_forecast.status) %>
+            <span class="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600 ring-1 ring-inset ring-slate-200">Schedule forecast</span>
+          </div>
+          <p class="mt-3 break-words text-sm font-semibold text-slate-950"><%= latest_forecast.batch_id %></p>
+          <p class="mt-1 text-sm text-slate-500">Requested by <%= latest_forecast.requested_by.presence || "ops_console" %> · payroll run <%= latest_forecast.payroll_run_id || "pending" %></p>
+        </div>
+        <div class="grid grid-cols-4 gap-2 text-center">
+          <div class="rounded-md bg-white px-2 py-3 ring-1 ring-inset ring-slate-200">
+            <p class="text-xs text-slate-500">Lines</p>
+            <p class="mt-1 font-semibold text-slate-950"><%= compact_number(latest_forecast.line_count) %></p>
+          </div>
+          <div class="rounded-md bg-white px-2 py-3 ring-1 ring-inset ring-slate-200">
+            <p class="text-xs text-slate-500">People</p>
+            <p class="mt-1 font-semibold text-slate-950"><%= compact_number(latest_forecast.employee_count) %></p>
+          </div>
+          <div class="rounded-md bg-white px-2 py-3 ring-1 ring-inset ring-slate-200">
+            <p class="text-xs text-slate-500">Held</p>
+            <p class="mt-1 font-semibold text-slate-950"><%= compact_number(latest_forecast.holdback_count) %></p>
+          </div>
+          <div class="rounded-md bg-white px-2 py-3 ring-1 ring-inset ring-slate-200">
+            <p class="text-xs text-slate-500">Labor</p>
+            <p class="mt-1 font-semibold text-slate-950"><%= money_cents(latest_forecast.total_labor_cents) %></p>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid divide-y divide-slate-100 xl:grid-cols-2 xl:divide-x xl:divide-y-0">
+        <div>
+          <div class="border-b border-slate-100 px-5 py-3">
+            <h3 class="text-sm font-semibold text-slate-950">Included shifts</h3>
+          </div>
+          <div class="divide-y divide-slate-100">
+            <% @schedule.forecast_lines.each do |line| %>
+              <div class="p-5">
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                  <div class="min-w-0">
+                    <p class="font-semibold text-slate-950"><%= line.employee_name %></p>
+                    <p class="mt-1 text-sm text-slate-500"><%= line.role %> · <%= line.location_name || "No location" %></p>
+                  </div>
+                  <%= status_pill(line.status) %>
+                </div>
+                <div class="mt-3 flex flex-wrap gap-2">
+                  <span class="rounded-md bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-600"><%= number_with_precision(line.net_minutes / 60.0, precision: 1) %>h</span>
+                  <span class="rounded-md bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-600"><%= money_cents(line.labor_cost_cents) %></span>
+                </div>
+              </div>
+            <% end %>
+            <% if @schedule.forecast_lines.empty? %>
+              <div class="p-5 text-sm text-slate-600">No shifts were included in the latest forecast.</div>
+            <% end %>
+          </div>
+        </div>
+
+        <div>
+          <div class="border-b border-slate-100 px-5 py-3">
+            <h3 class="text-sm font-semibold text-slate-950">Holdbacks</h3>
+          </div>
+          <div class="divide-y divide-slate-100">
+            <% @schedule.forecast_holdbacks.each do |holdback| %>
+              <div class="p-5">
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                  <div class="min-w-0">
+                    <p class="font-semibold text-slate-950"><%= holdback.employee_name %></p>
+                    <p class="mt-1 text-sm text-slate-500"><%= holdback.role %></p>
+                  </div>
+                  <%= status_pill(holdback.status) %>
+                </div>
+                <p class="mt-3 text-sm leading-6 text-slate-600"><%= holdback.reason %></p>
+              </div>
+            <% end %>
+            <% if @schedule.forecast_holdbacks.empty? %>
+              <div class="p-5 text-sm text-slate-600">No holdbacks in the latest forecast.</div>
+            <% end %>
+          </div>
+        </div>
+      </div>
+    <% else %>
+      <div class="p-5 text-sm text-slate-600">No schedule payroll forecast has been generated yet.</div>
+    <% end %>
+  </section>
+</section>

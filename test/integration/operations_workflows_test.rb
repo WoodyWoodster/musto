@@ -108,6 +108,11 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     @time_off_request = @employee.time_off_requests.create!(time_off_policy: @policy, starts_on: Date.current + 1.day, ends_on: Date.current + 2.days, hours: 16)
     @sick_policy = @employer.time_off_policies.create!(name: "Sick Leave", accrual_method: "state_accrual", annual_hours: 56, carryover_hours: 16)
     @approved_time_off_request = @employee.time_off_requests.create!(time_off_policy: @sick_policy, starts_on: Date.current + 10.days, ends_on: Date.current + 10.days, hours: 8, status: "approved", reviewed_at: 1.day.ago)
+    @published_shift = @employer.work_shifts.create!(employee: @employee, department: @department, work_location: @location, role: "People ops coverage", status: "published", starts_at: (Date.current + 2.days).in_time_zone.change(hour: 9), ends_at: (Date.current + 2.days).in_time_zone.change(hour: 17), break_minutes: 30, hourly_rate_cents: 4_500, published_at: 1.day.ago)
+    @draft_shift = @employer.work_shifts.create!(employee: @employee, department: @department, work_location: @location, role: "Payroll close support", status: "draft", starts_at: (Date.current + 3.days).in_time_zone.change(hour: 10), ends_at: (Date.current + 3.days).in_time_zone.change(hour: 18), break_minutes: 30, hourly_rate_cents: 4_500)
+    @open_shift = @employer.work_shifts.create!(department: @department, work_location: @location, role: "Open benefits desk", status: "draft", starts_at: (Date.current + 4.days).in_time_zone.change(hour: 8), ends_at: (Date.current + 4.days).in_time_zone.change(hour: 16), break_minutes: 30, hourly_rate_cents: 3_800)
+    @missed_shift = @employer.work_shifts.create!(employee: @employee, department: @department, work_location: @location, role: "Missed payroll prep", status: "missed", starts_at: (Date.current - 1.day).in_time_zone.change(hour: 9), ends_at: (Date.current - 1.day).in_time_zone.change(hour: 17), break_minutes: 30, hourly_rate_cents: 4_500)
+    @shift_swap_request = @published_shift.shift_swap_requests.create!(requester: @employee, target_employee: @employee, status: "submitted", reason: "Coverage requested for benefits review", submitted_at: 3.hours.ago)
     @payroll_run = @employer.payroll_runs.create!(period_start_on: Date.current.beginning_of_month, period_end_on: Date.current.end_of_month, pay_date: Date.current.end_of_month, gross_pay_cents: 9_500_00, status: "estimated")
     @payroll_run.payroll_deductions.create!(employee: @employee, enrollment: @enrollment, code: "VITABLE_BENEFITS", amount_cents: 9_900, status: "ready")
     @pending_deduction = @payroll_run.payroll_deductions.create!(employee: @employee, enrollment: @pending_enrollment, code: "VITABLE_DENTAL", amount_cents: 0, status: "waiting_on_enrollment")
@@ -244,6 +249,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       onboarding_path,
       documents_path,
       time_off_path,
+      scheduling_path,
       timesheets_path,
       expenses_path,
       contractors_path,
@@ -289,6 +295,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     onboarding = Onboarding::CommandCenterQuery.new.call
     documents = Documents::CenterQuery.new.call
     time_off = TimeOff::CommandCenterQuery.new.call
+    scheduling = Scheduling::CenterQuery.new.call
     timesheets = TimeTracking::CenterQuery.new.call
     expenses = Expenses::CenterQuery.new.call
     funding = PayrollFunding::CenterQuery.new.call
@@ -365,6 +372,11 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_instance_of TimeOff::RequestDto, time_off.requests.first
     assert_instance_of TimeOff::PolicyDto, time_off.policies.first
     assert_instance_of TimeOff::EmployeeBalanceDto, time_off.balances.first
+    assert_instance_of Scheduling::CenterDto, scheduling
+    assert_instance_of Scheduling::MetricDto, scheduling.metrics.first
+    assert_instance_of Scheduling::ShiftDto, scheduling.shifts.first
+    assert_instance_of Scheduling::SwapRequestDto, scheduling.swap_requests.first
+    assert_instance_of Scheduling::IssueDto, scheduling.issues.first
     assert_instance_of TimeTracking::CenterDto, timesheets
     assert_instance_of TimeTracking::EntryDto, timesheets.entries.first
     assert_instance_of TimeTracking::EmployeeSummaryDto, timesheets.employees.first
@@ -994,6 +1006,67 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal "time_off_command_center", @time_off_request.metadata.fetch("reviewed_from")
     assert_equal "approved", @time_off_request.metadata.fetch("review_decision")
     assert_not_nil @time_off_request.reviewed_at
+  end
+
+  test "scheduling center exposes shifts swaps and forecast DTOs" do
+    detail = Scheduling::CenterQuery.new.call
+
+    assert_instance_of Scheduling::CenterDto, detail
+    assert_instance_of Scheduling::MetricDto, detail.metrics.first
+    assert_instance_of Scheduling::ShiftDto, detail.shifts.first
+    assert_instance_of Scheduling::SwapRequestDto, detail.swap_requests.first
+    assert_instance_of Scheduling::IssueDto, detail.issues.first
+    assert detail.publishable_shifts.any? { |shift| shift.id == @draft_shift.id }
+    assert detail.open_shifts.any? { |shift| shift.id == @open_shift.id }
+    assert detail.reviewable_swaps.any? { |swap| swap.id == @shift_swap_request.id }
+
+    get scheduling_path
+
+    assert_response :success
+    assert_select "h1", "Workforce scheduling center"
+    assert_select "h2", "Scheduling issues"
+    assert_select "h2", "Swap queue"
+    assert_select "h2", "Shift roster"
+    assert_select "h2", "Payroll forecast ledger"
+  end
+
+  test "publishes draft shifts through command action" do
+    post publish_schedule_path, params: { published_by: "schedule_admin" }
+
+    assert_redirected_to scheduling_path
+    @draft_shift.reload
+    assert_equal "published", @draft_shift.status
+    assert_equal "schedule_admin", @draft_shift.metadata.fetch("published_by")
+    assert_not_nil @draft_shift.published_at
+  end
+
+  test "approves shift swap through command action" do
+    post approve_shift_swap_path(@shift_swap_request), params: { reviewed_by: "manager_admin" }
+
+    assert_redirected_to scheduling_path
+    @shift_swap_request.reload
+    assert_equal "approved", @shift_swap_request.status
+    assert_equal "manager_admin", @shift_swap_request.reviewed_by
+    assert_equal "manager_admin", @shift_swap_request.metadata.fetch("approved_by")
+    assert_not_nil @shift_swap_request.reviewed_at
+  end
+
+  test "generates schedule payroll forecast through command action" do
+    post generate_schedule_forecast_path, params: { requested_by: "payroll_admin" }
+
+    assert_redirected_to scheduling_path
+    forecast = @employer.reload.settings.fetch("schedule_payroll_forecast")
+    assert_match(/\Aschedule_forecast_#{@employer.id}_#{@payroll_run.id}_/, forecast.fetch("batch_id"))
+    assert_equal "payroll_admin", forecast.fetch("requested_by")
+    assert_equal 1, forecast.fetch("totals").fetch("line_count")
+    assert_equal 1, forecast.fetch("totals").fetch("employee_count")
+    assert_equal 3, forecast.fetch("totals").fetch("holdback_count")
+    assert_equal @published_shift.labor_cost_cents, forecast.fetch("totals").fetch("total_labor_cents")
+
+    detail = Scheduling::CenterQuery.new.call
+    assert_instance_of Scheduling::ForecastDto, detail.latest_forecast
+    assert_instance_of Scheduling::ForecastLineDto, detail.forecast_lines.first
+    assert_instance_of Scheduling::ForecastHoldbackDto, detail.forecast_holdbacks.first
   end
 
   test "timesheets command center exposes approval and export DTOs" do

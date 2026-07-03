@@ -13,6 +13,9 @@ class Employee < ApplicationRecord
   has_many :employee_documents, dependent: :destroy
   has_many :time_off_requests, dependent: :destroy
   has_many :time_entries, dependent: :destroy
+  has_many :work_shifts, dependent: :nullify
+  has_many :requested_shift_swaps, class_name: "ShiftSwapRequest", foreign_key: :requester_id, dependent: :destroy, inverse_of: :requester
+  has_many :targeted_shift_swaps, class_name: "ShiftSwapRequest", foreign_key: :target_employee_id, dependent: :nullify, inverse_of: :target_employee
   has_many :payroll_adjustments, dependent: :destroy
   has_many :employee_expenses, dependent: :destroy
   has_many :employee_bank_accounts, dependent: :destroy

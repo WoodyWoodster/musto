@@ -41,6 +41,10 @@ Rails.application.routes.draw do
   get "documents", to: "employee_documents#show", as: :documents
   post "documents/request_batch", to: "employee_documents#request_batch", as: :request_document_batch
   get "time-off", to: "time_off#show", as: :time_off
+  get "scheduling", to: "scheduling#show"
+  post "scheduling/publish", to: "scheduling#publish", as: :publish_schedule
+  post "scheduling/swaps/:id/approve", to: "scheduling#approve_swap", as: :approve_shift_swap
+  post "scheduling/forecast", to: "scheduling#generate_forecast", as: :generate_schedule_forecast
   get "timesheets", to: "timesheets#show"
   post "timesheets/time_entries/:id/approve", to: "timesheets#approve_entry", as: :approve_time_entry
   post "timesheets/time_entries/:id/reject", to: "timesheets#reject_entry", as: :reject_time_entry

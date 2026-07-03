@@ -15,13 +15,13 @@ module ApplicationHelper
   def status_pill(status)
     normalized = status.to_s
     palette = case normalized
-    when "active", "available", "accepted", "approved", "complete", "completed", "processed", "succeeded", "finalized", "ready", "connected", "verified", "paid", "eligible", "enrolled", "synced", "funded", "delivered", "viewed", "matched", "hired", "on_track", "closed", "certificate_ready"
+    when "active", "available", "accepted", "approved", "complete", "completed", "processed", "succeeded", "finalized", "ready", "connected", "verified", "paid", "eligible", "enrolled", "synced", "funded", "delivered", "viewed", "matched", "hired", "on_track", "closed", "certificate_ready", "forecast_ready", "published"
       "bg-emerald-50 text-emerald-700 ring-emerald-200"
     when "pending", "requested", "received", "onboarding", "estimated", "open", "running", "in_progress", "scheduled", "remote_pending", "sync_queued", "prenote_sent", "sent", "opened", "reminded", "applied", "screening", "interview", "offer", "self_review", "manager_review", "calibration", "assigned", "withheld"
       "bg-cyan-50 text-cyan-700 ring-cyan-200"
     when "needs_credentials", "waiting_on_enrollment", "needs_review", "draft", "not_synced", "waived", "unmatched_organization", "missing", "pending_verification", "variance", "missing_deduction", "not_sent", "due_soon", "paused", "skipped", "empty", "submitted"
       "bg-amber-50 text-amber-800 ring-amber-200"
-    when "failed", "expired", "denied", "critical", "high", "blocked", "overdue", "rejected", "withdrawn", "at_risk"
+    when "failed", "expired", "denied", "critical", "high", "blocked", "overdue", "rejected", "withdrawn", "at_risk", "missed", "coverage_gap"
       "bg-rose-50 text-rose-700 ring-rose-200"
     else
       "bg-slate-100 text-slate-700 ring-slate-200"
