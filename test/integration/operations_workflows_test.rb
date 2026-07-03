@@ -235,6 +235,40 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       status: "draft"
     )
     @compliance_case = @employer.compliance_cases.create!(employee: @employee, kind: "i9_reverification", severity: "high", due_on: Date.current + 5.days)
+    @compliance_notice = @employer.compliance_notices.create!(
+      employee: @employee,
+      source: "agency_mail",
+      notice_type: "payroll_tax_deposit",
+      title: "IRS deposit discrepancy notice",
+      agency_name: "Internal Revenue Service",
+      jurisdiction: "Federal",
+      reference_number: "IRS-CP-276-OPS",
+      severity: "high",
+      status: "received",
+      received_on: Date.current - 3.days,
+      due_on: Date.current + 7.days,
+      amount_cents: 1_250_00,
+      response_owner: "Finance",
+      response_channel: "agency_portal",
+      summary: "Agency notice flags payroll tax deposit variance."
+    )
+    @response_ready_notice = @employer.compliance_notices.create!(
+      employee: @employee,
+      source: "state_portal",
+      notice_type: "wage_hour",
+      title: "Wage notice response",
+      agency_name: "State Labor Department",
+      jurisdiction: "CO",
+      reference_number: "CO-WAGE-OPS",
+      severity: "medium",
+      status: "response_ready",
+      received_on: Date.current - 4.days,
+      due_on: Date.current + 3.days,
+      amount_cents: 0,
+      response_owner: "Compliance",
+      response_channel: "secure_message",
+      summary: "Wage-hour response is ready for submission."
+    )
     @connection = @organization.integration_connections.create!(provider: "vitable", environment: "production", webhook_secret_reference: "VITABLE_WEBHOOK_SECRET")
     @sync_run = @connection.sync_runs.create!(
       resource_type: "employee",
@@ -314,6 +348,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       benefits_reconciliation_path,
       enrollment_path(@pending_enrollment),
       compliance_path,
+      compliance_notices_path,
       integrations_path,
       vitable_employer_provisioning_path,
       vitable_census_sync_path,
@@ -364,6 +399,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     offboarding = Benefits::OffboardingQuery.new.call
     reconciliation = Benefits::ReconciliationQuery.new.call
     compliance = Operations::ComplianceQuery.new.call
+    compliance_notices = Compliance::NoticeCenterQuery.new.call
     integrations = Operations::IntegrationsQuery.new.call
     employer_provisioning = Vitable::EmployerProvisioningQuery.new.call
     census = Vitable::CensusSyncQuery.new.call
@@ -522,6 +558,10 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_instance_of Benefits::OffboardingIssueDto, offboarding.issues.first
     assert_instance_of Benefits::ReconciliationDetailDto, reconciliation
     assert_instance_of Operations::ComplianceCaseDto, compliance.fetch(:cases).first
+    assert_instance_of Compliance::NoticeCenterDto, compliance_notices
+    assert_instance_of Compliance::NoticeMetricDto, compliance_notices.metrics.first
+    assert_instance_of Compliance::NoticeDto, compliance_notices.notices.first
+    assert_instance_of Compliance::NoticeIssueDto, compliance_notices.issues.first
     assert_instance_of Operations::IntegrationConnectionDto, integrations.fetch(:connections).first
     assert_instance_of Vitable::EmployerProvisioningCenterDto, employer_provisioning
     assert_instance_of Vitable::EmployerProvisioningMetricDto, employer_provisioning.metrics.first
@@ -2700,6 +2740,67 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_redirected_to compliance_path
     assert_equal "resolved", @compliance_case.reload.status
     assert_not_nil @compliance_case.resolved_at
+  end
+
+  test "compliance notices center exposes notice DTOs" do
+    detail = Compliance::NoticeCenterQuery.new.call
+
+    assert_instance_of Compliance::NoticeCenterDto, detail
+    assert_instance_of Compliance::NoticeMetricDto, detail.metrics.first
+    assert_instance_of Compliance::NoticeDto, detail.notices.first
+    assert_instance_of Compliance::NoticeIssueDto, detail.issues.first
+    assert detail.notices.any? { |notice| notice.id == @compliance_notice.id }
+
+    get compliance_notices_path
+
+    assert_response :success
+    assert_select "h1", "Compliance notices"
+    assert_select "h2", "Notice response queue"
+    assert_select "h2", "Notice holdbacks"
+    assert_select "h2", "Agency notice matrix"
+    assert_select "h2", "Packet notice lines"
+    assert_select "h2", "Packet holdbacks"
+  end
+
+  test "acknowledges a compliance notice through command action" do
+    post acknowledge_compliance_notice_path(@compliance_notice), params: { acknowledged_by: "compliance_admin" }
+
+    assert_redirected_to compliance_notices_path
+    @compliance_notice.reload
+    assert_equal "in_review", @compliance_notice.status
+    assert_equal "compliance_admin", @compliance_notice.metadata.fetch("acknowledged_by")
+    assert_not_nil @compliance_notice.acknowledged_at
+  end
+
+  test "resolves a compliance notice through command action" do
+    post resolve_compliance_notice_path(@response_ready_notice), params: { resolved_by: "compliance_admin", resolution_summary: "Submitted response package." }
+
+    assert_redirected_to compliance_notices_path
+    @response_ready_notice.reload
+    assert_equal "resolved", @response_ready_notice.status
+    assert_equal "Submitted response package.", @response_ready_notice.resolution_summary
+    assert_equal "compliance_admin", @response_ready_notice.metadata.fetch("resolved_by")
+    assert_not_nil @response_ready_notice.responded_at
+    assert_not_nil @response_ready_notice.resolved_at
+  end
+
+  test "generates a compliance notice packet through command action" do
+    post generate_compliance_notice_packet_path, params: { requested_by: "compliance_admin" }
+
+    assert_redirected_to compliance_notices_path
+    packet = @employer.reload.settings.fetch("compliance_notice_packet")
+    assert_match(/\Acompliance_notice_#{@employer.id}_/, packet.fetch("packet_id"))
+    assert_equal "compliance_admin", packet.fetch("requested_by")
+    assert_equal 2, packet.fetch("totals").fetch("notice_count")
+    assert_equal 2, packet.fetch("totals").fetch("open_count")
+    assert_equal 1, packet.fetch("totals").fetch("ready_count")
+    assert_equal @compliance_notice.amount_cents, packet.fetch("totals").fetch("amount_cents")
+    assert packet.fetch("totals").fetch("holdback_count").positive?
+
+    detail = Compliance::NoticeCenterQuery.new.call
+    assert_instance_of Compliance::NoticePacketDto, detail.packet
+    assert_instance_of Compliance::NoticePacketLineDto, detail.packet_lines.first
+    assert_instance_of Compliance::NoticeIssueDto, detail.packet_holdbacks.first
   end
 
   def create_directory_manager_pair

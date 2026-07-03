@@ -35,6 +35,7 @@ class Employer < ApplicationRecord
   has_many :employee_change_requests, through: :employees
   has_many :employee_goals, through: :employees
   has_many :compliance_cases, dependent: :destroy
+  has_many :compliance_notices, dependent: :destroy
 
   validates :name, :status, presence: true
   validates :vitable_id, uniqueness: { scope: :organization_id }, allow_blank: true

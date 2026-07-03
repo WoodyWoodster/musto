@@ -1153,6 +1153,116 @@ end
 end
 
 [
+  [
+    nil,
+    "agency_mail",
+    "payroll_tax_deposit",
+    "IRS deposit discrepancy notice",
+    "Internal Revenue Service",
+    "Federal",
+    "IRS-CP-276-ATLAS",
+    "high",
+    "received",
+    Date.current - 3.days,
+    Date.current + 8.days,
+    4_250_00,
+    "Finance",
+    "agency_portal",
+    "IRS notice flags a variance between current-quarter deposits and reported taxable wages.",
+    nil,
+    nil,
+    nil,
+    nil
+  ],
+  [
+    employees.second,
+    "state_portal",
+    "new_hire_reporting",
+    "PA new hire report follow-up",
+    "Pennsylvania Department of Labor",
+    "PA",
+    "PA-NH-202607",
+    "medium",
+    "in_review",
+    Date.current - 5.days,
+    Date.current + 12.days,
+    0,
+    "People Ops",
+    "agency_portal",
+    "Agency requested confirmation that a retail manager location change was included in the new hire report.",
+    2.days.ago,
+    nil,
+    nil,
+    nil
+  ],
+  [
+    employees[4],
+    "state_mail",
+    "wage_hour",
+    "Colorado wage notice response",
+    "Colorado Department of Labor and Employment",
+    "CO",
+    "CO-WAGE-4481",
+    "critical",
+    "response_ready",
+    Date.current - 7.days,
+    Date.current + 2.days,
+    1_200_00,
+    "Compliance",
+    "secure_message",
+    "Wage-hour notice requires final pay timeline evidence for Denver operations coverage.",
+    5.days.ago,
+    nil,
+    nil,
+    nil
+  ],
+  [
+    employees.third,
+    "carrier_audit",
+    "benefits_eligibility",
+    "Benefits eligibility audit response",
+    "Vitable Benefits Operations",
+    "Multi-state",
+    "VIT-AUD-9921",
+    "low",
+    "resolved",
+    Date.current - 18.days,
+    Date.current - 2.days,
+    0,
+    "Benefits",
+    "email",
+    "Carrier audit asked for dependent eligibility evidence tied to the last census sync.",
+    17.days.ago,
+    4.days.ago,
+    2.days.ago,
+    "Dependent verification packet supplied and accepted."
+  ]
+].each do |employee, source, notice_type, title, agency_name, jurisdiction, reference_number, severity, status, received_on, due_on, amount_cents, response_owner, response_channel, summary, acknowledged_at, responded_at, resolved_at, resolution_summary|
+  notice = employer.compliance_notices.find_or_initialize_by(agency_name:, reference_number:)
+  notice.assign_attributes(
+    employee:,
+    source:,
+    notice_type:,
+    title:,
+    jurisdiction:,
+    severity:,
+    status:,
+    received_on:,
+    due_on:,
+    amount_cents:,
+    response_owner:,
+    response_channel:,
+    summary:,
+    acknowledged_at:,
+    responded_at:,
+    resolved_at:,
+    resolution_summary:,
+    metadata: { source: "seeded_compliance_notice" }
+  )
+  notice.save!
+end
+
+[
   [ "wevt_demo_enrollment_accepted", "enrollment.accepted", "enrollment", "enrl_demo_accepted", "needs_credentials", 2.hours.ago ],
   [ "wevt_demo_employee_created", "employee.created", "employee", "empl_demo_created", "needs_credentials", 90.minutes.ago ],
   [ "wevt_demo_payroll_deduction", "payroll_deduction.generated", "payroll_deduction", "pded_demo_generated", "received", 25.minutes.ago ]

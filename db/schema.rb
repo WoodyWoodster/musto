@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_04_002000) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_04_003500) do
   create_table "api_request_logs", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.integer "duration_ms"
@@ -178,6 +178,39 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_04_002000) do
     t.index ["employer_id", "status"], name: "index_compliance_cases_on_employer_id_and_status"
     t.index ["employer_id"], name: "index_compliance_cases_on_employer_id"
     t.index ["severity", "due_on"], name: "index_compliance_cases_on_severity_and_due_on"
+  end
+
+  create_table "compliance_notices", force: :cascade do |t|
+    t.datetime "acknowledged_at"
+    t.string "agency_name", null: false
+    t.integer "amount_cents", default: 0, null: false
+    t.datetime "created_at", null: false
+    t.date "due_on", null: false
+    t.integer "employee_id"
+    t.integer "employer_id", null: false
+    t.string "jurisdiction", null: false
+    t.json "metadata", default: {}, null: false
+    t.string "notice_type", null: false
+    t.date "received_on", null: false
+    t.string "reference_number"
+    t.text "resolution_summary"
+    t.datetime "resolved_at"
+    t.datetime "responded_at"
+    t.string "response_channel", default: "agency_portal", null: false
+    t.string "response_owner", default: "Compliance", null: false
+    t.string "severity", default: "medium", null: false
+    t.string "source", null: false
+    t.string "status", default: "received", null: false
+    t.text "summary"
+    t.string "title", null: false
+    t.datetime "updated_at", null: false
+    t.index ["agency_name", "reference_number"], name: "index_compliance_notices_on_agency_name_and_reference_number"
+    t.index ["employee_id"], name: "index_compliance_notices_on_employee_id"
+    t.index ["employer_id", "notice_type"], name: "index_compliance_notices_on_employer_id_and_notice_type"
+    t.index ["employer_id", "status"], name: "index_compliance_notices_on_employer_id_and_status"
+    t.index ["employer_id"], name: "index_compliance_notices_on_employer_id"
+    t.index ["severity", "due_on"], name: "index_compliance_notices_on_severity_and_due_on"
+    t.index ["status", "due_on"], name: "index_compliance_notices_on_status_and_due_on"
   end
 
   create_table "contractor_payments", force: :cascade do |t|
@@ -1041,6 +1074,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_04_002000) do
   add_foreign_key "compensation_changes", "payroll_runs"
   add_foreign_key "compliance_cases", "employees"
   add_foreign_key "compliance_cases", "employers"
+  add_foreign_key "compliance_notices", "employees"
+  add_foreign_key "compliance_notices", "employers"
   add_foreign_key "contractor_payments", "contractors"
   add_foreign_key "contractors", "employers"
   add_foreign_key "departments", "employees", column: "manager_id"

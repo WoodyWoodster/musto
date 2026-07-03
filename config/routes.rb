@@ -112,6 +112,10 @@ Rails.application.routes.draw do
   get "benefits/reconciliation", to: "benefits_reconciliations#show", as: :benefits_reconciliation
   post "benefits/reconciliation/:enrollment_id/resolve", to: "benefits_reconciliations#resolve", as: :resolve_benefits_reconciliation_item
   get "compliance", to: "operations#compliance"
+  get "compliance/notices", to: "compliance_notices#show", as: :compliance_notices
+  post "compliance/notices/packet", to: "compliance_notices#generate_packet", as: :generate_compliance_notice_packet
+  post "compliance/notices/:id/acknowledge", to: "compliance_notices#acknowledge", as: :acknowledge_compliance_notice
+  post "compliance/notices/:id/resolve", to: "compliance_notices#resolve", as: :resolve_compliance_notice
   get "integrations", to: "operations#integrations"
   get "integrations/vitable/employer-provisioning", to: "vitable_employer_provisioning#show", as: :vitable_employer_provisioning
   post "integrations/vitable/employer-provisioning/packet", to: "vitable_employer_provisioning#generate_packet", as: :generate_vitable_employer_provisioning
