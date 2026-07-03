@@ -18,6 +18,8 @@ Rails.application.routes.draw do
   get "workforce", to: "operations#workforce"
   get "payroll", to: "operations#payroll"
   get "benefits", to: "operations#benefits"
+  get "benefits/reconciliation", to: "benefits_reconciliations#show", as: :benefits_reconciliation
+  post "benefits/reconciliation/:enrollment_id/resolve", to: "benefits_reconciliations#resolve", as: :resolve_benefits_reconciliation_item
   get "compliance", to: "operations#compliance"
   get "integrations", to: "operations#integrations"
 

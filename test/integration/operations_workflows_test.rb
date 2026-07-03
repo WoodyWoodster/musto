@@ -75,6 +75,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       payroll_path,
       payroll_run_path(@payroll_run),
       benefits_path,
+      benefits_reconciliation_path,
       enrollment_path(@pending_enrollment),
       compliance_path,
       integrations_path,
@@ -92,6 +93,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     workforce = Operations::WorkforceQuery.new.call
     payroll = Operations::PayrollQuery.new.call
     benefits = Operations::BenefitsQuery.new.call
+    reconciliation = Benefits::ReconciliationQuery.new.call
     compliance = Operations::ComplianceQuery.new.call
     integrations = Operations::IntegrationsQuery.new.call
 
@@ -100,6 +102,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_instance_of Operations::WorkforceEmployeeDto, workforce.fetch(:employees).first
     assert_instance_of Operations::PayrollRunDto, payroll.fetch(:payroll_runs).first
     assert_instance_of Operations::BenefitPlanDto, benefits.fetch(:benefit_plans).first
+    assert_instance_of Benefits::ReconciliationDetailDto, reconciliation
     assert_instance_of Operations::ComplianceCaseDto, compliance.fetch(:cases).first
     assert_instance_of Operations::IntegrationConnectionDto, integrations.fetch(:connections).first
   end
@@ -156,6 +159,25 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_select "h2", "Sync payload"
   end
 
+  test "benefits reconciliation workspace exposes deduction exception DTOs" do
+    @pending_deduction.update!(amount_cents: 1_234, status: "ready")
+
+    detail = Benefits::ReconciliationQuery.new.call
+
+    assert_instance_of Benefits::ReconciliationDetailDto, detail
+    assert_instance_of Benefits::ReconciliationMetricDto, detail.metrics.first
+    assert_instance_of Benefits::ReconciliationItemDto, detail.items.first
+    assert detail.exception_items.any? { |item| item.enrollment_id == @pending_enrollment.id }
+
+    get benefits_reconciliation_path
+
+    assert_response :success
+    assert_select "h1", "Benefits deduction reconciliation"
+    assert_select "h2", "Exception queue"
+    assert_select "h2", "Enrollment deduction ledger"
+    assert_select "td", text: @pending_plan.name
+  end
+
   test "webhook event workspace exposes replay diagnostics" do
     detail = Vitable::WebhookEventDetailQuery.new.call(@webhook_event.id)
 
@@ -210,6 +232,17 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal "value", @connection.metadata.fetch("existing")
     assert_equal "needs_credentials", @connection.metadata.dig("last_verification", "status")
     assert_match @connection.api_key_reference, @connection.metadata.dig("last_verification", "message")
+  end
+
+  test "resolves a benefits reconciliation exception" do
+    @pending_deduction.update!(amount_cents: 1_234, status: "ready")
+
+    post resolve_benefits_reconciliation_item_path(@pending_enrollment)
+
+    assert_redirected_to benefits_reconciliation_path
+    @pending_deduction.reload
+    assert_equal 0, @pending_deduction.amount_cents
+    assert_equal "waiting_on_enrollment", @pending_deduction.status
   end
 
   test "simulates a Vitable webhook through the connection workspace" do

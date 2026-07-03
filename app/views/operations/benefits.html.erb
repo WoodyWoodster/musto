@@ -5,7 +5,10 @@
       <h1 class="mt-2 text-3xl font-semibold tracking-tight text-slate-950">Embedded benefits cockpit</h1>
       <p class="mt-2 max-w-3xl text-sm leading-6 text-slate-600">Track plan catalog, enrollment status, payroll deductions, and Vitable event freshness from one benefits operations view.</p>
     </div>
-    <%= link_to "Webhook operations", integrations_path, class: "rounded-md bg-slate-950 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-slate-800" %>
+    <div class="flex flex-wrap gap-2">
+      <%= link_to "Reconcile deductions", benefits_reconciliation_path, class: "rounded-md bg-slate-950 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-slate-800" %>
+      <%= link_to "Webhook operations", integrations_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm hover:border-slate-300" %>
+    </div>
   </div>
 
   <div class="grid gap-4 md:grid-cols-4">
