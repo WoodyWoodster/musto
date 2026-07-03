@@ -1,0 +1,19 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+one:
+  employer: one
+  period_start_on: 2026-07-02
+  period_end_on: 2026-07-02
+  pay_date: 2026-07-02
+  status: MyString
+  gross_pay_cents: 1
+  metadata: 
+
+two:
+  employer: two
+  period_start_on: 2026-07-02
+  period_end_on: 2026-07-02
+  pay_date: 2026-07-02
+  status: MyString
+  gross_pay_cents: 1
+  metadata: 

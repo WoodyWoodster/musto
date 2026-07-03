@@ -1,0 +1,17 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+one:
+  employer: one
+  name: MyString
+  code: MyString
+  manager_id: 1
+  budget_cents: 1
+  metadata: 
+
+two:
+  employer: two
+  name: MyString
+  code: MyString
+  manager_id: 1
+  budget_cents: 1
+  metadata: 

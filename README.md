@@ -1,0 +1,85 @@
+# Musto
+
+Musto is a Rails 8.1 prototype for pushing a Vitable Connect integration in a Gusto-style benefits and payroll operations platform.
+
+It models the local system of record for organizations, employers, employees, benefit plans, enrollments, payroll runs, payroll deductions, Vitable integration connections, webhook events, sync runs, and API request logs. The app is intentionally credential-aware: it works without a Vitable API key, records missing-credential states, and is ready to call the Vitable SDK when `VITABLE_CONNECT_API_KEY` is configured.
+
+## Stack
+
+- Ruby 4.0.5 target
+- Rails 8.1.3
+- SQLite for local proofing
+- Tailwind CSS via `tailwindcss-rails`
+- Vitable SDK: `vitable-connect ~> 0.5.0`
+- Solid Cache, Solid Queue, and Solid Cable
+
+## Vitable Integration Notes
+
+The Vitable docs used for this scaffold:
+
+- `https://developer.vitablehealth.com/`
+- `https://developer.vitablehealth.com/api/ruby/`
+- `https://developer.vitablehealth.com/webhooks/introduction/`
+
+The SDK is initialized through `Vitable::ClientGateway`, using `IntegrationConnection#api_key_reference` to read credentials from the environment. By default this is:
+
+```sh
+VITABLE_CONNECT_API_KEY=...
+VITABLE_WEBHOOK_SECRET=...
+```
+
+Webhook payloads are stored idempotently by `event_id`. Vitable webhook events include identifiers only, so `Vitable::ProcessWebhookCommand` records the event and, when credentials exist, calls `Vitable::FetchResourceCommand` to retrieve the fresh resource state.
+
+## CQRS Layout
+
+- Commands: `app/commands`
+- Queries: `app/queries`
+- DTOs: `app/dtos`
+- Vitable gateway: `app/services/vitable/client_gateway.rb`
+- JSON serializers: `app/serializers`
+
+Controllers stay thin and delegate writes to commands:
+
+- `POST /api/v1/employers`
+- `POST /api/v1/webhooks/vitable`
+
+Read-side UI:
+
+- `GET /`
+- `GET /employers`
+- `GET /employers/:id`
+
+## Local Setup
+
+```sh
+bundle install
+bin/rails db:prepare
+bin/rails db:seed
+bin/dev
+```
+
+The seed data creates a sample organization, Vitable connection placeholder, employer, roster, plans, enrollments, payroll deductions, and a sample webhook event.
+
+## Webhook Smoke Test
+
+```sh
+curl -X POST http://localhost:3000/api/v1/webhooks/vitable \
+  -H "Content-Type: application/json" \
+  -d '{
+    "event_id": "wevt_local_smoke",
+    "organization_id": "org_demo_vitable",
+    "event_name": "enrollment.accepted",
+    "resource_type": "enrollment",
+    "resource_id": "enrl_local_smoke",
+    "created_at": "2026-01-23T14:30:00+00:00"
+  }'
+```
+
+Without `VITABLE_CONNECT_API_KEY`, the event is accepted and marked `needs_credentials`.
+
+## Verification
+
+```sh
+bin/rails test
+env RUBOCOP_CACHE_ROOT=/private/tmp/rubocop_cache bin/rubocop
+```

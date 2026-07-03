@@ -1,0 +1,21 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+one:
+  payroll_run: one
+  employee: one
+  enrollment: one
+  vitable_id: MyString
+  amount_cents: 1
+  code: MyString
+  status: MyString
+  metadata: 
+
+two:
+  payroll_run: two
+  employee: two
+  enrollment: two
+  vitable_id: MyString
+  amount_cents: 1
+  code: MyString
+  status: MyString
+  metadata: 

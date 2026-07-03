@@ -1,0 +1,44 @@
+<section class="space-y-7">
+  <div class="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+    <div>
+      <p class="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">Employers</p>
+      <h1 class="mt-2 text-3xl font-semibold tracking-tight text-slate-950">Employer portfolio</h1>
+      <p class="mt-2 max-w-3xl text-sm leading-6 text-slate-600">A multi-employer operating layer for benefits, payroll, compliance, and Vitable organization routing.</p>
+    </div>
+    <%= link_to "Back to command", root_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm hover:border-slate-300" %>
+  </div>
+
+  <section class="rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div class="overflow-x-auto">
+      <table class="min-w-full divide-y divide-slate-100 text-sm">
+        <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <tr>
+            <th class="px-5 py-3">Employer</th>
+            <th class="px-5 py-3">Organization</th>
+            <th class="px-5 py-3">People</th>
+            <th class="px-5 py-3">Benefits</th>
+            <th class="px-5 py-3">Payroll</th>
+            <th class="px-5 py-3">Compliance</th>
+            <th class="px-5 py-3">Status</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          <% @employers.each do |employer| %>
+            <tr class="hover:bg-slate-50">
+              <td class="px-5 py-4">
+                <%= link_to employer.name, employer_path(employer), class: "font-semibold text-slate-950 hover:text-cyan-700" %>
+                <p class="mt-1 text-xs text-slate-500"><%= employer.legal_name.presence || "Legal entity pending" %></p>
+              </td>
+              <td class="px-5 py-4 text-slate-600"><%= employer.organization.name %></td>
+              <td class="px-5 py-4 text-slate-600"><%= employer.employees.size %></td>
+              <td class="px-5 py-4 text-slate-600"><%= employer.enrollments.accepted.count %>/<%= employer.enrollments.count %> accepted</td>
+              <td class="px-5 py-4 text-slate-600"><%= employer.payroll_runs.count %> runs</td>
+              <td class="px-5 py-4 text-slate-600"><%= employer.compliance_cases.open.count %> open</td>
+              <td class="px-5 py-4"><%= status_pill(employer.status) %></td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</section>

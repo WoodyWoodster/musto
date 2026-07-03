@@ -1,0 +1,21 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+one:
+  employer: one
+  vitable_id: MyString
+  first_name: MyString
+  last_name: MyString
+  email: MyString
+  date_of_birth: 2026-07-02
+  employment_status: MyString
+  metadata: 
+
+two:
+  employer: two
+  vitable_id: MyString
+  first_name: MyString
+  last_name: MyString
+  email: MyString
+  date_of_birth: 2026-07-02
+  employment_status: MyString
+  metadata: 

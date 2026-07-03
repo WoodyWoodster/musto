@@ -1,0 +1,140 @@
+<section class="space-y-7">
+  <div class="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+    <div>
+      <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Integrations</p>
+      <h1 class="mt-2 text-3xl font-semibold tracking-tight text-slate-950">Vitable operations console</h1>
+      <p class="mt-2 max-w-3xl text-sm leading-6 text-slate-600">Monitor API credentials, webhook intake, idempotency status, resource syncs, and request logs for the benefits integration.</p>
+    </div>
+    <span class="rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm"><%= @integrations[:webhooks].count %> recent events</span>
+  </div>
+
+  <section class="rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div class="border-b border-slate-100 px-5 py-4">
+      <h2 class="text-base font-semibold text-slate-950">Connections</h2>
+      <p class="text-sm text-slate-500">Credential references are intentionally stored as environment variable names, not secrets.</p>
+    </div>
+    <div class="grid divide-y divide-slate-100 lg:grid-cols-2 lg:divide-x lg:divide-y-0">
+      <% @integrations[:connections].each do |connection| %>
+        <div class="p-5">
+          <div class="flex items-start justify-between gap-4">
+            <div>
+              <p class="font-semibold text-slate-950"><%= connection.organization.name %></p>
+              <p class="mt-1 text-sm text-slate-500"><%= connection.provider %> · <%= connection.environment %></p>
+            </div>
+            <%= status_pill(connection.status) %>
+          </div>
+          <dl class="mt-5 grid gap-3 text-sm">
+            <div class="rounded-md bg-slate-50 p-3">
+              <dt class="text-xs font-semibold uppercase tracking-wide text-slate-400">API key</dt>
+              <dd class="mt-1 font-mono text-xs text-slate-700"><%= connection.api_key_reference %></dd>
+            </div>
+            <div class="rounded-md bg-slate-50 p-3">
+              <dt class="text-xs font-semibold uppercase tracking-wide text-slate-400">Webhook secret</dt>
+              <dd class="mt-1 font-mono text-xs text-slate-700"><%= connection.webhook_secret_reference.presence || "not configured" %></dd>
+            </div>
+          </dl>
+        </div>
+      <% end %>
+    </div>
+  </section>
+
+  <div class="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+    <section class="rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="border-b border-slate-100 px-5 py-4">
+        <h2 class="text-base font-semibold text-slate-950">Webhook event ledger</h2>
+        <p class="text-sm text-slate-500">Vitable sends IDs only; each event is stored once and followed by API fetches when credentials exist.</p>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-slate-100 text-sm">
+          <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <tr>
+              <th class="px-5 py-3">Event</th>
+              <th class="px-5 py-3">Resource</th>
+              <th class="px-5 py-3">Organization</th>
+              <th class="px-5 py-3">Received</th>
+              <th class="px-5 py-3">Status</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            <% @integrations[:webhooks].each do |event| %>
+              <tr class="hover:bg-slate-50">
+                <td class="px-5 py-4">
+                  <p class="font-medium text-slate-950"><%= event.event_name %></p>
+                  <p class="text-xs text-slate-500"><%= event.event_id %></p>
+                </td>
+                <td class="px-5 py-4 text-slate-600"><%= event.resource_type %> · <%= event.resource_id %></td>
+                <td class="px-5 py-4 text-slate-600"><%= event.organization_external_id %></td>
+                <td class="px-5 py-4 text-slate-600"><%= time_ago_in_words(event.created_at) %> ago</td>
+                <td class="px-5 py-4"><%= status_pill(event.status) %></td>
+              </tr>
+            <% end %>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="border-b border-slate-100 px-5 py-4">
+        <h2 class="text-base font-semibold text-slate-950">Sync runs</h2>
+        <p class="text-sm text-slate-500">Resource fetch attempts triggered by commands and webhooks.</p>
+      </div>
+      <div class="divide-y divide-slate-100">
+        <% @integrations[:sync_runs].each do |sync| %>
+          <div class="px-5 py-4">
+            <div class="flex items-start justify-between gap-4">
+              <div>
+                <p class="font-semibold text-slate-950"><%= sync.operation.humanize %> <%= sync.resource_type %></p>
+                <p class="mt-1 text-sm text-slate-500"><%= sync.started_at&.strftime("%b %-d, %I:%M %p") %></p>
+              </div>
+              <%= status_pill(sync.status) %>
+            </div>
+            <% if sync.error_message.present? %>
+              <p class="mt-2 rounded-md bg-rose-50 px-3 py-2 text-xs text-rose-700"><%= sync.error_message %></p>
+            <% end %>
+          </div>
+        <% end %>
+        <% if @integrations[:sync_runs].empty? %>
+          <p class="px-5 py-4 text-sm text-slate-500">No sync runs yet. Configure credentials and process a webhook to fetch fresh resource state.</p>
+        <% end %>
+      </div>
+    </section>
+  </div>
+
+  <section class="rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div class="border-b border-slate-100 px-5 py-4">
+      <h2 class="text-base font-semibold text-slate-950">API request log</h2>
+      <p class="text-sm text-slate-500">Auditable request attempts with status, timing, and error class.</p>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="min-w-full divide-y divide-slate-100 text-sm">
+        <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <tr>
+            <th class="px-5 py-3">Operation</th>
+            <th class="px-5 py-3">Method</th>
+            <th class="px-5 py-3">Path</th>
+            <th class="px-5 py-3">Status</th>
+            <th class="px-5 py-3">Duration</th>
+            <th class="px-5 py-3">Error</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          <% @integrations[:request_logs].each do |log| %>
+            <tr class="hover:bg-slate-50">
+              <td class="px-5 py-4 font-medium text-slate-950"><%= log.operation %></td>
+              <td class="px-5 py-4 text-slate-600"><%= log.method %></td>
+              <td class="px-5 py-4 font-mono text-xs text-slate-600"><%= log.path %></td>
+              <td class="px-5 py-4 text-slate-600"><%= log.status_code || "n/a" %></td>
+              <td class="px-5 py-4 text-slate-600"><%= log.duration_ms || 0 %>ms</td>
+              <td class="px-5 py-4 text-slate-600"><%= log.error_class.presence || "none" %></td>
+            </tr>
+          <% end %>
+          <% if @integrations[:request_logs].empty? %>
+            <tr>
+              <td colspan="6" class="px-5 py-5 text-sm text-slate-500">No API request logs yet.</td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</section>

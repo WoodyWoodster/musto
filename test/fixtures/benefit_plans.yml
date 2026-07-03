@@ -1,0 +1,21 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+one:
+  employer: one
+  vitable_id: MyString
+  name: MyString
+  category: MyString
+  carrier: MyString
+  status: MyString
+  monthly_premium_cents: 1
+  metadata: 
+
+two:
+  employer: two
+  vitable_id: MyString
+  name: MyString
+  category: MyString
+  carrier: MyString
+  status: MyString
+  monthly_premium_cents: 1
+  metadata: 

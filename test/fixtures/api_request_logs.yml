@@ -1,0 +1,25 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+one:
+  integration_connection: one
+  operation: MyString
+  method: MyString
+  path: MyString
+  status_code: 1
+  duration_ms: 1
+  request_body: 
+  response_body: 
+  error_class: MyString
+  error_message: MyText
+
+two:
+  integration_connection: two
+  operation: MyString
+  method: MyString
+  path: MyString
+  status_code: 1
+  duration_ms: 1
+  request_body: 
+  response_body: 
+  error_class: MyString
+  error_message: MyText

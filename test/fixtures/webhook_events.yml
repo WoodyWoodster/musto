@@ -1,0 +1,27 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+one:
+  integration_connection: one
+  event_id: MyString
+  organization_external_id: MyString
+  event_name: MyString
+  resource_type: MyString
+  resource_id: MyString
+  occurred_at: 2026-07-02 21:34:02
+  processed_at: 2026-07-02 21:34:02
+  status: MyString
+  payload: 
+  error_message: MyText
+
+two:
+  integration_connection: two
+  event_id: MyString
+  organization_external_id: MyString
+  event_name: MyString
+  resource_type: MyString
+  resource_id: MyString
+  occurred_at: 2026-07-02 21:34:02
+  processed_at: 2026-07-02 21:34:02
+  status: MyString
+  payload: 
+  error_message: MyText

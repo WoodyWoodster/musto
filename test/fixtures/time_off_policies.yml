@@ -1,0 +1,21 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+one:
+  employer: one
+  name: MyString
+  accrual_method: MyString
+  annual_hours: 9.99
+  carryover_hours: 9.99
+  paid: false
+  status: MyString
+  metadata: 
+
+two:
+  employer: two
+  name: MyString
+  accrual_method: MyString
+  annual_hours: 9.99
+  carryover_hours: 9.99
+  paid: false
+  status: MyString
+  metadata: 

@@ -1,0 +1,132 @@
+<section class="space-y-7">
+  <div class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div class="grid gap-0 lg:grid-cols-[1.35fr_0.65fr]">
+      <div class="p-6 lg:p-8">
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="rounded-full bg-cyan-50 px-3 py-1 text-xs font-semibold text-cyan-700 ring-1 ring-cyan-200">Platform command</span>
+          <span class="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-200">Live Rails workflows</span>
+        </div>
+        <h1 class="mt-5 max-w-3xl text-4xl font-semibold tracking-tight text-slate-950">A benefits and payroll control plane for modern operators.</h1>
+        <p class="mt-4 max-w-3xl text-base leading-7 text-slate-600">
+          Manage employers, employee lifecycle, benefit participation, payroll readiness, compliance risk, and Vitable webhook operations from one dense workspace.
+        </p>
+        <div class="mt-6 grid gap-3 sm:grid-cols-3">
+          <%= link_to "Review workforce", workforce_path, class: "rounded-md bg-slate-950 px-4 py-3 text-center text-sm font-semibold text-white shadow-sm hover:bg-slate-800" %>
+          <%= link_to "Run payroll", payroll_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-center text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
+          <%= link_to "Inspect Vitable", integrations_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-center text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
+        </div>
+      </div>
+      <div class="border-t border-slate-200 bg-slate-950 p-6 text-white lg:border-l lg:border-t-0 lg:p-8">
+        <p class="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-300">Integration health</p>
+        <div class="mt-6 grid gap-4">
+          <div class="flex items-center justify-between border-b border-white/10 pb-4">
+            <span class="text-sm text-slate-300">Active connections</span>
+            <span class="text-2xl font-semibold"><%= @dashboard[:integration_health][:active] %></span>
+          </div>
+          <div class="flex items-center justify-between border-b border-white/10 pb-4">
+            <span class="text-sm text-slate-300">Needs credentials</span>
+            <span class="text-2xl font-semibold text-amber-200"><%= @dashboard[:integration_health][:needs_credentials] %></span>
+          </div>
+          <div class="flex items-center justify-between">
+            <span class="text-sm text-slate-300">Pending webhooks</span>
+            <span class="text-2xl font-semibold text-cyan-200"><%= @dashboard[:integration_health][:pending_webhooks] %></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+    <% [
+      ["Active employees", @dashboard[:active_employee_count], "bg-emerald-500"],
+      ["Payroll ready", @dashboard[:payroll_ready_count], "bg-indigo-500"],
+      ["Open onboarding", @dashboard[:open_onboarding_count], "bg-cyan-500"],
+      ["Urgent compliance", @dashboard[:compliance_urgent_count], "bg-rose-500"]
+    ].each do |label, value, accent| %>
+      <article class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <div class="flex items-center justify-between">
+          <p class="text-sm font-medium text-slate-500"><%= label %></p>
+          <span class="h-2.5 w-2.5 rounded-full <%= accent %>"></span>
+        </div>
+        <p class="mt-4 text-3xl font-semibold tracking-tight text-slate-950"><%= compact_number(value) %></p>
+      </article>
+    <% end %>
+  </div>
+
+  <div class="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+    <section class="rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+        <div>
+          <h2 class="text-base font-semibold text-slate-950">Employer portfolio</h2>
+          <p class="text-sm text-slate-500">Companies, roster depth, and benefits utilization.</p>
+        </div>
+        <%= link_to "All employers", employers_path, class: "text-sm font-semibold text-cyan-700 hover:text-cyan-900" %>
+      </div>
+      <div class="divide-y divide-slate-100">
+        <% @dashboard[:employers].each do |employer| %>
+          <%= link_to employer_path(employer), class: "grid gap-4 px-5 py-4 hover:bg-slate-50 md:grid-cols-[1fr_auto]" do %>
+            <div>
+              <p class="font-semibold text-slate-950"><%= employer.name %></p>
+              <p class="mt-1 text-sm text-slate-500"><%= employer.organization.name %> · <%= employer.status.humanize %></p>
+            </div>
+            <div class="grid grid-cols-3 gap-5 text-right text-sm">
+              <span><strong class="block text-slate-950"><%= employer.employees.count %></strong><span class="text-slate-500">People</span></span>
+              <span><strong class="block text-slate-950"><%= employer.benefit_plans.count %></strong><span class="text-slate-500">Plans</span></span>
+              <span><strong class="block text-slate-950"><%= employer.compliance_cases.open.count %></strong><span class="text-slate-500">Cases</span></span>
+            </div>
+          <% end %>
+        <% end %>
+      </div>
+    </section>
+
+    <section class="rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="border-b border-slate-100 px-5 py-4">
+        <h2 class="text-base font-semibold text-slate-950">Activity stream</h2>
+        <p class="text-sm text-slate-500">Recent events across payroll, webhooks, and compliance.</p>
+      </div>
+      <div class="divide-y divide-slate-100">
+        <% @dashboard[:recent_activity].each do |type, title, status, timestamp| %>
+          <div class="flex items-start justify-between gap-4 px-5 py-4">
+            <div>
+              <p class="text-xs font-semibold uppercase tracking-wide text-slate-400"><%= type %></p>
+              <p class="mt-1 font-medium text-slate-950"><%= title %></p>
+              <p class="mt-1 text-xs text-slate-500"><%= time_ago_in_words(timestamp) %> ago</p>
+            </div>
+            <%= status_pill(status) %>
+          </div>
+        <% end %>
+      </div>
+    </section>
+  </div>
+
+  <section class="grid gap-6 lg:grid-cols-3">
+    <div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      <p class="text-sm font-semibold text-slate-950">Benefits participation</p>
+      <div class="mt-4 flex items-end gap-3">
+        <span class="text-4xl font-semibold tracking-tight"><%= @dashboard[:benefits_participation_rate] %>%</span>
+        <span class="pb-1 text-sm text-slate-500">accepted enrollment ratio</span>
+      </div>
+      <div class="mt-4 h-2 rounded-full bg-slate-100">
+        <div class="h-2 rounded-full bg-cyan-500" style="width: <%= @dashboard[:benefits_participation_rate] %>%"></div>
+      </div>
+    </div>
+
+    <div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      <p class="text-sm font-semibold text-slate-950">Upcoming payroll</p>
+      <% if @dashboard[:upcoming_payroll] %>
+        <p class="mt-4 text-3xl font-semibold"><%= @dashboard[:upcoming_payroll].pay_date.strftime("%b %-d") %></p>
+        <p class="mt-1 text-sm text-slate-500"><%= money_cents(@dashboard[:upcoming_payroll].gross_pay_cents) %> gross payroll</p>
+        <div class="mt-4"><%= status_pill(@dashboard[:upcoming_payroll].status) %></div>
+      <% else %>
+        <p class="mt-4 text-sm text-slate-500">No upcoming payroll run scheduled.</p>
+      <% end %>
+    </div>
+
+    <div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      <p class="text-sm font-semibold text-slate-950">Time off queue</p>
+      <p class="mt-4 text-3xl font-semibold"><%= @dashboard[:pending_time_off_count] %></p>
+      <p class="mt-1 text-sm text-slate-500">requests awaiting review</p>
+      <%= link_to "Review policy queue", compliance_path, class: "mt-4 inline-flex text-sm font-semibold text-cyan-700 hover:text-cyan-900" %>
+    </div>
+  </section>
+</section>

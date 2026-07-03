@@ -1,0 +1,21 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+one:
+  integration_connection: one
+  resource_type: MyString
+  operation: MyString
+  status: MyString
+  started_at: 2026-07-02 21:34:02
+  completed_at: 2026-07-02 21:34:02
+  stats: 
+  error_message: MyText
+
+two:
+  integration_connection: two
+  resource_type: MyString
+  operation: MyString
+  status: MyString
+  started_at: 2026-07-02 21:34:02
+  completed_at: 2026-07-02 21:34:02
+  stats: 
+  error_message: MyText

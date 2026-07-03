@@ -1,0 +1,120 @@
+<section class="space-y-7">
+  <div class="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+    <div>
+      <p class="text-sm font-semibold uppercase tracking-[0.18em] text-cyan-700">Benefits</p>
+      <h1 class="mt-2 text-3xl font-semibold tracking-tight text-slate-950">Embedded benefits cockpit</h1>
+      <p class="mt-2 max-w-3xl text-sm leading-6 text-slate-600">Track plan catalog, enrollment status, payroll deductions, and Vitable event freshness from one benefits operations view.</p>
+    </div>
+    <%= link_to "Webhook operations", integrations_path, class: "rounded-md bg-slate-950 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-slate-800" %>
+  </div>
+
+  <div class="grid gap-4 md:grid-cols-4">
+    <% accepted = @benefits[:enrollments].accepted.count %>
+    <% pending = @benefits[:enrollments].pending.count %>
+    <% [
+      ["Available plans", @benefits[:benefit_plans].count, "bg-cyan-500"],
+      ["Accepted enrollments", accepted, "bg-emerald-500"],
+      ["Pending enrollments", pending, "bg-amber-500"],
+      ["Webhook events", @benefits[:webhooks].count, "bg-indigo-500"]
+    ].each do |label, value, accent| %>
+      <div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <div class="flex items-center justify-between">
+          <p class="text-sm text-slate-500"><%= label %></p>
+          <span class="h-2.5 w-2.5 rounded-full <%= accent %>"></span>
+        </div>
+        <p class="mt-3 text-3xl font-semibold"><%= value %></p>
+      </div>
+    <% end %>
+  </div>
+
+  <section class="rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div class="border-b border-slate-100 px-5 py-4">
+      <h2 class="text-base font-semibold text-slate-950">Plan catalog</h2>
+      <p class="text-sm text-slate-500">Vitable-powered benefits mapped into the employer’s local product catalog.</p>
+    </div>
+    <div class="grid divide-y divide-slate-100 lg:grid-cols-2 lg:divide-x lg:divide-y-0">
+      <% @benefits[:benefit_plans].each do |plan| %>
+        <article class="p-5">
+          <div class="flex items-start justify-between gap-4">
+            <div>
+              <p class="font-semibold text-slate-950"><%= plan.name %></p>
+              <p class="mt-1 text-sm text-slate-500"><%= plan.category.humanize %> · <%= plan.carrier.presence || "Carrier pending" %></p>
+            </div>
+            <%= status_pill(plan.status) %>
+          </div>
+          <div class="mt-5 grid grid-cols-3 gap-3">
+            <div class="rounded-md bg-slate-50 p-3">
+              <p class="text-xs text-slate-500">Premium</p>
+              <p class="mt-1 font-semibold text-slate-950"><%= money_cents(plan.monthly_premium_cents) %></p>
+            </div>
+            <div class="rounded-md bg-slate-50 p-3">
+              <p class="text-xs text-slate-500">Accepted</p>
+              <p class="mt-1 font-semibold text-slate-950"><%= plan.enrollments.accepted.count %></p>
+            </div>
+            <div class="rounded-md bg-slate-50 p-3">
+              <p class="text-xs text-slate-500">Pending</p>
+              <p class="mt-1 font-semibold text-slate-950"><%= plan.enrollments.pending.count %></p>
+            </div>
+          </div>
+        </article>
+      <% end %>
+    </div>
+  </section>
+
+  <div class="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+    <section class="rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="border-b border-slate-100 px-5 py-4">
+        <h2 class="text-base font-semibold text-slate-950">Enrollment funnel</h2>
+        <p class="text-sm text-slate-500">Employee-level enrollment state and effective dates.</p>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-slate-100 text-sm">
+          <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <tr>
+              <th class="px-5 py-3">Employee</th>
+              <th class="px-5 py-3">Plan</th>
+              <th class="px-5 py-3">Coverage</th>
+              <th class="px-5 py-3">Effective</th>
+              <th class="px-5 py-3">Status</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            <% @benefits[:enrollments].each do |enrollment| %>
+              <tr class="hover:bg-slate-50">
+                <td class="px-5 py-4 font-medium text-slate-950"><%= enrollment.employee.full_name %></td>
+                <td class="px-5 py-4 text-slate-600"><%= enrollment.benefit_plan.name %></td>
+                <td class="px-5 py-4 text-slate-600"><%= enrollment.coverage_level.humanize %></td>
+                <td class="px-5 py-4 text-slate-600"><%= enrollment.effective_on&.strftime("%b %-d, %Y") || "Pending" %></td>
+                <td class="px-5 py-4"><%= status_pill(enrollment.status) %></td>
+              </tr>
+            <% end %>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="border-b border-slate-100 px-5 py-4">
+        <h2 class="text-base font-semibold text-slate-950">Vitable connection</h2>
+        <p class="text-sm text-slate-500">API key readiness and event intake health.</p>
+      </div>
+      <div class="divide-y divide-slate-100">
+        <% @benefits[:connections].each do |connection| %>
+          <div class="px-5 py-4">
+            <div class="flex items-start justify-between gap-4">
+              <div>
+                <p class="font-semibold text-slate-950"><%= connection.organization.name %></p>
+                <p class="mt-1 text-sm text-slate-500"><%= connection.provider %> · <%= connection.environment %></p>
+              </div>
+              <%= status_pill(connection.status) %>
+            </div>
+            <div class="mt-4 rounded-md bg-slate-50 p-3">
+              <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Credential source</p>
+              <code class="mt-1 block text-xs text-slate-700"><%= connection.api_key_reference %></code>
+            </div>
+          </div>
+        <% end %>
+      </div>
+    </section>
+  </div>
+</section>

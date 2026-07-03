@@ -1,0 +1,132 @@
+<section class="space-y-7">
+  <div class="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+    <div>
+      <p class="text-sm font-semibold uppercase tracking-[0.18em] text-indigo-700">Payroll</p>
+      <h1 class="mt-2 text-3xl font-semibold tracking-tight text-slate-950">Payroll readiness</h1>
+      <p class="mt-2 max-w-3xl text-sm leading-6 text-slate-600">Preview gross pay, Vitable deductions, payroll adjustments, estimated taxes, and net payroll before finalizing a run.</p>
+    </div>
+    <% if @payroll[:current_run] && @payroll[:current_run].status != "finalized" %>
+      <%= button_to "Finalize current run", finalize_payroll_run_path(@payroll[:current_run]), method: :post, class: "rounded-md bg-slate-950 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-slate-800" %>
+    <% end %>
+  </div>
+
+  <% if @payroll[:current_run] %>
+    <% run = @payroll[:current_run] %>
+    <section class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="grid gap-0 lg:grid-cols-[0.85fr_1.15fr]">
+        <div class="border-b border-slate-200 p-6 lg:border-b-0 lg:border-r">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-sm font-semibold text-slate-500">Current pay date</p>
+              <h2 class="mt-2 text-4xl font-semibold tracking-tight text-slate-950"><%= run.pay_date.strftime("%b %-d") %></h2>
+            </div>
+            <%= status_pill(run.status) %>
+          </div>
+          <p class="mt-4 text-sm text-slate-500"><%= run.period_start_on.strftime("%b %-d") %> to <%= run.period_end_on.strftime("%b %-d, %Y") %></p>
+          <div class="mt-6 h-2 overflow-hidden rounded-full bg-slate-100">
+            <div class="h-2 rounded-full bg-indigo-500" style="width: <%= run.status == "finalized" ? 100 : 68 %>%"></div>
+          </div>
+          <p class="mt-3 text-xs font-medium text-slate-500"><%= run.status == "finalized" ? "Run locked and ready for export" : "Preflight checks in progress" %></p>
+        </div>
+        <div class="grid grid-cols-2 gap-px bg-slate-100 md:grid-cols-4">
+          <% [
+            ["Gross pay", money_cents(run.gross_pay_cents), "text-slate-950"],
+            ["Adjustments", money_cents(run.total_adjustments_cents), "text-emerald-700"],
+            ["Deductions", money_cents(run.total_deductions_cents), "text-amber-700"],
+            ["Est. net pay", money_cents(run.estimated_net_pay_cents), "text-indigo-700"]
+          ].each do |label, value, color| %>
+            <div class="bg-white p-5">
+              <p class="text-xs font-semibold uppercase tracking-wide text-slate-400"><%= label %></p>
+              <p class="mt-3 text-2xl font-semibold <%= color %>"><%= value %></p>
+            </div>
+          <% end %>
+        </div>
+      </div>
+    </section>
+  <% end %>
+
+  <div class="grid gap-6 xl:grid-cols-[1fr_0.9fr]">
+    <section class="rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="border-b border-slate-100 px-5 py-4">
+        <h2 class="text-base font-semibold text-slate-950">Payroll runs</h2>
+        <p class="text-sm text-slate-500">Period status and benefit deduction totals.</p>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-slate-100 text-sm">
+          <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <tr>
+              <th class="px-5 py-3">Period</th>
+              <th class="px-5 py-3">Pay date</th>
+              <th class="px-5 py-3">Gross</th>
+              <th class="px-5 py-3">Deductions</th>
+              <th class="px-5 py-3">Status</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            <% @payroll[:payroll_runs].each do |run| %>
+              <tr class="hover:bg-slate-50">
+                <td class="px-5 py-4 font-medium text-slate-950"><%= run.period_start_on.strftime("%b %-d") %> - <%= run.period_end_on.strftime("%b %-d") %></td>
+                <td class="px-5 py-4 text-slate-600"><%= run.pay_date.strftime("%b %-d, %Y") %></td>
+                <td class="px-5 py-4 text-slate-600"><%= money_cents(run.gross_pay_cents) %></td>
+                <td class="px-5 py-4 text-slate-600"><%= money_cents(run.total_deductions_cents) %></td>
+                <td class="px-5 py-4"><%= status_pill(run.status) %></td>
+              </tr>
+            <% end %>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="border-b border-slate-100 px-5 py-4">
+        <h2 class="text-base font-semibold text-slate-950">Adjustment ledger</h2>
+        <p class="text-sm text-slate-500">One-time bonuses, reimbursements, corrections, and taxable flags.</p>
+      </div>
+      <div class="divide-y divide-slate-100">
+        <% @payroll[:adjustments].limit(8).each do |adjustment| %>
+          <div class="flex items-start justify-between gap-4 px-5 py-4">
+            <div>
+              <p class="font-semibold text-slate-950"><%= adjustment.description %></p>
+              <p class="mt-1 text-sm text-slate-500"><%= adjustment.employee.full_name %> · <%= adjustment.adjustment_type.humanize %></p>
+            </div>
+            <div class="text-right">
+              <p class="font-semibold text-slate-950"><%= money_cents(adjustment.amount_cents) %></p>
+              <p class="mt-1 text-xs text-slate-500"><%= adjustment.taxable? ? "Taxable" : "Non-taxable" %></p>
+            </div>
+          </div>
+        <% end %>
+      </div>
+    </section>
+  </div>
+
+  <section class="rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div class="border-b border-slate-100 px-5 py-4">
+      <h2 class="text-base font-semibold text-slate-950">Vitable deduction detail</h2>
+      <p class="text-sm text-slate-500">Per-employee benefit deductions prepared for payroll export.</p>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="min-w-full divide-y divide-slate-100 text-sm">
+        <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <tr>
+            <th class="px-5 py-3">Employee</th>
+            <th class="px-5 py-3">Code</th>
+            <th class="px-5 py-3">Amount</th>
+            <th class="px-5 py-3">Enrollment</th>
+            <th class="px-5 py-3">Status</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          <% @payroll[:deductions].each do |deduction| %>
+            <tr class="hover:bg-slate-50">
+              <td class="px-5 py-4 font-medium text-slate-950"><%= deduction.employee.full_name %></td>
+              <td class="px-5 py-4 text-slate-600"><%= deduction.code %></td>
+              <td class="px-5 py-4 text-slate-600"><%= money_cents(deduction.amount_cents) %></td>
+              <td class="px-5 py-4 text-slate-600"><%= deduction.enrollment&.benefit_plan&.name || "Pending enrollment" %></td>
+              <td class="px-5 py-4"><%= status_pill(deduction.status) %></td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</section>
