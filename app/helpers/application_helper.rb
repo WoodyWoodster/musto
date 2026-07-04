@@ -1,14 +1,14 @@
 module ApplicationHelper
-  def nav_item(label, path, accent: "bg-cyan-500")
+  def nav_item(label, path)
     active = current_page?(path)
     classes = [
-      "group flex shrink-0 items-center gap-3 whitespace-nowrap rounded-md px-3 py-2 text-sm font-medium transition lg:shrink",
-      active ? "bg-slate-950 text-white shadow-sm" : "text-slate-600 hover:bg-white hover:text-slate-950 hover:shadow-sm"
+      "group flex shrink-0 items-center justify-between gap-3 whitespace-nowrap rounded-md px-3 py-2 text-sm font-medium transition lg:shrink",
+      active ? "bg-[#f4f3ff] text-[#635bff] ring-1 ring-inset ring-[#635bff]/15" : "text-slate-600 hover:bg-slate-50 hover:text-slate-950"
     ].join(" ")
 
-    link_to path, class: classes do
-      tag.span("", class: "h-2.5 w-2.5 rounded-full #{active ? "bg-white" : accent}") +
-        tag.span(label)
+    link_to path, class: classes, aria: (active ? { current: "page" } : nil) do
+      tag.span(label, class: "truncate") +
+        tag.span("", class: "h-1.5 w-1.5 shrink-0 rounded-full #{active ? "bg-[#635bff]" : "bg-transparent"}")
     end
   end
 

@@ -1,56 +1,59 @@
 <% policy = @workers_comp.policy %>
 <% latest_packet = @workers_comp.latest_packet %>
 
-<section class="space-y-7">
+<section class="space-y-6">
   <div class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-    <div class="grid xl:grid-cols-[1.18fr_0.82fr]">
-      <div class="p-6 lg:p-8">
-        <div class="flex flex-wrap items-center gap-2">
-          <%= status_pill(policy&.status || "missing") %>
-          <span class="rounded-full bg-red-50 px-3 py-1 text-xs font-semibold text-red-800 ring-1 ring-inset ring-red-200">Workers comp</span>
-          <span class="rounded-full bg-cyan-50 px-3 py-1 text-xs font-semibold text-cyan-800 ring-1 ring-inset ring-cyan-200">Class-code audit</span>
+    <div class="grid xl:grid-cols-[1.2fr_0.8fr]">
+      <div class="p-5 lg:p-6">
+        <div class="flex flex-wrap items-center gap-2 text-sm text-slate-500">
+          <%= link_to "Compliance", compliance_path, class: "font-medium text-slate-600 hover:text-slate-950" %>
+          <span>/</span>
+          <span class="font-medium text-slate-950">Workers compensation</span>
         </div>
 
-        <h1 class="mt-5 text-4xl font-semibold tracking-tight text-slate-950">Workers comp coverage</h1>
-        <p class="mt-3 max-w-3xl text-base leading-7 text-slate-600">
-          Track coverage, class-code payroll exposure, open claims, carrier reserves, and audit packet readiness from one compliance workspace.
-        </p>
+        <div class="mt-5 flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+          <div>
+            <div class="flex flex-wrap items-center gap-2">
+              <%= status_pill(policy&.status || "missing") %>
+              <% if policy&.renewal_due %>
+                <%= status_pill("renewal_due") %>
+              <% end %>
+            </div>
+            <h1 class="mt-4 text-3xl font-semibold text-slate-950 sm:text-4xl">Workers comp coverage</h1>
+            <p class="mt-3 max-w-3xl text-base leading-7 text-slate-600">
+              Monitor policy status, class-code payroll exposure, open claims, carrier reserves, and audit packet readiness.
+            </p>
+          </div>
 
-        <div class="mt-6 flex flex-wrap gap-3">
-          <%= button_to "Generate audit packet", generate_workers_comp_audit_packet_path, method: :post, params: { requested_by: "compliance_ops" }, class: "rounded-md bg-slate-950 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-slate-800" %>
-          <%= link_to "Compliance center", compliance_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
-          <%= link_to "Payroll", payroll_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
-          <%= link_to "Reports", reports_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
+          <div class="flex flex-wrap gap-2">
+            <%= button_to "Generate audit packet", generate_workers_comp_audit_packet_path, method: :post, params: { requested_by: "compliance_ops" }, class: "rounded-md bg-[#635bff] px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#4f46e5]" %>
+            <%= link_to "Payroll", payroll_path, class: "rounded-md border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:border-slate-300 hover:text-slate-950" %>
+            <%= link_to "Reports", reports_path, class: "rounded-md border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:border-slate-300 hover:text-slate-950" %>
+          </div>
         </div>
       </div>
 
-      <aside class="border-t border-slate-200 bg-slate-950 p-6 text-white xl:border-l xl:border-t-0 xl:p-8">
-        <p class="text-xs font-semibold uppercase tracking-[0.2em] text-red-300">Coverage snapshot</p>
+      <aside class="border-t border-slate-200 bg-[#f8fafc] p-5 xl:border-l xl:border-t-0 xl:p-6">
+        <p class="text-sm font-semibold text-slate-500">Current policy</p>
         <% if policy.present? %>
-          <p class="mt-6 text-3xl font-semibold tracking-tight"><%= policy.carrier %></p>
-          <p class="mt-2 break-all font-mono text-sm text-slate-300"><%= policy.policy_number %></p>
-          <div class="mt-5 flex flex-wrap items-center gap-2">
-            <%= status_pill(policy.status) %>
-            <% if policy.renewal_due %>
-              <%= status_pill("renewal_due") %>
-            <% end %>
-          </div>
-          <div class="mt-6 grid grid-cols-2 gap-3">
-            <div class="rounded-md bg-white/10 p-4">
-              <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Premium</p>
-              <p class="mt-2 text-2xl font-semibold"><%= money_cents(policy.manual_premium_cents) %></p>
+          <p class="mt-3 text-2xl font-semibold text-slate-950"><%= policy.carrier %></p>
+          <p class="mt-1 break-all font-mono text-sm text-slate-500"><%= policy.policy_number %></p>
+          <div class="mt-5 grid grid-cols-2 gap-3">
+            <div class="rounded-md border border-slate-200 bg-white p-4">
+              <p class="text-xs font-semibold text-slate-500">Premium</p>
+              <p class="mt-2 text-2xl font-semibold text-slate-950"><%= money_cents(policy.manual_premium_cents) %></p>
             </div>
-            <div class="rounded-md bg-white/10 p-4">
-              <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Deposit</p>
-              <p class="mt-2 text-2xl font-semibold"><%= money_cents(policy.deposit_premium_cents) %></p>
+            <div class="rounded-md border border-slate-200 bg-white p-4">
+              <p class="text-xs font-semibold text-slate-500">Deposit</p>
+              <p class="mt-2 text-2xl font-semibold text-slate-950"><%= money_cents(policy.deposit_premium_cents) %></p>
             </div>
           </div>
-          <p class="mt-5 text-sm leading-6 text-slate-300">
-            Coverage <%= policy.coverage_start_on.strftime("%b %-d, %Y") %> to <%= policy.coverage_end_on.strftime("%b %-d, %Y") %>. Renewal due <%= policy.renewal_due_on.strftime("%b %-d") %>.
+          <p class="mt-4 text-sm leading-6 text-slate-600">
+            Coverage runs <%= policy.coverage_start_on.strftime("%b %-d, %Y") %> to <%= policy.coverage_end_on.strftime("%b %-d, %Y") %>. Renewal due <%= policy.renewal_due_on.strftime("%b %-d") %>.
           </p>
         <% else %>
-          <p class="mt-6 text-3xl font-semibold tracking-tight">Policy missing</p>
-          <p class="mt-2 text-sm leading-6 text-slate-300">Add active workers comp coverage before payroll audit packets are production-ready.</p>
+          <p class="mt-3 text-2xl font-semibold text-slate-950">Policy missing</p>
+          <p class="mt-2 text-sm leading-6 text-slate-600">Add active workers comp coverage before audit packets can be cleared.</p>
         <% end %>
       </aside>
     </div>
@@ -63,7 +66,7 @@
           <p class="text-sm font-medium text-slate-500"><%= metric.label %></p>
           <span class="h-2.5 w-2.5 shrink-0 rounded-full <%= metric.accent %>"></span>
         </div>
-        <p class="mt-4 text-3xl font-semibold tracking-tight text-slate-950"><%= metric.format == "money" ? money_cents(metric.value) : metric.format == "text" ? metric.value : compact_number(metric.value) %></p>
+        <p class="mt-4 text-3xl font-semibold text-slate-950"><%= metric.format == "money" ? money_cents(metric.value) : metric.format == "text" ? metric.value : compact_number(metric.value) %></p>
         <div class="mt-2 flex flex-wrap items-center gap-2">
           <%= status_pill(metric.status) %>
           <p class="text-sm text-slate-500"><%= metric.hint %></p>
@@ -84,7 +87,7 @@
             <div class="p-5">
               <div class="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400"><%= issue.severity %> · <%= issue.reason_code.humanize %></p>
+                  <p class="text-xs font-semibold uppercase text-slate-400"><%= issue.severity %> · <%= issue.reason_code.humanize %></p>
                   <h3 class="mt-2 text-base font-semibold text-slate-950"><%= issue.reason %></h3>
                 </div>
                 <%= status_pill(issue.status) %>
@@ -111,7 +114,7 @@
             <div class="p-5">
               <div class="flex flex-wrap items-start justify-between gap-3">
                 <div class="min-w-0">
-                  <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400"><%= claim.severity.humanize %> · <%= claim.claim_number.presence || "Claim number pending" %></p>
+                  <p class="text-xs font-semibold uppercase text-slate-400"><%= claim.severity.humanize %> · <%= claim.claim_number.presence || "Claim number pending" %></p>
                   <h3 class="mt-2 text-base font-semibold text-slate-950"><%= claim.employee_name %></h3>
                   <p class="mt-1 text-sm text-slate-500"><%= claim.injury_type.presence || "Injury type pending" %> · <%= claim.body_part.presence || "Body part pending" %></p>
                 </div>
@@ -156,7 +159,7 @@
     </div>
     <div class="overflow-x-auto">
       <table class="min-w-full divide-y divide-slate-100 text-sm">
-        <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <thead class="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
           <tr>
             <th class="px-5 py-3">Class</th>
             <th class="px-5 py-3">State</th>
@@ -222,7 +225,7 @@
             <div class="p-5">
               <div class="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400"><%= holdback.severity %></p>
+                  <p class="text-xs font-semibold uppercase text-slate-400"><%= holdback.severity %></p>
                   <h3 class="mt-2 text-base font-semibold text-slate-950"><%= holdback.reason_code.humanize %></h3>
                 </div>
                 <%= status_pill(holdback.status) %>
