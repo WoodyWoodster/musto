@@ -10,7 +10,7 @@ class WorkShiftTest < ActiveSupport::TestCase
   test "calculates net minutes and labor cost" do
     shift = @employer.work_shifts.create!(
       employee: @employee,
-      role: "Cafe lead",
+      role: "Support lead",
       starts_at: Time.current.change(hour: 8),
       ends_at: Time.current.change(hour: 16),
       break_minutes: 30,

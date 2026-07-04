@@ -26,7 +26,7 @@
           </div>
 
           <div class="flex flex-wrap gap-2">
-            <%= button_to "Generate audit packet", generate_workers_comp_audit_packet_path, method: :post, params: { requested_by: "compliance_ops" }, class: "rounded-md bg-[#635bff] px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#4f46e5]" %>
+            <%= button_to "Generate audit packet", generate_workers_comp_audit_packet_path, method: :post, params: { requested_by: "Compliance Team" }, class: "rounded-md bg-[#635bff] px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#4f46e5]" %>
             <%= link_to "Payroll", payroll_path, class: "rounded-md border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:border-slate-300 hover:text-slate-950" %>
             <%= link_to "Reports", reports_path, class: "rounded-md border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:border-slate-300 hover:text-slate-950" %>
           </div>
@@ -137,7 +137,7 @@
               </div>
               <% if claim.closable? %>
                 <div class="mt-4 border-t border-slate-100 pt-4">
-                  <%= button_to "Close claim", close_workers_comp_claim_path(claim.id), method: :post, params: { closed_by: "compliance_ops", resolution: "Closed from workers comp center" }, class: "rounded-md bg-emerald-600 px-3.5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700" %>
+                  <%= button_to "Close claim", close_workers_comp_claim_path(claim.id), method: :post, params: { closed_by: "Compliance Team", resolution: "Closed from workers comp center" }, class: "rounded-md bg-emerald-600 px-3.5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700" %>
                 </div>
               <% end %>
             </div>

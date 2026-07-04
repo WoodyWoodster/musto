@@ -167,7 +167,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     @benefit_invoice_variance_line = @benefit_invoice.benefit_invoice_lines.create!(employee: @employee, benefit_plan: @pending_plan, enrollment: @pending_enrollment, coverage_level: "employee", amount_cents: 5_500, expected_premium_cents: 4_500, expected_payroll_deduction_cents: 0, employee_contribution_cents: 0, employer_contribution_cents: 5_500, variance_cents: 1_000, status: "variance")
     @expense = @employee.employee_expenses.create!(incurred_on: Date.current - 2.days, merchant: "Amtrak", category: "travel", description: "Benefits implementation travel", amount_cents: 184_00, status: "submitted", receipt_status: "uploaded")
     @approved_expense = @employee.employee_expenses.create!(incurred_on: Date.current - 3.days, merchant: "Staples", category: "supplies", description: "Operations supplies", amount_cents: 86_00, status: "approved", receipt_status: "verified", approved_at: 1.day.ago)
-    @blocked_expense = @employee.employee_expenses.create!(incurred_on: Date.current - 1.day, merchant: "Cafe", category: "meals", description: "Team lunch missing receipt", amount_cents: 145_00, status: "submitted", receipt_status: "missing")
+    @blocked_expense = @employee.employee_expenses.create!(incurred_on: Date.current - 1.day, merchant: "Client services", category: "meals", description: "Team lunch missing receipt", amount_cents: 145_00, status: "submitted", receipt_status: "missing")
     time_start = @payroll_run.period_start_on.in_time_zone.change(hour: 9, min: 0)
     @approved_time_entry = @employee.time_entries.create!(work_date: @payroll_run.period_start_on, clock_in_at: time_start, clock_out_at: time_start + 8.hours, break_minutes: 30, source: "web", status: "approved", approved_at: 1.hour.ago, reviewed_at: 1.hour.ago, notes: "Regular shift")
     @submitted_time_entry = @employee.time_entries.create!(work_date: @payroll_run.period_start_on + 1.day, clock_in_at: time_start + 1.day, clock_out_at: time_start + 1.day + 9.hours, break_minutes: 45, source: "mobile", status: "submitted", notes: "Needs manager review")
@@ -667,7 +667,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_instance_of Vitable::EmbeddedSessionPreflightCheckDto, embedded_sessions.preflight_checks.first
   end
 
-  test "reports command center exposes finance and risk DTOs" do
+  test "reports workspace exposes finance and risk DTOs" do
     detail = Reports::CenterQuery.new.call
 
     assert_instance_of Reports::CenterDto, detail
@@ -681,7 +681,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     get reports_path
 
     assert_response :success
-    assert_select "h1", "Reports command center"
+    assert_select "h1", "Reports"
     assert_select "h2", "Report library"
     assert_select "h2", "Department cost ledger"
     assert_select "h2", "Benefits spend"
@@ -1020,7 +1020,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     get hiring_path
 
     assert_response :success
-    assert_select "h1", "Hiring and offer command center"
+    assert_select "h1", "Hiring and offers"
     assert_select "h2", "Pipeline stages"
     assert_select "h2", "Hiring issues"
     assert_select "h2", "Open roles"
@@ -1274,7 +1274,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_instance_of Training::AuditHoldbackDto, detail.audit_holdbacks.first
   end
 
-  test "lifecycle command center exposes employee change DTOs" do
+  test "lifecycle workspace exposes employee change DTOs" do
     detail = Lifecycle::CommandCenterQuery.new.call
 
     assert_instance_of Lifecycle::CenterDto, detail
@@ -1287,7 +1287,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     get lifecycle_path
 
     assert_response :success
-    assert_select "h1", "Employee lifecycle command center"
+    assert_select "h1", "Employee lifecycle"
     assert_select "h2", "Lifecycle review queue"
     assert_select "h2", "Lifecycle impact checks"
     assert_select "h2", "Employee change ledger"
@@ -1325,7 +1325,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_instance_of Lifecycle::SyncHoldbackDto, detail.batch_holdbacks.first
   end
 
-  test "onboarding command center exposes readiness and review DTOs" do
+  test "onboarding workspace exposes readiness and review DTOs" do
     detail = Onboarding::CommandCenterQuery.new.call
 
     assert_instance_of Onboarding::CommandCenterDto, detail
@@ -1338,7 +1338,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     get onboarding_path
 
     assert_response :success
-    assert_select "h1", "Onboarding command center"
+    assert_select "h1", "Onboarding"
     assert_select "h2", "Readiness lanes"
     assert_select "h2", "Employee readiness"
     assert_select "h2", "Task queue"
@@ -1407,7 +1407,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_not_nil @pending_document.verified_at
   end
 
-  test "time off command center exposes policies balances and calendar DTOs" do
+  test "time off workspace exposes policies balances and calendar DTOs" do
     detail = TimeOff::CommandCenterQuery.new.call
 
     assert_instance_of TimeOff::CommandCenterDto, detail
@@ -1421,14 +1421,14 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     get time_off_path
 
     assert_response :success
-    assert_select "h1", "Time off command center"
+    assert_select "h1", "Time off"
     assert_select "h2", "Request review"
     assert_select "h2", "Employee balances"
     assert_select "h2", "Policy utilization"
     assert_select "h2", "Upcoming leave calendar"
   end
 
-  test "approves a time off request from the time off command center" do
+  test "approves a time off request from the time off workspace" do
     post approve_time_off_request_path(@time_off_request), params: { return_to: "time_off" }
 
     assert_redirected_to time_off_path
@@ -1579,7 +1579,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_instance_of Scheduling::ForecastHoldbackDto, detail.forecast_holdbacks.first
   end
 
-  test "timesheets command center exposes approval and export DTOs" do
+  test "timesheets workspace exposes approval and export DTOs" do
     detail = TimeTracking::CenterQuery.new.call
 
     assert_instance_of TimeTracking::CenterDto, detail
@@ -1593,7 +1593,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     get timesheets_path
 
     assert_response :success
-    assert_select "h1", "Timesheets command center"
+    assert_select "h1", "Timesheets"
     assert_select "h2", "Time entry review"
     assert_select "h2", "Timesheet exceptions"
     assert_select "h2", "Employee time summary"
@@ -2093,7 +2093,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     get benefits_open_enrollment_path
 
     assert_response :success
-    assert_select "h1", "Open enrollment command center"
+    assert_select "h1", "Open enrollment"
     assert_select "h2", "Enrollment blockers"
     assert_select "h2", "Plan readiness"
     assert_select "h2", "Employee election queue"
@@ -2568,12 +2568,12 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_select "h1", "#{@organization.name} Vitable connection"
-    assert_select "h2", "Sandbox webhook composer"
+    assert_select "h2", "Test event composer"
     assert_select "h2", "Readiness checks"
     assert_select "h2", "Resource coverage"
     assert_select "h2", "Connection timeline"
     assert_select "h2", "Webhook queue"
-    assert_select "h2", "API request trail"
+    assert_select "h2", "Connection activity"
   end
 
   test "vitable employer provisioning workspace exposes packet DTOs" do
@@ -2595,10 +2595,10 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_select "h1", "Vitable employer provisioning"
     assert_select "h2", "Provisioning preflight"
-    assert_select "h2", "SDK payload review"
+    assert_select "h2", "Submission field review"
     assert_select "h2", "Provisioning holdbacks"
     assert_select "h2", "Provisioning attempts"
-    assert_select "h2", "Employer API request trail"
+    assert_select "h2", "Employer submission activity"
   end
 
   test "generates a Vitable employer provisioning packet" do
@@ -2711,7 +2711,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_select "h2", "Ready census rows"
     assert_select "h2", "Holdbacks"
     assert_select "h2", "Sync attempts"
-    assert_select "h2", "API request trail"
+    assert_select "h2", "Submission activity"
   end
 
   test "generates a Vitable census manifest through command action" do
@@ -2771,7 +2771,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_select "h2", "Session-ready employees"
     assert_select "h2", "Session holdbacks"
     assert_select "h2", "Token attempts"
-    assert_select "h2", "Token API request trail"
+    assert_select "h2", "Session issuance activity"
   end
 
   test "generates a Vitable embedded enrollment session packet" do

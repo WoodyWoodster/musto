@@ -8,42 +8,42 @@
           <%= status_pill(@dependent_verifications.packet&.status || "pending") %>
         </div>
 
-        <h1 class="mt-5 text-4xl font-semibold tracking-tight text-slate-950">Dependent verification center</h1>
+        <h1 class="mt-5 text-4xl font-semibold text-slate-950">Dependent verification center</h1>
         <p class="mt-3 max-w-3xl text-base leading-7 text-slate-600">
           Request and review spouse, partner, and child verification documents before dependent records are included in a Vitable-ready eligibility packet for <%= @dependent_verifications.employer&.name || "your employer portfolio" %>.
         </p>
 
         <div class="mt-6 flex flex-wrap gap-3">
-          <%= button_to "Request missing verifications", request_dependent_verifications_path, method: :post, params: { requested_by: "benefits_admin" }, class: "rounded-md bg-slate-950 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-slate-800" %>
-          <%= button_to "Generate dependent packet", generate_dependent_verification_packet_path, method: :post, params: { requested_by: "benefits_admin" }, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
+          <%= button_to "Request missing verifications", request_dependent_verifications_path, method: :post, params: { requested_by: "Benefits Team" }, class: "rounded-md bg-slate-950 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-slate-800" %>
+          <%= button_to "Generate dependent packet", generate_dependent_verification_packet_path, method: :post, params: { requested_by: "Benefits Team" }, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
           <%= link_to "Eligibility sync", benefits_eligibility_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
           <%= link_to "Open enrollment", benefits_open_enrollment_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
         </div>
       </div>
 
-      <aside class="border-t border-slate-200 bg-slate-950 p-6 text-white xl:border-l xl:border-t-0 xl:p-8">
-        <p class="text-xs font-semibold uppercase tracking-[0.2em] text-pink-300">Latest dependent packet</p>
+      <aside class="border-t border-slate-200 bg-[#f8fafc] p-6 text-slate-950 xl:border-l xl:border-t-0 xl:p-8">
+        <p class="text-xs font-semibold uppercase text-pink-300">Latest dependent packet</p>
         <% if @dependent_verifications.packet.present? %>
           <p class="mt-6 break-all font-mono text-sm font-semibold"><%= @dependent_verifications.packet.packet_id %></p>
-          <p class="mt-3 text-sm text-slate-300">Generated <%= time_ago_in_words(@dependent_verifications.packet.generated_at) %> ago by <%= @dependent_verifications.packet.requested_by %></p>
+          <p class="mt-3 text-sm text-slate-600">Generated <%= time_ago_in_words(@dependent_verifications.packet.generated_at) %> ago by <%= operator_name(@dependent_verifications.packet.requested_by) %></p>
           <div class="mt-6 grid grid-cols-2 gap-3">
-            <div class="rounded-md bg-white/10 p-4">
-              <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Ready</p>
+            <div class="rounded-md border border-slate-200 bg-white p-4">
+              <p class="text-xs font-semibold uppercase text-slate-400">Ready</p>
               <p class="mt-2 text-2xl font-semibold"><%= compact_number(@dependent_verifications.packet.ready_count) %></p>
             </div>
-            <div class="rounded-md bg-white/10 p-4">
-              <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Holdbacks</p>
+            <div class="rounded-md border border-slate-200 bg-white p-4">
+              <p class="text-xs font-semibold uppercase text-slate-400">Holdbacks</p>
               <p class="mt-2 text-2xl font-semibold"><%= compact_number(@dependent_verifications.packet.holdback_count) %></p>
             </div>
           </div>
-          <div class="mt-5 rounded-md bg-white/10 p-4">
-            <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Dependents</p>
+          <div class="mt-5 rounded-md border border-slate-200 bg-white p-4">
+            <p class="text-xs font-semibold uppercase text-slate-400">Dependents</p>
             <p class="mt-2 text-2xl font-semibold"><%= compact_number(@dependent_verifications.packet.dependent_count) %></p>
             <p class="mt-2 text-xs text-slate-400">records evaluated for packet inclusion</p>
           </div>
         <% else %>
-          <p class="mt-6 text-3xl font-semibold tracking-tight">No packet</p>
-          <p class="mt-2 text-sm leading-6 text-slate-300">Generate a packet after dependent documents have been requested and reviewed.</p>
+          <p class="mt-6 text-3xl font-semibold">No packet</p>
+          <p class="mt-2 text-sm leading-6 text-slate-600">Generate a packet after dependent documents have been requested and reviewed.</p>
         <% end %>
       </aside>
     </div>
@@ -56,7 +56,7 @@
           <p class="text-sm font-medium text-slate-500"><%= metric.label %></p>
           <span class="h-2.5 w-2.5 shrink-0 rounded-full <%= metric.accent %>"></span>
         </div>
-        <p class="mt-4 break-words text-3xl font-semibold tracking-tight text-slate-950">
+        <p class="mt-4 break-words text-3xl font-semibold text-slate-950">
           <%= metric.format == "number" ? compact_number(metric.value) : metric.value %>
         </p>
         <div class="mt-2 flex flex-wrap items-center gap-2">
@@ -75,7 +75,7 @@
       </div>
       <div class="overflow-x-auto">
         <table class="min-w-full divide-y divide-slate-100 text-sm">
-          <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <thead class="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
             <tr>
               <th class="px-5 py-3">Dependent</th>
               <th class="px-5 py-3">Employee</th>
@@ -123,7 +123,7 @@
           <div class="p-5">
             <div class="flex items-start justify-between gap-3">
               <div class="min-w-0">
-                <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400"><%= issue.reason_code.humanize %></p>
+                <p class="text-xs font-semibold uppercase text-slate-400"><%= issue.reason_code.humanize %></p>
                 <h3 class="mt-2 text-base font-semibold text-slate-950"><%= issue.dependent_name %></h3>
                 <p class="mt-1 text-sm text-slate-500"><%= issue.employee_name %></p>
               </div>
@@ -162,8 +162,8 @@
             </div>
             <div class="flex shrink-0 flex-wrap gap-2">
               <% if verification.reviewable? %>
-                <%= button_to "Approve", approve_dependent_verification_path(verification.id), method: :post, params: { reviewed_by: "benefits_admin" }, class: "rounded-md bg-emerald-600 px-3 py-2 text-xs font-semibold text-white shadow-sm hover:bg-emerald-700" %>
-                <%= button_to "Reject", reject_dependent_verification_path(verification.id), method: :post, params: { reviewed_by: "benefits_admin", issue_code: "document_mismatch", note: "Document does not match dependent profile." }, class: "rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm hover:border-slate-300" %>
+                <%= button_to "Approve", approve_dependent_verification_path(verification.id), method: :post, params: { reviewed_by: "Benefits Team" }, class: "rounded-md bg-emerald-600 px-3 py-2 text-xs font-semibold text-white shadow-sm hover:bg-emerald-700" %>
+                <%= button_to "Reject", reject_dependent_verification_path(verification.id), method: :post, params: { reviewed_by: "Benefits Team", issue_code: "document_mismatch", note: "Document does not match dependent profile." }, class: "rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm hover:border-slate-300" %>
               <% elsif verification.reviewed_at.present? %>
                 <p class="rounded-md bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-600">Reviewed <%= time_ago_in_words(verification.reviewed_at) %> ago</p>
               <% else %>

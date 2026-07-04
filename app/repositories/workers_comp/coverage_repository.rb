@@ -6,7 +6,7 @@ module WorkersComp
       "8810" => { "description" => "Clerical office employees", "rate_basis_points" => 32 },
       "8742" => { "description" => "Outside sales and customer success", "rate_basis_points" => 48 },
       "8803" => { "description" => "Payroll and accounting operations", "rate_basis_points" => 36 },
-      "9079" => { "description" => "Coffee shop and food service", "rate_basis_points" => 215 }
+      "9079" => { "description" => "Office support and customer service", "rate_basis_points" => 215 }
     }.freeze
 
     def initialize(employer: nil)

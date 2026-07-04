@@ -8,7 +8,7 @@
           <span class="rounded-full bg-cyan-50 px-3 py-1 text-xs font-semibold text-cyan-800 ring-1 ring-inset ring-cyan-200">Response packet</span>
         </div>
 
-        <h1 class="mt-5 text-4xl font-semibold tracking-tight text-slate-950">Compliance notices</h1>
+        <h1 class="mt-5 text-4xl font-semibold text-slate-950">Compliance notices</h1>
         <p class="mt-3 max-w-3xl text-base leading-7 text-slate-600">
           Triage payroll, tax, labor, and benefits notices, assign response ownership, retain agency evidence, and package audit-ready response details for finance and people operations.
         </p>
@@ -17,32 +17,32 @@
           <%= link_to "Risk center", compliance_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
           <%= link_to "Tax setup", tax_agency_registrations_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
           <%= link_to "Documents", documents_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
-          <%= button_to "Generate notice packet", generate_compliance_notice_packet_path, method: :post, params: { requested_by: "compliance_admin" }, class: "rounded-md bg-slate-950 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-slate-800" %>
+          <%= button_to "Generate notice packet", generate_compliance_notice_packet_path, method: :post, params: { requested_by: "Compliance Team" }, class: "rounded-md bg-slate-950 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-slate-800" %>
         </div>
       </div>
 
-      <aside class="border-t border-slate-200 bg-slate-950 p-6 text-white xl:border-l xl:border-t-0 xl:p-8">
-        <p class="text-xs font-semibold uppercase tracking-[0.2em] text-orange-300">Latest notice packet</p>
+      <aside class="border-t border-slate-200 bg-[#f8fafc] p-6 text-slate-950 xl:border-l xl:border-t-0 xl:p-8">
+        <p class="text-xs font-semibold uppercase text-orange-300">Latest notice packet</p>
         <% if @notices.packet.present? %>
           <p class="mt-6 break-all font-mono text-sm font-semibold"><%= @notices.packet.packet_id %></p>
-          <p class="mt-3 text-sm text-slate-300">Generated <%= time_ago_in_words(@notices.packet.generated_at) %> ago by <%= @notices.packet.requested_by %></p>
+          <p class="mt-3 text-sm text-slate-600">Generated <%= time_ago_in_words(@notices.packet.generated_at) %> ago by <%= operator_name(@notices.packet.requested_by) %></p>
           <div class="mt-6 grid grid-cols-2 gap-3">
-            <div class="rounded-md bg-white/10 p-4">
-              <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Open</p>
+            <div class="rounded-md border border-slate-200 bg-white p-4">
+              <p class="text-xs font-semibold uppercase text-slate-400">Open</p>
               <p class="mt-2 text-2xl font-semibold"><%= compact_number(@notices.packet.open_count) %></p>
             </div>
-            <div class="rounded-md bg-white/10 p-4">
-              <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Holdbacks</p>
+            <div class="rounded-md border border-slate-200 bg-white p-4">
+              <p class="text-xs font-semibold uppercase text-slate-400">Holdbacks</p>
               <p class="mt-2 text-2xl font-semibold"><%= compact_number(@notices.packet.holdback_count) %></p>
             </div>
           </div>
-          <div class="mt-5 rounded-md bg-white/10 p-4">
-            <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Amount at risk</p>
+          <div class="mt-5 rounded-md border border-slate-200 bg-white p-4">
+            <p class="text-xs font-semibold uppercase text-slate-400">Amount at risk</p>
             <p class="mt-2 text-2xl font-semibold"><%= money_cents(@notices.packet.amount_cents) %></p>
           </div>
         <% else %>
-          <p class="mt-6 text-3xl font-semibold tracking-tight">No packet</p>
-          <p class="mt-2 text-sm leading-6 text-slate-300">Generate a response packet after notice ownership and due-date risk have been reviewed.</p>
+          <p class="mt-6 text-3xl font-semibold">No packet</p>
+          <p class="mt-2 text-sm leading-6 text-slate-600">Generate a response packet after notice ownership and due-date risk have been reviewed.</p>
         <% end %>
       </aside>
     </div>
@@ -55,7 +55,7 @@
           <p class="text-sm font-medium text-slate-500"><%= metric.label %></p>
           <span class="h-2.5 w-2.5 shrink-0 rounded-full <%= metric.accent %>"></span>
         </div>
-        <p class="mt-4 text-3xl font-semibold tracking-tight text-slate-950">
+        <p class="mt-4 text-3xl font-semibold text-slate-950">
           <% if metric.format == "money" %>
             <%= money_cents(metric.value) %>
           <% elsif metric.format == "text" %>
@@ -86,8 +86,8 @@
           <article class="p-5">
             <div class="flex flex-wrap items-start justify-between gap-4">
               <div class="min-w-0">
-                <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400"><%= notice.jurisdiction %> · <%= notice.notice_type.humanize %></p>
-                <h3 class="mt-2 text-lg font-semibold tracking-tight text-slate-950"><%= notice.title %></h3>
+                <p class="text-xs font-semibold uppercase text-slate-400"><%= notice.jurisdiction %> · <%= notice.notice_type.humanize %></p>
+                <h3 class="mt-2 text-lg font-semibold text-slate-950"><%= notice.title %></h3>
                 <p class="mt-1 text-sm leading-6 text-slate-600"><%= notice.summary.presence || "No notice summary recorded." %></p>
               </div>
               <div class="flex flex-wrap items-center gap-2">
@@ -98,19 +98,19 @@
 
             <div class="mt-5 grid gap-3 md:grid-cols-4">
               <div class="rounded-md bg-slate-50 px-3 py-3">
-                <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Due</p>
+                <p class="text-xs font-semibold uppercase text-slate-400">Due</p>
                 <p class="mt-1 text-sm font-semibold text-slate-950"><%= notice.due_on.strftime("%b %-d, %Y") %></p>
               </div>
               <div class="rounded-md bg-slate-50 px-3 py-3">
-                <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Amount</p>
+                <p class="text-xs font-semibold uppercase text-slate-400">Amount</p>
                 <p class="mt-1 text-sm font-semibold text-slate-950"><%= money_cents(notice.amount_cents) %></p>
               </div>
               <div class="rounded-md bg-slate-50 px-3 py-3">
-                <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Owner</p>
+                <p class="text-xs font-semibold uppercase text-slate-400">Owner</p>
                 <p class="mt-1 text-sm font-semibold text-slate-950"><%= notice.response_owner %></p>
               </div>
               <div class="rounded-md bg-slate-50 px-3 py-3">
-                <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Reference</p>
+                <p class="text-xs font-semibold uppercase text-slate-400">Reference</p>
                 <p class="mt-1 text-sm font-semibold text-slate-950"><%= notice.reference_number.presence || "Missing" %></p>
               </div>
             </div>
@@ -125,10 +125,10 @@
               </p>
               <div class="flex flex-wrap gap-2">
                 <% if notice.status == "received" %>
-                  <%= button_to "Acknowledge", acknowledge_compliance_notice_path(notice.id), method: :post, params: { acknowledged_by: "compliance_admin" }, class: "rounded-md bg-cyan-600 px-3.5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-cyan-700" %>
+                  <%= button_to "Acknowledge", acknowledge_compliance_notice_path(notice.id), method: :post, params: { acknowledged_by: "Compliance Team" }, class: "rounded-md bg-cyan-600 px-3.5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-cyan-700" %>
                 <% end %>
                 <% if notice.actionable %>
-                  <%= button_to "Resolve", resolve_compliance_notice_path(notice.id), method: :post, params: { resolved_by: "compliance_admin", resolution_summary: "Response submitted and supporting evidence retained." }, class: "rounded-md bg-slate-950 px-3.5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-800" %>
+                  <%= button_to "Resolve", resolve_compliance_notice_path(notice.id), method: :post, params: { resolved_by: "Compliance Team", resolution_summary: "Response submitted and supporting evidence retained." }, class: "rounded-md bg-slate-950 px-3.5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-800" %>
                 <% else %>
                   <span class="rounded-md border border-slate-200 bg-white px-3.5 py-2 text-sm font-semibold text-slate-600">Evidence retained</span>
                 <% end %>
@@ -150,13 +150,13 @@
             <div class="p-5">
               <div class="flex flex-wrap items-start justify-between gap-3">
                 <div class="min-w-0">
-                  <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400"><%= issue.jurisdiction %> · <%= issue.severity %></p>
+                  <p class="text-xs font-semibold uppercase text-slate-400"><%= issue.jurisdiction %> · <%= issue.severity %></p>
                   <h3 class="mt-2 text-base font-semibold text-slate-950"><%= issue.reason_code.humanize %></h3>
                 </div>
                 <%= status_pill(issue.status) %>
               </div>
               <p class="mt-3 text-sm leading-6 text-slate-600"><%= issue.reason %></p>
-              <p class="mt-3 text-xs font-semibold uppercase tracking-wide text-slate-400"><%= issue.response_owner %> · due <%= issue.due_on.strftime("%b %-d") %></p>
+              <p class="mt-3 text-xs font-semibold uppercase text-slate-400"><%= issue.response_owner %> · due <%= issue.due_on.strftime("%b %-d") %></p>
             </div>
           <% end %>
         <% else %>
@@ -176,7 +176,7 @@
     </div>
     <div class="overflow-x-auto">
       <table class="min-w-full divide-y divide-slate-100 text-sm">
-        <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <thead class="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
           <tr>
             <th class="px-5 py-3">Notice</th>
             <th class="px-5 py-3">Agency</th>
@@ -246,7 +246,7 @@
             <div class="p-5">
               <div class="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400"><%= holdback.jurisdiction %> · <%= holdback.severity %></p>
+                  <p class="text-xs font-semibold uppercase text-slate-400"><%= holdback.jurisdiction %> · <%= holdback.severity %></p>
                   <h3 class="mt-2 text-base font-semibold text-slate-950"><%= holdback.reason_code.humanize %></h3>
                 </div>
                 <%= status_pill(holdback.status) %>

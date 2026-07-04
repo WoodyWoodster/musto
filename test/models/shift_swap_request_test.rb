@@ -6,7 +6,7 @@ class ShiftSwapRequestTest < ActiveSupport::TestCase
     @employer = organization.employers.create!(name: "Swap Employer", status: "active")
     @requester = @employer.employees.create!(first_name: "Casey", last_name: "Ng", email: "casey.swap@example.com")
     @target = @employer.employees.create!(first_name: "Ari", last_name: "Lopez", email: "ari.swap@example.com")
-    @shift = @employer.work_shifts.create!(employee: @requester, role: "Cafe lead", starts_at: Time.current + 1.day, ends_at: Time.current + 1.day + 8.hours, hourly_rate_cents: 3_000, status: "published")
+    @shift = @employer.work_shifts.create!(employee: @requester, role: "Support lead", starts_at: Time.current + 1.day, ends_at: Time.current + 1.day + 8.hours, hourly_rate_cents: 3_000, status: "published")
   end
 
   test "approves swap and reassigns shift" do

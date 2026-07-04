@@ -8,7 +8,7 @@
           <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700 ring-1 ring-inset ring-slate-200">Audit trail</span>
         </div>
 
-        <h1 class="mt-5 text-4xl font-semibold tracking-tight text-slate-950">Employee document vault</h1>
+        <h1 class="mt-5 text-4xl font-semibold text-slate-950">Employee document vault</h1>
         <p class="mt-3 max-w-3xl text-base leading-7 text-slate-600">
           Collect, verify, and renew employment, payroll, tax, benefits, and policy documents for <%= @documents.employer&.name || "your employer portfolio" %>.
         </p>
@@ -17,32 +17,32 @@
           <%= link_to "Onboarding", onboarding_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
           <%= link_to "Compliance", compliance_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
           <%= link_to "Payroll", payroll_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
-          <%= button_to "Generate request batch", request_document_batch_path, method: :post, params: { requested_by: "ops_console" }, class: "rounded-md bg-slate-950 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-slate-800" %>
+          <%= button_to "Generate request batch", request_document_batch_path, method: :post, params: { requested_by: "Musto Operations" }, class: "rounded-md bg-slate-950 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-slate-800" %>
         </div>
       </div>
 
-      <aside class="border-t border-slate-200 bg-slate-950 p-6 text-white xl:border-l xl:border-t-0 xl:p-8">
-        <p class="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-300">Latest request batch</p>
+      <aside class="border-t border-slate-200 bg-[#f8fafc] p-6 text-slate-950 xl:border-l xl:border-t-0 xl:p-8">
+        <p class="text-xs font-semibold uppercase text-slate-500">Latest request batch</p>
         <% if @documents.latest_batch.present? %>
           <p class="mt-6 break-all font-mono text-sm font-semibold"><%= @documents.latest_batch.batch_id %></p>
-          <p class="mt-3 text-sm text-slate-300">Generated <%= time_ago_in_words(@documents.latest_batch.generated_at) %> ago by <%= @documents.latest_batch.requested_by %></p>
+          <p class="mt-3 text-sm text-slate-600">Generated <%= time_ago_in_words(@documents.latest_batch.generated_at) %> ago by <%= operator_name(@documents.latest_batch.requested_by) %></p>
           <div class="mt-6 grid grid-cols-3 gap-3">
-            <div class="rounded-md bg-white/10 p-4">
-              <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Requests</p>
+            <div class="rounded-md border border-slate-200 bg-white p-4">
+              <p class="text-xs font-semibold uppercase text-slate-400">Requests</p>
               <p class="mt-2 text-2xl font-semibold"><%= compact_number(@documents.latest_batch.request_count) %></p>
             </div>
-            <div class="rounded-md bg-white/10 p-4">
-              <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">People</p>
+            <div class="rounded-md border border-slate-200 bg-white p-4">
+              <p class="text-xs font-semibold uppercase text-slate-400">People</p>
               <p class="mt-2 text-2xl font-semibold"><%= compact_number(@documents.latest_batch.employee_count) %></p>
             </div>
-            <div class="rounded-md bg-white/10 p-4">
-              <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Clear</p>
+            <div class="rounded-md border border-slate-200 bg-white p-4">
+              <p class="text-xs font-semibold uppercase text-slate-400">Clear</p>
               <p class="mt-2 text-2xl font-semibold"><%= compact_number(@documents.latest_batch.holdback_count) %></p>
             </div>
           </div>
         <% else %>
-          <p class="mt-6 text-3xl font-semibold tracking-tight">No batch</p>
-          <p class="mt-2 text-sm leading-6 text-slate-300">Generate employee document requests after reviewing coverage gaps.</p>
+          <p class="mt-6 text-3xl font-semibold">No batch</p>
+          <p class="mt-2 text-sm leading-6 text-slate-600">Generate employee document requests after reviewing coverage gaps.</p>
         <% end %>
       </aside>
     </div>
@@ -55,7 +55,7 @@
           <p class="text-sm font-medium text-slate-500"><%= metric.label %></p>
           <span class="h-2.5 w-2.5 shrink-0 rounded-full <%= metric.accent %>"></span>
         </div>
-        <p class="mt-4 text-3xl font-semibold tracking-tight text-slate-950">
+        <p class="mt-4 text-3xl font-semibold text-slate-950">
           <%= metric.format == "percent" ? "#{metric.value}%" : compact_number(metric.value) %>
         </p>
         <div class="mt-2 flex flex-wrap items-center gap-2">
@@ -77,7 +77,7 @@
           <div class="p-5">
             <div class="flex flex-wrap items-start justify-between gap-3">
               <div class="min-w-0">
-                <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400"><%= issue.owner %> · <%= issue.severity %></p>
+                <p class="text-xs font-semibold uppercase text-slate-400"><%= issue.owner %> · <%= issue.severity %></p>
                 <h3 class="mt-2 text-base font-semibold text-slate-950"><%= issue.title %></h3>
               </div>
               <%= status_pill(issue.status) %>
@@ -99,7 +99,7 @@
       </div>
       <div class="overflow-x-auto">
         <table class="min-w-full divide-y divide-slate-100 text-sm">
-          <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <thead class="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
             <tr>
               <th class="px-5 py-3">Employee</th>
               <th class="px-5 py-3">Coverage</th>
@@ -146,7 +146,7 @@
     </div>
     <div class="overflow-x-auto">
       <table class="min-w-full divide-y divide-slate-100 text-sm">
-        <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <thead class="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
           <tr>
             <th class="px-5 py-3">Requirement</th>
             <th class="px-5 py-3">Owner</th>
@@ -182,7 +182,7 @@
     </div>
     <div class="overflow-x-auto">
       <table class="min-w-full divide-y divide-slate-100 text-sm">
-        <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <thead class="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
           <tr>
             <th class="px-5 py-3">Employee</th>
             <th class="px-5 py-3">Document</th>
@@ -212,7 +212,7 @@
                 <% if document.complete? %>
                   <%= status_pill(document.status) %>
                 <% else %>
-                  <%= button_to "Verify", verify_employee_document_path(document.id), method: :post, params: { return_to: "documents", reviewed_by: "ops_console" }, class: "rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-800" %>
+                  <%= button_to "Verify", verify_employee_document_path(document.id), method: :post, params: { return_to: "documents", reviewed_by: "Musto Operations" }, class: "rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-800" %>
                 <% end %>
               </td>
             </tr>
@@ -231,11 +231,11 @@
       <div class="grid divide-y divide-slate-100 lg:grid-cols-[1fr_0.9fr] lg:divide-x lg:divide-y-0">
         <div class="min-w-0">
           <div class="border-b border-slate-100 px-5 py-3">
-            <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Requested documents</p>
+            <p class="text-xs font-semibold uppercase text-slate-400">Requested documents</p>
           </div>
           <div class="overflow-x-auto">
             <table class="min-w-full divide-y divide-slate-100 text-sm">
-              <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <thead class="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
                 <tr>
                   <th class="px-5 py-3">Employee</th>
                   <th class="px-5 py-3">Document</th>
@@ -264,7 +264,7 @@
 
         <div class="min-w-0">
           <div class="border-b border-slate-100 px-5 py-3">
-            <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Already clear</p>
+            <p class="text-xs font-semibold uppercase text-slate-400">Already clear</p>
           </div>
           <div class="divide-y divide-slate-100">
             <% @documents.batch_holdbacks.each do |holdback| %>

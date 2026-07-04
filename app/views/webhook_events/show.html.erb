@@ -7,7 +7,7 @@
           <%= status_pill(@webhook_event.status) %>
           <%= status_pill(@webhook_event.processed? ? "processed" : "received") %>
         </div>
-        <h1 class="mt-5 break-all text-4xl font-semibold tracking-tight text-slate-950"><%= @webhook_event.event_name %></h1>
+        <h1 class="mt-5 break-all text-4xl font-semibold text-slate-950"><%= @webhook_event.event_name %></h1>
         <p class="mt-3 max-w-3xl text-base leading-7 text-slate-600">
           Inspect the event payload, routing match, sync attempts, request logs, and replay behavior for <%= @webhook_event.resource_type.humanize.downcase %> <span class="font-mono text-sm"><%= @webhook_event.resource_id %></span>.
         </p>
@@ -17,33 +17,33 @@
         </div>
       </div>
 
-      <aside class="border-t border-slate-200 bg-slate-950 p-6 text-white xl:border-l xl:border-t-0 xl:p-8">
-        <p class="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-300">Event identity</p>
+      <aside class="border-t border-slate-200 bg-[#f8fafc] p-6 text-slate-950 xl:border-l xl:border-t-0 xl:p-8">
+        <p class="text-xs font-semibold uppercase text-slate-500">Event identity</p>
         <div class="mt-6 space-y-5">
           <div>
-            <p class="text-sm text-slate-300">Event ID</p>
+            <p class="text-sm text-slate-600">Event ID</p>
             <p class="mt-1 break-all font-mono text-sm font-semibold"><%= @webhook_event.event_id %></p>
           </div>
-          <div class="h-px bg-white/10"></div>
+          <div class="h-px bg-slate-200"></div>
           <div class="grid grid-cols-2 gap-4">
             <div>
-              <p class="text-sm text-slate-300">Organization</p>
+              <p class="text-sm text-slate-600">Organization</p>
               <p class="mt-1 break-all font-semibold"><%= @webhook_event.organization_external_id %></p>
             </div>
             <div>
-              <p class="text-sm text-slate-300">Occurred</p>
+              <p class="text-sm text-slate-600">Occurred</p>
               <p class="mt-1 font-semibold"><%= @webhook_event.occurred_at.strftime("%b %-d, %I:%M %p") %></p>
             </div>
           </div>
           <% if @webhook_event.connection %>
-            <div class="rounded-md bg-white/10 p-4">
-              <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Matched connection</p>
-              <p class="mt-2 text-sm font-semibold text-white"><%= @webhook_event.connection.organization_name %></p>
-              <p class="mt-1 text-sm text-slate-300"><%= @webhook_event.connection.provider %> · <%= @webhook_event.connection.environment %></p>
+            <div class="rounded-md border border-slate-200 bg-white p-4">
+              <p class="text-xs font-semibold uppercase text-slate-400">Matched connection</p>
+              <p class="mt-2 text-sm font-semibold text-slate-950"><%= @webhook_event.connection.organization_name %></p>
+              <p class="mt-1 text-sm text-slate-600"><%= @webhook_event.connection.provider %> · <%= @webhook_event.connection.environment %></p>
             </div>
           <% else %>
             <div class="rounded-md bg-rose-500/10 p-4 text-rose-100">
-              <p class="text-xs font-semibold uppercase tracking-wide">No connection matched</p>
+              <p class="text-xs font-semibold uppercase">No connection matched</p>
               <p class="mt-2 text-sm leading-6">Replay after creating a matching Vitable connection for this organization external ID.</p>
             </div>
           <% end %>
@@ -65,7 +65,7 @@
           <p class="text-sm font-medium text-slate-500"><%= label %></p>
           <span class="h-2.5 w-2.5 shrink-0 rounded-full <%= accent %>"></span>
         </div>
-        <p class="mt-4 break-words text-lg font-semibold tracking-tight text-slate-950"><%= value %></p>
+        <p class="mt-4 break-words text-lg font-semibold text-slate-950"><%= value %></p>
       </article>
     <% end %>
   </div>
@@ -89,12 +89,12 @@
       </div>
     </section>
 
-    <section class="min-w-0 rounded-lg border border-slate-200 bg-slate-950 shadow-sm">
-      <div class="border-b border-white/10 px-5 py-4">
-        <h2 class="text-base font-semibold text-white">Stored payload</h2>
+    <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="border-b border-slate-200 px-5 py-4">
+        <h2 class="text-base font-semibold text-slate-950">Stored payload</h2>
         <p class="text-sm text-slate-400">Canonical payload used for replay and idempotency verification.</p>
       </div>
-      <pre class="overflow-x-auto p-5 text-xs leading-6 text-cyan-100"><%= JSON.pretty_generate(@webhook_event.payload) %></pre>
+      <pre class="overflow-x-auto p-5 text-xs leading-6 text-slate-700"><%= JSON.pretty_generate(@webhook_event.payload) %></pre>
     </section>
   </div>
 
@@ -108,7 +108,7 @@
         <% @webhook_event.timeline.each do |item| %>
           <div class="flex items-start justify-between gap-4 px-5 py-4">
             <div class="min-w-0">
-              <p class="text-xs font-semibold uppercase tracking-wide text-slate-400"><%= item.type %></p>
+              <p class="text-xs font-semibold uppercase text-slate-400"><%= item.type %></p>
               <p class="mt-1 break-all font-medium text-slate-950"><%= item.title %></p>
               <p class="mt-1 break-all text-sm text-slate-500"><%= item.subtitle %></p>
               <p class="mt-1 text-xs text-slate-400"><%= time_ago_in_words(item.timestamp) %> ago</p>
@@ -126,7 +126,7 @@
       </div>
       <div class="overflow-x-auto">
         <table class="min-w-full divide-y divide-slate-100 text-sm">
-          <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <thead class="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
             <tr>
               <th class="px-5 py-3">Operation</th>
               <th class="px-5 py-3">Resource</th>
@@ -156,12 +156,12 @@
 
   <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
     <div class="border-b border-slate-100 px-5 py-4">
-      <h2 class="text-base font-semibold text-slate-950">API request trail</h2>
+      <h2 class="text-base font-semibold text-slate-950">Connection activity</h2>
       <p class="text-sm text-slate-500">Request attempts whose operation, path, or body reference this webhook resource.</p>
     </div>
     <div class="overflow-x-auto">
       <table class="min-w-full divide-y divide-slate-100 text-sm">
-        <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <thead class="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
           <tr>
             <th class="px-5 py-3">Operation</th>
             <th class="px-5 py-3">Method</th>
@@ -184,7 +184,7 @@
           <% end %>
           <% if @webhook_event.request_logs.empty? %>
             <tr>
-              <td colspan="6" class="px-5 py-5 text-sm text-slate-500">No matching API request logs yet.</td>
+              <td colspan="6" class="px-5 py-5 text-sm text-slate-500">No matching connection activity yet.</td>
             </tr>
           <% end %>
         </tbody>

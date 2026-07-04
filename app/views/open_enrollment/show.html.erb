@@ -8,7 +8,7 @@
           <span class="rounded-full bg-cyan-50 px-3 py-1 text-xs font-semibold text-cyan-800 ring-1 ring-inset ring-cyan-200">Vitable handoff</span>
         </div>
 
-        <h1 class="mt-5 text-4xl font-semibold tracking-tight text-slate-950">Open enrollment command center</h1>
+        <h1 class="mt-5 text-4xl font-semibold text-slate-950">Open enrollment</h1>
         <p class="mt-3 max-w-3xl text-base leading-7 text-slate-600">
           Launch benefit election windows, track employee completion, resolve dependent blockers, and prepare Vitable eligibility handoffs for <%= @open_enrollment.employer&.name || "your employer portfolio" %>.
         </p>
@@ -17,33 +17,33 @@
           <%= link_to "Benefits cockpit", benefits_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
           <%= link_to "Eligibility sync", benefits_eligibility_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
           <%= link_to "Billing", benefits_billing_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
-          <%= button_to "Launch campaign", launch_open_enrollment_path, method: :post, params: { requested_by: "ops_console" }, class: "rounded-md bg-slate-950 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-slate-800" %>
-          <%= button_to "Send reminders", send_open_enrollment_reminders_path, method: :post, params: { requested_by: "ops_console" }, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
+          <%= button_to "Launch campaign", launch_open_enrollment_path, method: :post, params: { requested_by: "Musto Operations" }, class: "rounded-md bg-slate-950 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-slate-800" %>
+          <%= button_to "Send reminders", send_open_enrollment_reminders_path, method: :post, params: { requested_by: "Musto Operations" }, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
         </div>
       </div>
 
-      <aside class="border-t border-slate-200 bg-slate-950 p-6 text-white xl:border-l xl:border-t-0 xl:p-8">
-        <p class="text-xs font-semibold uppercase tracking-[0.2em] text-blue-300">Campaign window</p>
+      <aside class="border-t border-slate-200 bg-[#f8fafc] p-6 text-slate-950 xl:border-l xl:border-t-0 xl:p-8">
+        <p class="text-xs font-semibold uppercase text-blue-300">Campaign window</p>
         <% if @open_enrollment.campaign.present? %>
-          <p class="mt-6 text-3xl font-semibold tracking-tight"><%= @open_enrollment.campaign.plan_year %></p>
-          <p class="mt-2 text-sm leading-6 text-slate-300"><%= @open_enrollment.campaign.name %></p>
+          <p class="mt-6 text-3xl font-semibold"><%= @open_enrollment.campaign.plan_year %></p>
+          <p class="mt-2 text-sm leading-6 text-slate-600"><%= @open_enrollment.campaign.name %></p>
           <div class="mt-6 grid grid-cols-2 gap-3">
-            <div class="rounded-md bg-white/10 p-4">
-              <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Starts</p>
+            <div class="rounded-md border border-slate-200 bg-white p-4">
+              <p class="text-xs font-semibold uppercase text-slate-400">Starts</p>
               <p class="mt-2 text-sm font-semibold"><%= @open_enrollment.campaign.starts_on.strftime("%b %-d") %></p>
             </div>
-            <div class="rounded-md bg-white/10 p-4">
-              <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Ends</p>
+            <div class="rounded-md border border-slate-200 bg-white p-4">
+              <p class="text-xs font-semibold uppercase text-slate-400">Ends</p>
               <p class="mt-2 text-sm font-semibold"><%= @open_enrollment.campaign.ends_on.strftime("%b %-d") %></p>
             </div>
           </div>
-          <div class="mt-5 rounded-md bg-white/10 p-4">
-            <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Invitations</p>
+          <div class="mt-5 rounded-md border border-slate-200 bg-white p-4">
+            <p class="text-xs font-semibold uppercase text-slate-400">Invitations</p>
             <p class="mt-2 text-2xl font-semibold"><%= compact_number(@open_enrollment.campaign.invitation_count) %></p>
           </div>
         <% else %>
-          <p class="mt-6 text-3xl font-semibold tracking-tight">Not launched</p>
-          <p class="mt-2 text-sm leading-6 text-slate-300">Launch the next plan-year campaign to create employee invitations.</p>
+          <p class="mt-6 text-3xl font-semibold">Not launched</p>
+          <p class="mt-2 text-sm leading-6 text-slate-600">Launch the next plan-year campaign to create employee invitations.</p>
         <% end %>
       </aside>
     </div>
@@ -56,7 +56,7 @@
           <p class="text-sm font-medium text-slate-500"><%= metric.label %></p>
           <span class="h-2.5 w-2.5 shrink-0 rounded-full <%= metric.accent %>"></span>
         </div>
-        <p class="mt-4 text-3xl font-semibold tracking-tight text-slate-950"><%= compact_number(metric.value) %></p>
+        <p class="mt-4 text-3xl font-semibold text-slate-950"><%= compact_number(metric.value) %></p>
         <div class="mt-2 flex flex-wrap items-center gap-2">
           <%= status_pill(metric.status) %>
           <p class="text-sm text-slate-500"><%= metric.hint %></p>
@@ -76,7 +76,7 @@
           <div class="p-5">
             <div class="flex flex-wrap items-start justify-between gap-3">
               <div class="min-w-0">
-                <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400"><%= issue.owner %> · <%= issue.severity %></p>
+                <p class="text-xs font-semibold uppercase text-slate-400"><%= issue.owner %> · <%= issue.severity %></p>
                 <h3 class="mt-2 text-base font-semibold text-slate-950"><%= issue.title %></h3>
               </div>
               <%= status_pill(issue.status) %>
@@ -133,7 +133,7 @@
     </div>
     <div class="overflow-x-auto">
       <table class="min-w-full divide-y divide-slate-100 text-sm">
-        <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <thead class="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
           <tr>
             <th class="px-5 py-3">Employee</th>
             <th class="px-5 py-3">Invite</th>
@@ -189,7 +189,7 @@
             <span class="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600 ring-1 ring-inset ring-slate-200"><%= @open_enrollment.latest_batch.batch_type.humanize %> batch</span>
           </div>
           <p class="mt-3 break-all font-mono text-sm font-semibold text-slate-950"><%= @open_enrollment.latest_batch.batch_id %></p>
-          <p class="mt-2 text-sm text-slate-500">Generated <%= time_ago_in_words(@open_enrollment.latest_batch.generated_at) %> ago by <%= @open_enrollment.latest_batch.requested_by %></p>
+          <p class="mt-2 text-sm text-slate-500">Generated <%= time_ago_in_words(@open_enrollment.latest_batch.generated_at) %> ago by <%= operator_name(@open_enrollment.latest_batch.requested_by) %></p>
         </div>
         <div class="grid grid-cols-3 gap-2 text-center">
           <div class="rounded-md bg-white px-3 py-3 shadow-sm ring-1 ring-inset ring-slate-200">
@@ -209,11 +209,11 @@
       <div class="grid divide-y divide-slate-100 lg:grid-cols-[1fr_0.85fr] lg:divide-x lg:divide-y-0">
         <div class="min-w-0">
           <div class="border-b border-slate-100 px-5 py-3">
-            <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400"><%= @open_enrollment.latest_batch.batch_type.humanize %> lines</p>
+            <p class="text-xs font-semibold uppercase text-slate-400"><%= @open_enrollment.latest_batch.batch_type.humanize %> lines</p>
           </div>
           <div class="overflow-x-auto">
             <table class="min-w-full divide-y divide-slate-100 text-sm">
-              <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <thead class="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
                 <tr>
                   <th class="px-5 py-3">Employee</th>
                   <th class="px-5 py-3">Due</th>
@@ -242,7 +242,7 @@
 
         <div class="min-w-0">
           <div class="border-b border-slate-100 px-5 py-3">
-            <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Holdbacks</p>
+            <p class="text-xs font-semibold uppercase text-slate-400">Holdbacks</p>
           </div>
           <div class="divide-y divide-slate-100">
             <% @open_enrollment.batch_holdbacks.each do |holdback| %>

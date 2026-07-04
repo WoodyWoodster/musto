@@ -15,9 +15,12 @@ connection.assign_attributes(
 )
 connection.save!
 
-employer = organization.employers.find_or_initialize_by(name: "Atlas Coffee Roasters")
+employer = organization.employers.find_by(name: "Atlas Global Services") ||
+  organization.employers.find_by(vitable_id: "empr_atlas_demo") ||
+  organization.employers.build
 employer.assign_attributes(
-  legal_name: "Atlas Coffee Roasters LLC",
+  name: "Atlas Global Services",
+  legal_name: "Atlas Global Services LLC",
   ein: "12-3456789",
   vitable_id: "empr_atlas_demo",
   status: "onboarding",
@@ -86,11 +89,14 @@ end
 
 locations = {
   "Philadelphia HQ" => { city: "Philadelphia", state: "PA", postal_code: "19106", address_line1: "214 Market Street", remote: false },
-  "Denver Roastery" => { city: "Denver", state: "CO", postal_code: "80202", address_line1: "88 Blake Street", remote: false },
+  "Denver Operations Center" => { city: "Denver", state: "CO", postal_code: "80202", address_line1: "88 Blake Street", remote: false },
   "Remote US" => { city: nil, state: nil, address_line1: nil, remote: true }
 }.to_h do |name, attrs|
-  location = employer.work_locations.find_or_initialize_by(name:)
+  location = employer.work_locations.find_by(name:) ||
+    employer.work_locations.find_by(address_line1: attrs[:address_line1], city: attrs[:city]) ||
+    employer.work_locations.build
   location.assign_attributes(attrs.merge(country: "US", metadata: { tax_profile: attrs[:remote] ? "multi_state" : "single_state" }))
+  location.name = name
   location.save!
   [ name, location ]
 end
@@ -131,7 +137,7 @@ end
     "Withholding account submitted; unemployment rate assignment is pending agency confirmation."
   ],
   [
-    locations.fetch("Denver Roastery"),
+    locations.fetch("Denver Operations Center"),
     "Colorado Department of Labor and Employment",
     "CO",
     "unemployment_insurance",
@@ -193,8 +199,8 @@ employees = [
   [ "Jordan", "Lee", "jordan.lee@example.com", "1987-09-23", "5551231002", "empl_atlas_jordan", "Retail Lead", "RET", "Philadelphia HQ", 86_000_00, "in_progress" ],
   [ "Morgan", "Patel", "morgan.patel@example.com", "1995-01-18", "5551231003", "empl_atlas_morgan", "People Partner", "PPL", "Remote US", 92_000_00, "complete" ],
   [ "Riley", "Chen", "riley.chen@example.com", "1992-12-02", "5551231004", nil, "Payroll Analyst", "FIN", "Remote US", 98_000_00, "in_progress" ],
-  [ "Sam", "Rivera", "sam.rivera@example.com", "1989-05-06", "5551231005", nil, "Roastery Manager", "OPS", "Denver Roastery", 104_000_00, "blocked" ],
-  [ "Taylor", "Brooks", "taylor.brooks@example.com", "1998-08-17", "5551231006", nil, "Cafe Associate", "RET", "Denver Roastery", 54_000_00, "complete" ]
+  [ "Sam", "Rivera", "sam.rivera@example.com", "1989-05-06", "5551231005", nil, "Operations Manager", "OPS", "Denver Operations Center", 104_000_00, "blocked" ],
+  [ "Taylor", "Brooks", "taylor.brooks@example.com", "1998-08-17", "5551231006", nil, "Client Support Associate", "RET", "Denver Operations Center", 54_000_00, "complete" ]
 ].map do |first_name, last_name, email, date_of_birth, phone, vitable_id, title, department_code, location_name, compensation_cents, onboarding_status|
   employee = employer.employees.find_or_initialize_by(email:)
   employee.assign_attributes(
@@ -362,13 +368,13 @@ end
     employees.fourth,
     "work_location",
     "Move tax work location",
-    "Riley moved to the Denver roastery and needs payroll tax and benefit eligibility review.",
+    "Riley moved to the Denver operations center and needs payroll tax and benefit eligibility review.",
     "submitted",
     Date.current + 7.days,
     3.days.ago,
     {
       payload: {
-        work_location_id: locations.fetch("Denver Roastery").id,
+        work_location_id: locations.fetch("Denver Operations Center").id,
         reason: "employee_relocation"
       },
       impact: { payroll: "state_tax_profile", benefits: "eligibility_review", compliance: "work_location_update" }
@@ -452,7 +458,7 @@ next_performance_cycle.save!
   [ employees.third, employees.first, "self_review", nil, Date.current + 3.days, "Partnered well with remote employees on benefits changes.", "Self-review is still pending final employee submission." ],
   [ employees.fourth, employees.third, "calibration", 3, Date.current + 2.days, "Improved payroll funding controls and variance review.", "Needs clearer cross-training coverage for tax calendar work." ],
   [ employees[4], employees.first, "overdue", nil, Date.current - 2.days, "Strong Denver operations ownership.", "Manager review is overdue and needs follow-up." ],
-  [ employees.last, employees.second, "manager_review", 4, Date.current + 8.days, "Consistent cafe execution and customer quality.", "Ready to expand into shift lead responsibilities." ]
+  [ employees.last, employees.second, "manager_review", 4, Date.current + 8.days, "Consistent client service execution and quality.", "Ready to expand into shift lead responsibilities." ]
 ].each do |employee, reviewer, status, rating, due_on, strengths, growth_areas|
   review = current_performance_cycle.performance_reviews.find_or_initialize_by(employee:)
   review.assign_attributes(
@@ -476,7 +482,7 @@ end
   [ employees.second, current_performance_cycle, "Staff retail leadership bench", "Identify and train two shift leads before the year-end review cycle.", "at_risk", 38, Date.current + 30.days, "manager", "2 shift leads trained" ],
   [ employees.third, current_performance_cycle, "Complete benefits education series", "Publish employee-facing Vitable plan education and enrollment reminders.", "complete", 100, Date.current - 3.days, "employee", "Education series completed" ],
   [ employees.fourth, current_performance_cycle, "Document payroll funding backups", "Create a repeatable backup process for funding reviews and prenote exceptions.", "on_track", 64, Date.current + 18.days, "employee", "Backup runbook published" ],
-  [ employees[4], current_performance_cycle, "Rebuild Denver roastery coverage", "Stabilize staffing and manager coverage ahead of final pay season.", "paused", 45, Date.current + 45.days, "manager", "Coverage plan approved" ]
+  [ employees[4], current_performance_cycle, "Rebuild Denver operations center coverage", "Stabilize staffing and manager coverage ahead of final pay season.", "paused", 45, Date.current + 45.days, "manager", "Coverage plan approved" ]
 ].each do |employee, cycle, title, description, status, progress_percent, due_on, owner, metric|
   goal = employee.employee_goals.find_or_initialize_by(title:)
   goal.assign_attributes(
@@ -681,10 +687,10 @@ end
     employees.last,
     "location_change",
     Date.current - 7.days,
-    "Taylor Brooks moved into the Denver roastery location and is queued for HRIS sync.",
+    "Taylor Brooks moved into the Denver operations center location and is queued for HRIS sync.",
     "sync_queued",
     {
-      changes: { work_location: { from: "Remote US", to: "Denver Roastery" } },
+      changes: { work_location: { from: "Remote US", to: "Denver Operations Center" } },
       payroll_impact: "tax_profile_review",
       benefits_impact: "eligibility_review",
       compliance_impact: "state_notice"
@@ -807,10 +813,10 @@ end
 
 [
   [ employees.second, departments.fetch("RET"), locations.fetch("Philadelphia HQ"), "Retail floor lead", "published", 3, 8, 16, 30, 3_850, "Morning floor coverage" ],
-  [ employees.last, departments.fetch("RET"), locations.fetch("Denver Roastery"), "Cafe associate", "published", 4, 7, 15, 30, 2_650, "Cafe open and service" ],
+  [ employees.last, departments.fetch("RET"), locations.fetch("Denver Operations Center"), "Client support associate", "published", 4, 7, 15, 30, 2_650, "Client support coverage" ],
   [ employees.first, departments.fetch("OPS"), locations.fetch("Philadelphia HQ"), "Operations close", "draft", 5, 12, 20, 30, 6_350, "Close payroll exception queue" ],
-  [ nil, departments.fetch("RET"), locations.fetch("Denver Roastery"), "Cafe associate", "draft", 6, 10, 18, 30, 2_650, "Open coverage gap for Denver" ],
-  [ employees[4], departments.fetch("OPS"), locations.fetch("Denver Roastery"), "Roastery manager", "missed", 1, 6, 14, 30, 5_000, "Missed shift needs manager review" ],
+  [ nil, departments.fetch("RET"), locations.fetch("Denver Operations Center"), "Client support associate", "draft", 6, 10, 18, 30, 2_650, "Open coverage gap for Denver" ],
+  [ employees[4], departments.fetch("OPS"), locations.fetch("Denver Operations Center"), "Operations manager", "missed", 1, 6, 14, 30, 5_000, "Missed shift needs manager review" ],
   [ employees.fourth, departments.fetch("FIN"), locations.fetch("Remote US"), "Payroll operations", "completed", -1, 9, 17, 30, 4_700, "Completed payroll prep coverage" ]
 ].each do |employee, department, location, role, status, day_offset, start_hour, end_hour, break_minutes, hourly_rate_cents, notes|
   starts_at = (Date.current + day_offset.days).in_time_zone.change(hour: start_hour, min: 0)
@@ -910,7 +916,7 @@ previous_run.save!
     current_run,
     "market_adjustment",
     "rejected",
-    "Market adjustment paused until Denver roastery role leveling is complete.",
+    "Market adjustment paused until Denver operations center role leveling is complete.",
     employees[4].compensation_cents,
     employees[4].compensation_cents + 4_000_00,
     Date.current.next_month.beginning_of_month,
@@ -960,8 +966,8 @@ end
   [ employees.third, "Transit commuter benefit", "benefit", "active", "fixed_amount", 120_00, nil, nil, nil, 40, true, "Musto Benefits", "TRN-COMMUTE", Date.current - 1.month, nil ],
   [ employees.fourth, "401k employee deferral", "retirement", "active", "percent_gross", 0, 500, 650_00, nil, 30, true, "Musto Retirement", "RET-DEFERRAL", Date.current - 3.months, nil ],
   [ employees[4], "Tax levy order", "tax_levy", "blocked", "court_order", 450_00, nil, 500_00, 4_800_00, 5, false, "Colorado Department of Revenue", "LEVY-8812", Date.current - 10.days, nil ],
-  [ employees.last, "Equipment repayment", "equipment", "pending", "remaining_balance", 75_00, nil, 75_00, 525_00, 60, false, "Atlas Coffee Roasters", "EQ-ROASTER-22", Date.current + 5.days, nil ],
-  [ employees.first, "Wellness advance repayment", "loan_repayment", "paused", "fixed_amount", 90_00, nil, nil, 360_00, 70, false, "Atlas Coffee Roasters", "ADV-2026-04", Date.current - 2.months, nil ]
+  [ employees.last, "Equipment repayment", "equipment", "pending", "remaining_balance", 75_00, nil, 75_00, 525_00, 60, false, "Atlas Global Services", "EQ-ASSET-22", Date.current + 5.days, nil ],
+  [ employees.first, "Wellness advance repayment", "loan_repayment", "paused", "fixed_amount", 90_00, nil, nil, 360_00, 70, false, "Atlas Global Services", "ADV-2026-04", Date.current - 2.months, nil ]
 ].each do |employee, title, deduction_type, status, calculation_method, amount_cents, percent_basis_points, max_per_paycheck_cents, current_balance_cents, priority, pre_tax, agency_name, case_number, starts_on, ends_on|
   deduction = employer.employee_deductions.find_or_initialize_by(employee:, title:)
   deduction.assign_attributes(
@@ -1085,7 +1091,7 @@ benefit_invoice.update!(
 [
   [ employees.third, Date.current - 2.days, "Amtrak", "travel", "Open enrollment onsite travel", 184_00, "submitted", "uploaded", true, "employee_paid" ],
   [ employees.first, Date.current - 3.days, "Staples", "supplies", "Operations supplies for benefits launch", 86_00, "approved", "verified", true, "employee_paid" ],
-  [ employees.second, Date.current - 1.day, "High Street Cafe", "meals", "Team lunch missing receipt", 145_00, "submitted", "missing", true, "employee_paid" ],
+  [ employees.second, Date.current - 1.day, "Market Hall", "meals", "Team lunch missing receipt", 145_00, "submitted", "missing", true, "employee_paid" ],
   [ employees.last, Date.current - 4.days, "City Gym", "wellness", "Out-of-policy wellness reimbursement request", 59_00, "submitted", "uploaded", false, "employee_paid" ]
 ].each do |employee, incurred_on, merchant, category, description, amount_cents, status, receipt_status, reimbursable, payment_method|
   expense = employee.employee_expenses.find_or_initialize_by(merchant:, incurred_on:, description:)
@@ -1233,7 +1239,7 @@ workers_comp_policy.save!
 
 [
   [ employees.second, "WC-CLAIM-1048", Date.current - 24.days, Date.current - 23.days, "accepted", "lost_time", "strain", "Lower back", "Retail lead reported a lifting injury while closing floor inventory.", 4, 8_500_00, 1_250_00, nil ],
-  [ employees.last, nil, Date.current - 6.days, Date.current - 5.days, "reported", "medical_only", "burn", "Hand", "Cafe associate reported a minor burn during espresso bar prep.", 0, 1_200_00, 175_00, Date.current + 2.days ]
+  [ employees.last, nil, Date.current - 6.days, Date.current - 5.days, "reported", "medical_only", "burn", "Hand", "Client support associate reported a minor burn during facilities prep.", 0, 1_200_00, 175_00, Date.current + 2.days ]
 ].each do |employee, claim_number, incident_on, reported_on, status, severity, injury_type, body_part, description, lost_time_days, reserve_cents, paid_cents, return_to_work_on|
   claim = workers_comp_policy.workers_comp_claims.find_or_initialize_by(employee:, incident_on:)
   claim.assign_attributes(

@@ -2,8 +2,8 @@
   <div class="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
     <div>
       <%= link_to "Back to payroll", payroll_path, class: "text-sm font-semibold text-cyan-700 hover:text-cyan-900" %>
-      <p class="mt-5 text-sm font-semibold uppercase tracking-[0.18em] text-indigo-700">Payroll run</p>
-      <h1 class="mt-2 text-3xl font-semibold tracking-tight text-slate-950"><%= @payroll_run.pay_date.strftime("%B %-d, %Y") %> payroll</h1>
+      <p class="mt-5 text-sm font-semibold uppercase text-indigo-700">Payroll run</p>
+      <h1 class="mt-2 text-3xl font-semibold text-slate-950"><%= @payroll_run.pay_date.strftime("%B %-d, %Y") %> payroll</h1>
       <p class="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
         <%= @payroll_run.employer_name %> · <%= @payroll_run.period_start_on.strftime("%b %-d") %> to <%= @payroll_run.period_end_on.strftime("%b %-d, %Y") %> · <%= @payroll_run.employee_count %> employee lines.
       </p>
@@ -24,7 +24,7 @@
       <div class="border-b border-slate-200 p-6 lg:border-b-0 lg:border-r">
         <p class="text-sm font-semibold text-slate-500">Run readiness</p>
         <div class="mt-4 flex items-end gap-3">
-          <span class="text-5xl font-semibold tracking-tight text-slate-950"><%= @payroll_run.progress_percent %>%</span>
+          <span class="text-5xl font-semibold text-slate-950"><%= @payroll_run.progress_percent %>%</span>
           <span class="pb-1 text-sm text-slate-500"><%= @payroll_run.finalized? ? "locked" : "reviewed" %></span>
         </div>
         <div class="mt-6 h-2 overflow-hidden rounded-full bg-slate-100">
@@ -42,7 +42,7 @@
           ["Net", money_cents(@payroll_run.estimated_net_pay_cents), "text-indigo-700"]
         ].each do |label, value, color| %>
           <div class="bg-white p-5">
-            <p class="text-xs font-semibold uppercase tracking-wide text-slate-400"><%= label %></p>
+            <p class="text-xs font-semibold uppercase text-slate-400"><%= label %></p>
             <p class="mt-3 text-2xl font-semibold <%= color %>"><%= value %></p>
           </div>
         <% end %>
@@ -69,14 +69,14 @@
       </div>
     </section>
 
-    <section class="rounded-lg border border-slate-200 bg-slate-950 shadow-sm">
-      <div class="border-b border-white/10 px-5 py-4">
-        <h2 class="text-base font-semibold text-white">Export payload</h2>
+    <section class="rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="border-b border-slate-200 px-5 py-4">
+        <h2 class="text-base font-semibold text-slate-950">Export payload</h2>
         <p class="text-sm text-slate-400">Shape prepared for provider handoff once credentials and exports are enabled.</p>
       </div>
-      <pre class="overflow-x-auto p-5 text-xs leading-6 text-cyan-100"><%= JSON.pretty_generate(@payroll_run.export_payload) %></pre>
-      <div class="border-t border-white/10 px-5 py-4">
-        <%= link_to "Open benefits export workspace", payroll_run_benefits_export_path(@payroll_run.id), class: "text-sm font-semibold text-cyan-200 hover:text-white" %>
+      <pre class="overflow-x-auto p-5 text-xs leading-6 text-slate-700"><%= JSON.pretty_generate(@payroll_run.export_payload) %></pre>
+      <div class="border-t border-slate-200 px-5 py-4">
+        <%= link_to "Open benefits export workspace", payroll_run_benefits_export_path(@payroll_run.id), class: "text-sm font-semibold text-[#635bff] hover:text-[#4f46e5]" %>
       </div>
     </section>
   </div>
@@ -88,7 +88,7 @@
     </div>
     <div class="overflow-x-auto">
       <table class="min-w-full divide-y divide-slate-100 text-sm">
-        <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <thead class="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
           <tr>
             <th class="px-5 py-3">Employee</th>
             <th class="px-5 py-3">Gross</th>

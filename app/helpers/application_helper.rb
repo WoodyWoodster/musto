@@ -30,6 +30,24 @@ module ApplicationHelper
     tag.span(normalized.to_s.humanize, class: "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset #{palette}")
   end
 
+  def operator_name(identifier)
+    normalized = identifier.to_s.presence || "Musto Operations"
+    {
+      "ops_console" => "Musto Operations",
+      "Musto Operations" => "Musto Operations",
+      "people_ops" => "People Operations",
+      "people_ops_admin" => "People Operations",
+      "payroll_ops" => "Payroll Team",
+      "payroll_admin" => "Payroll Team",
+      "benefits_admin" => "Benefits Team",
+      "compliance_ops" => "Compliance Team",
+      "compliance_admin" => "Compliance Team",
+      "tax_ops" => "Tax Team",
+      "finance_admin" => "Finance Team",
+      "preview" => "Preview"
+    }.fetch(normalized, normalized.tr("_", " ").titleize)
+  end
+
   def money_cents(value)
     number_to_currency(value.to_i / 100.0, precision: 0)
   end

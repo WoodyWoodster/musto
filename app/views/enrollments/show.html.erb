@@ -8,7 +8,7 @@
           <%= status_pill(@enrollment.plan_status) %>
           <%= status_pill(@enrollment.employee_status) %>
         </div>
-        <h1 class="mt-5 text-4xl font-semibold tracking-tight text-slate-950"><%= @enrollment.benefit_plan_name %></h1>
+        <h1 class="mt-5 text-4xl font-semibold text-slate-950"><%= @enrollment.benefit_plan_name %></h1>
         <p class="mt-3 max-w-3xl text-base leading-7 text-slate-600">
           Review <%= @enrollment.employee_name %>’s <%= @enrollment.coverage_level.humanize.downcase %> election, payroll deduction impact, and Vitable enrollment mapping before accepting or waiving coverage.
         </p>
@@ -21,27 +21,27 @@
         </div>
       </div>
 
-      <aside class="border-t border-slate-200 bg-slate-950 p-6 text-white xl:border-l xl:border-t-0 xl:p-8">
-        <p class="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-300">Vitable enrollment</p>
+      <aside class="border-t border-slate-200 bg-[#f8fafc] p-6 text-slate-950 xl:border-l xl:border-t-0 xl:p-8">
+        <p class="text-xs font-semibold uppercase text-slate-500">Vitable enrollment</p>
         <div class="mt-6 space-y-5">
           <div>
-            <p class="text-sm text-slate-300">Remote enrollment ID</p>
+            <p class="text-sm text-slate-600">Remote enrollment ID</p>
             <p class="mt-1 break-all font-mono text-sm font-semibold"><%= @enrollment.vitable_id.presence || "Waiting for remote ID" %></p>
           </div>
-          <div class="h-px bg-white/10"></div>
+          <div class="h-px bg-slate-200"></div>
           <div class="grid grid-cols-2 gap-4">
             <div>
-              <p class="text-sm text-slate-300">Monthly premium</p>
+              <p class="text-sm text-slate-600">Monthly premium</p>
               <p class="mt-1 text-2xl font-semibold"><%= money_cents(@enrollment.monthly_premium_cents) %></p>
             </div>
             <div>
-              <p class="text-sm text-slate-300">Annualized</p>
+              <p class="text-sm text-slate-600">Annualized</p>
               <p class="mt-1 text-2xl font-semibold"><%= money_cents(@enrollment.annual_premium_cents) %></p>
             </div>
           </div>
-          <div class="rounded-md bg-white/10 p-4">
-            <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Payroll impact</p>
-            <p class="mt-2 text-sm leading-6 text-slate-200"><%= @enrollment.payroll_deduction_count %> deductions · <%= money_cents(@enrollment.payroll_deduction_cents) %> currently queued.</p>
+          <div class="rounded-md border border-slate-200 bg-white p-4">
+            <p class="text-xs font-semibold uppercase text-slate-400">Payroll impact</p>
+            <p class="mt-2 text-sm leading-6 text-slate-600"><%= @enrollment.payroll_deduction_count %> deductions · <%= money_cents(@enrollment.payroll_deduction_cents) %> currently queued.</p>
           </div>
         </div>
       </aside>
@@ -60,7 +60,7 @@
           <p class="text-sm font-medium text-slate-500"><%= label %></p>
           <span class="h-2.5 w-2.5 shrink-0 rounded-full <%= accent %>"></span>
         </div>
-        <p class="mt-4 text-lg font-semibold tracking-tight text-slate-950"><%= value %></p>
+        <p class="mt-4 text-lg font-semibold text-slate-950"><%= value %></p>
       </article>
     <% end %>
   </div>
@@ -84,12 +84,12 @@
       </div>
     </section>
 
-    <section class="rounded-lg border border-slate-200 bg-slate-950 shadow-sm">
-      <div class="border-b border-white/10 px-5 py-4">
-        <h2 class="text-base font-semibold text-white">Sync payload</h2>
+    <section class="rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="border-b border-slate-200 px-5 py-4">
+        <h2 class="text-base font-semibold text-slate-950">Sync payload</h2>
         <p class="text-sm text-slate-400">Enrollment and payroll deduction payload prepared for Vitable/provider export.</p>
       </div>
-      <pre class="overflow-x-auto p-5 text-xs leading-6 text-cyan-100"><%= JSON.pretty_generate(@enrollment.export_payload) %></pre>
+      <pre class="overflow-x-auto p-5 text-xs leading-6 text-slate-700"><%= JSON.pretty_generate(@enrollment.export_payload) %></pre>
     </section>
   </div>
 
@@ -127,7 +127,7 @@
         <% @enrollment.timeline.each do |item| %>
           <div class="flex items-start justify-between gap-4 px-5 py-4">
             <div>
-              <p class="text-xs font-semibold uppercase tracking-wide text-slate-400"><%= item.type %></p>
+              <p class="text-xs font-semibold uppercase text-slate-400"><%= item.type %></p>
               <p class="mt-1 font-medium text-slate-950"><%= item.title %></p>
               <p class="mt-1 text-sm text-slate-500"><%= item.subtitle %></p>
               <p class="mt-1 text-xs text-slate-400"><%= time_ago_in_words(item.timestamp) %> ago</p>

@@ -32,7 +32,7 @@ class EmployeeExpenseTest < ActiveSupport::TestCase
   test "blocks policy readiness without a receipt" do
     expense = @employee.employee_expenses.create!(
       incurred_on: Date.current,
-      merchant: "Cafe",
+      merchant: "Client services",
       category: "meals",
       description: "Team lunch",
       amount_cents: 145_00

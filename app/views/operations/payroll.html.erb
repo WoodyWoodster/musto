@@ -1,8 +1,8 @@
 <section class="space-y-7">
   <div class="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
     <div>
-      <p class="text-sm font-semibold uppercase tracking-[0.18em] text-indigo-700">Payroll</p>
-      <h1 class="mt-2 text-3xl font-semibold tracking-tight text-slate-950">Payroll readiness</h1>
+      <p class="text-sm font-semibold uppercase text-indigo-700">Payroll</p>
+      <h1 class="mt-2 text-3xl font-semibold text-slate-950">Payroll readiness</h1>
       <p class="mt-2 max-w-3xl text-sm leading-6 text-slate-600">Preview gross pay, Vitable deductions, payroll adjustments, estimated taxes, and net payroll before finalizing a run.</p>
     </div>
     <% if @payroll[:current_run] && !@payroll[:current_run].finalized? %>
@@ -27,7 +27,7 @@
           <div class="flex items-center justify-between">
             <div>
               <p class="text-sm font-semibold text-slate-500">Current pay date</p>
-              <h2 class="mt-2 text-4xl font-semibold tracking-tight text-slate-950"><%= run.pay_date.strftime("%b %-d") %></h2>
+              <h2 class="mt-2 text-4xl font-semibold text-slate-950"><%= run.pay_date.strftime("%b %-d") %></h2>
             </div>
             <%= status_pill(run.status) %>
           </div>
@@ -46,7 +46,7 @@
             ["Est. net pay", money_cents(run.estimated_net_pay_cents), "text-indigo-700"]
           ].each do |label, value, color| %>
             <div class="bg-white p-5">
-              <p class="text-xs font-semibold uppercase tracking-wide text-slate-400"><%= label %></p>
+              <p class="text-xs font-semibold uppercase text-slate-400"><%= label %></p>
               <p class="mt-3 text-2xl font-semibold <%= color %>"><%= value %></p>
             </div>
           <% end %>
@@ -63,7 +63,7 @@
       </div>
       <div class="overflow-x-auto">
         <table class="min-w-full divide-y divide-slate-100 text-sm">
-          <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <thead class="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
             <tr>
               <th class="px-5 py-3">Period</th>
               <th class="px-5 py-3">Pay date</th>
@@ -116,7 +116,7 @@
     </div>
     <div class="overflow-x-auto">
       <table class="min-w-full divide-y divide-slate-100 text-sm">
-        <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <thead class="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
           <tr>
             <th class="px-5 py-3">Employee</th>
             <th class="px-5 py-3">Code</th>

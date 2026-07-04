@@ -6,7 +6,7 @@
           <%= status_pill(@company_setup.ready_for_launch? ? "ready" : "needs_review") %>
           <%= status_pill(@company_setup.status) %>
         </div>
-        <h1 class="mt-5 text-4xl font-semibold tracking-tight text-slate-950">Company setup center</h1>
+        <h1 class="mt-5 text-4xl font-semibold text-slate-950">Company setup center</h1>
         <p class="mt-3 max-w-3xl text-base leading-7 text-slate-600">
           Legal entity, payroll settings, org structure, benefits configuration, compliance readiness, and Vitable launch posture for <%= @company_setup.employer&.name || "your employer" %>.
         </p>
@@ -17,13 +17,13 @@
         </div>
       </div>
 
-      <aside class="border-t border-slate-200 bg-slate-950 p-6 text-white xl:border-l xl:border-t-0 xl:p-8">
-        <p class="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-300">Launch progress</p>
-        <p class="mt-6 text-5xl font-semibold tracking-tight"><%= @company_setup.launch_progress %>%</p>
+      <aside class="border-t border-slate-200 bg-[#f8fafc] p-6 text-slate-950 xl:border-l xl:border-t-0 xl:p-8">
+        <p class="text-xs font-semibold uppercase text-slate-500">Launch progress</p>
+        <p class="mt-6 text-5xl font-semibold"><%= @company_setup.launch_progress %>%</p>
         <div class="mt-5 h-2 overflow-hidden rounded-full bg-white/15">
           <div class="h-full rounded-full bg-cyan-300" style="width: <%= @company_setup.launch_progress %>%"></div>
         </div>
-        <p class="mt-4 text-sm leading-6 text-slate-300">
+        <p class="mt-4 text-sm leading-6 text-slate-600">
           <%= @company_setup.critical_blockers.count %> critical blocker<%= "s" unless @company_setup.critical_blockers.count == 1 %> before a confident launch.
         </p>
       </aside>
@@ -37,7 +37,7 @@
           <p class="text-sm font-medium text-slate-500"><%= metric.label %></p>
           <span class="h-2.5 w-2.5 shrink-0 rounded-full <%= metric.accent %>"></span>
         </div>
-        <p class="mt-4 text-3xl font-semibold tracking-tight text-slate-950"><%= compact_number(metric.value) %></p>
+        <p class="mt-4 text-3xl font-semibold text-slate-950"><%= compact_number(metric.value) %></p>
         <div class="mt-2 flex flex-wrap items-center gap-2">
           <%= status_pill(metric.status) %>
           <p class="text-sm text-slate-500"><%= metric.hint %></p>
@@ -64,7 +64,7 @@
                 <p class="mt-1 text-sm text-slate-500"><%= step.description %></p>
                 <p class="mt-2 text-sm font-medium text-slate-700"><%= step.detail %></p>
                 <% if step.manually_completed? && step.completed_at.present? %>
-                  <p class="mt-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Acknowledged <%= Time.iso8601(step.completed_at).strftime("%b %-d, %Y") %></p>
+                  <p class="mt-2 text-xs font-semibold uppercase text-slate-400">Acknowledged <%= Time.iso8601(step.completed_at).strftime("%b %-d, %Y") %></p>
                 <% end %>
               </div>
               <% if step.actionable? %>
@@ -93,7 +93,7 @@
           ["Onboarded", @company_setup.onboarded_at&.strftime("%b %-d, %Y") || "Not launched"]
         ].each do |label, value| %>
           <div class="bg-white p-5">
-            <dt class="text-xs font-semibold uppercase tracking-wide text-slate-400"><%= label %></dt>
+            <dt class="text-xs font-semibold uppercase text-slate-400"><%= label %></dt>
             <dd class="mt-2 text-sm font-semibold text-slate-950"><%= value %></dd>
           </div>
         <% end %>
@@ -167,7 +167,7 @@
             ["Failed syncs", @company_setup.integration.failed_sync_count]
           ].each do |label, value| %>
             <div class="bg-white p-4">
-              <dt class="text-xs font-semibold uppercase tracking-wide text-slate-400"><%= label %></dt>
+              <dt class="text-xs font-semibold uppercase text-slate-400"><%= label %></dt>
               <dd class="mt-2 break-all text-sm font-semibold text-slate-950"><%= value %></dd>
             </div>
           <% end %>
