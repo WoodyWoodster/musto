@@ -2589,6 +2589,8 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_empty detail.holdbacks
     assert_equal "create", detail.latest_packet.mode
     assert_equal "bi_weekly", detail.payload.pay_frequency
+    assert_equal "All", detail.payload.eligibility_classification
+    assert_equal "1st of the following month", detail.payload.eligibility_waiting_period
 
     get vitable_employer_provisioning_path
 
@@ -2616,6 +2618,9 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal "ops-benefits@example.com", packet.fetch("create_payload").fetch("email")
     assert_equal "214 Market Street", packet.fetch("create_payload").fetch("address").fetch("address_line_1")
     assert_equal "bi_weekly", packet.fetch("settings_payload").fetch("pay_frequency")
+    assert_equal "All", packet.fetch("eligibility_policy_payload").fetch("classification")
+    assert_equal "1st of the following month", packet.fetch("eligibility_policy_payload").fetch("waiting_period")
+    assert_equal "create", packet.fetch("eligibility_policy_action")
     assert_empty packet.fetch("holdbacks")
   end
 
@@ -2633,15 +2638,19 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_match @connection.api_key_reference, sync.error_message
     assert_equal "integration_admin", sync.stats.fetch("requested_by")
     assert_equal "ops-benefits@example.com", sync.stats.dig("payload", "create", "email")
+    assert_equal "All", sync.stats.dig("payload", "eligibility_policy", "classification")
   end
 
-  test "successful employer provisioning command stores remote id" do
+  test "successful employer provisioning command stores remote id and eligibility policy" do
     prepare_provisioning_profile
     response_class = Data.define(:data)
     gateway_class = Class.new do
       define_method(:initialize) { |_connection| }
       define_method(:create_employer) do |payload|
         response_class.new(data: { id: "empr_created_123", name: payload.fetch("name") })
+      end
+      define_method(:create_eligibility_policy) do |employer_id, payload|
+        response_class.new(data: { id: "bep_created_123", employer_id:, classification: payload.fetch("classification"), waiting_period: payload.fetch("waiting_period") })
       end
     end
     previous_key = ENV[@connection.api_key_reference]
@@ -2655,9 +2664,11 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert result.success?
     assert_equal "empr_created_123", @employer.reload.vitable_id
     assert_equal "bi_weekly", @employer.settings.fetch("vitable_pay_frequency")
+    assert_equal "bep_created_123", @employer.settings.dig("vitable_eligibility_policy", "data", "id")
     sync = @connection.sync_runs.where(operation: "employer_create").recent_first.first
     assert_equal "succeeded", sync.status
     assert_equal "empr_created_123", sync.stats.fetch("remote_employer_id")
+    assert_equal "bep_created_123", sync.stats.dig("remote_response", "data", "eligibility_policy", "data", "id")
   ensure
     ENV[@connection.api_key_reference] = previous_key
   end
@@ -2669,6 +2680,9 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       define_method(:initialize) { |_connection| }
       define_method(:update_employer_settings) do |employer_id, pay_frequency|
         response_class.new(data: { employer_id:, pay_frequency: })
+      end
+      define_method(:create_eligibility_policy) do |employer_id, payload|
+        response_class.new(data: { id: "bep_updated_123", employer_id:, classification: payload.fetch("classification") })
       end
     end
     previous_key = ENV[@connection.api_key_reference]
@@ -2685,6 +2699,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     sync = @connection.sync_runs.where(operation: "employer_settings_update").recent_first.first
     assert_equal "succeeded", sync.status
     assert_equal "bi_weekly", sync.stats.dig("payload", "settings", "pay_frequency")
+    assert_equal "bep_updated_123", sync.stats.dig("remote_response", "data", "eligibility_policy", "data", "id")
   ensure
     ENV[@connection.api_key_reference] = previous_key
   end
@@ -2712,6 +2727,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_select "h2", "Holdbacks"
     assert_select "h2", "Sync attempts"
     assert_select "h2", "Submission activity"
+    assert_select "button", "Refresh remote roster"
   end
 
   test "generates a Vitable census manifest through command action" do
@@ -2746,6 +2762,61 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_match @connection.api_key_reference, sync.error_message
     assert_equal "integration_admin", sync.stats.fetch("requested_by")
     assert_equal @employee.email, sync.stats.fetch("payload").fetch("employees").first.fetch("email")
+  end
+
+  test "refreshes Vitable remote roster as missing credentials sync run without API key" do
+    @employer.update!(vitable_id: "empr_ops_123")
+
+    assert_difference -> { @connection.sync_runs.where(operation: "remote_roster_refresh").count }, 1 do
+      post refresh_vitable_remote_roster_path, params: { requested_by: "integration_admin" }
+    end
+
+    assert_redirected_to vitable_census_sync_path
+    sync = @connection.sync_runs.where(operation: "remote_roster_refresh").recent_first.first
+    assert_equal "needs_credentials", sync.status
+    assert_match @connection.api_key_reference, sync.error_message
+    assert_equal "integration_admin", sync.stats.fetch("requested_by")
+  end
+
+  test "successful remote roster refresh stores Vitable employee IDs" do
+    @employer.update!(vitable_id: "empr_ops_123")
+    response_class = Data.define(:data)
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:list_employer_employees) do |_employer_id|
+        response_class.new(
+          data: [
+            {
+              id: "empl_remote_casey",
+              email: "casey@example.com",
+              first_name: "Casey",
+              last_name: "Nguyen",
+              reference_id: "musto_employee_#{Employee.find_by!(email: "casey@example.com").id}",
+              status: "active",
+              member_id: "mem_remote_casey"
+            }
+          ]
+        )
+      end
+    end
+    previous_key = ENV[@connection.api_key_reference]
+    ENV[@connection.api_key_reference] = "vit_apk_test_value"
+
+    result = Vitable::RefreshRemoteRosterCommand.new(
+      dto: Vitable::RefreshRemoteRosterDto.new(requested_by: "integration_admin"),
+      gateway_class:
+    ).call
+
+    assert result.success?
+    assert_equal "empl_remote_casey", @employee.reload.vitable_id
+    assert_equal "active", @employee.metadata.fetch("vitable_remote_status")
+    assert_equal "mem_remote_casey", @employee.metadata.fetch("vitable_member_id")
+    sync = @connection.sync_runs.where(operation: "remote_roster_refresh").recent_first.first
+    assert_equal "succeeded", sync.status
+    assert_equal 1, sync.stats.fetch("remote_employee_count")
+    assert_equal 1, sync.stats.fetch("matched_employee_count")
+  ensure
+    ENV[@connection.api_key_reference] = previous_key
   end
 
   test "embedded enrollment sessions workspace exposes token readiness DTOs" do

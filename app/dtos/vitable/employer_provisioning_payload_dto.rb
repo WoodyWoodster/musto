@@ -13,14 +13,18 @@ module Vitable
     :state,
     :zipcode,
     :pay_frequency,
+    :eligibility_classification,
+    :eligibility_waiting_period,
     :create_payload,
-    :settings_payload
+    :settings_payload,
+    :eligibility_policy_payload
   ) do
     def self.from_hash(payload)
       attributes = payload.to_h.stringify_keys
       create_payload = attributes.fetch("create_payload", {}).to_h.stringify_keys
       address = create_payload.fetch("address", {}).to_h.stringify_keys
       settings_payload = attributes.fetch("settings_payload", {}).to_h.stringify_keys
+      eligibility_policy_payload = attributes.fetch("eligibility_policy_payload", {}).to_h.stringify_keys
 
       new(
         mode: attributes.fetch("mode"),
@@ -36,8 +40,11 @@ module Vitable
         state: address.fetch("state", nil),
         zipcode: address.fetch("zipcode", nil),
         pay_frequency: settings_payload.fetch("pay_frequency", nil),
+        eligibility_classification: eligibility_policy_payload.fetch("classification", nil),
+        eligibility_waiting_period: eligibility_policy_payload.fetch("waiting_period", nil),
         create_payload:,
-        settings_payload:
+        settings_payload:,
+        eligibility_policy_payload:
       )
     end
   end

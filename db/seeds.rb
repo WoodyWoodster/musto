@@ -22,13 +22,11 @@ connection.assign_attributes(
 connection.save!
 
 employer = organization.employers.find_by(name: "Atlas Global Services") ||
-  organization.employers.find_by(vitable_id: "empr_atlas_demo") ||
   organization.employers.build
 employer.assign_attributes(
   name: "Atlas Global Services",
   legal_name: "Atlas Global Services LLC",
   ein: "12-3456789",
-  vitable_id: "empr_atlas_demo",
   status: "onboarding",
   onboarded_at: 2.weeks.ago,
   settings: {
@@ -201,19 +199,18 @@ end
 end
 
 employees = [
-  [ "Avery", "Kim", "avery.kim@example.com", "1990-04-11", "5551231001", "empl_atlas_avery", "Head of Operations", "OPS", "Philadelphia HQ", 132_000_00, "complete" ],
-  [ "Jordan", "Lee", "jordan.lee@example.com", "1987-09-23", "5551231002", "empl_atlas_jordan", "Retail Lead", "RET", "Philadelphia HQ", 86_000_00, "in_progress" ],
-  [ "Morgan", "Patel", "morgan.patel@example.com", "1995-01-18", "5551231003", "empl_atlas_morgan", "People Partner", "PPL", "Remote US", 92_000_00, "complete" ],
-  [ "Riley", "Chen", "riley.chen@example.com", "1992-12-02", "5551231004", nil, "Payroll Analyst", "FIN", "Remote US", 98_000_00, "in_progress" ],
-  [ "Sam", "Rivera", "sam.rivera@example.com", "1989-05-06", "5551231005", nil, "Operations Manager", "OPS", "Denver Operations Center", 104_000_00, "blocked" ],
-  [ "Taylor", "Brooks", "taylor.brooks@example.com", "1998-08-17", "5551231006", nil, "Client Support Associate", "RET", "Denver Operations Center", 54_000_00, "complete" ]
-].map do |first_name, last_name, email, date_of_birth, phone, vitable_id, title, department_code, location_name, compensation_cents, onboarding_status|
+  [ "Avery", "Kim", "avery.kim@example.com", "1990-04-11", "5551231001", "Head of Operations", "OPS", "Philadelphia HQ", 132_000_00, "complete" ],
+  [ "Jordan", "Lee", "jordan.lee@example.com", "1987-09-23", "5551231002", "Retail Lead", "RET", "Philadelphia HQ", 86_000_00, "in_progress" ],
+  [ "Morgan", "Patel", "morgan.patel@example.com", "1995-01-18", "5551231003", "People Partner", "PPL", "Remote US", 92_000_00, "complete" ],
+  [ "Riley", "Chen", "riley.chen@example.com", "1992-12-02", "5551231004", "Payroll Analyst", "FIN", "Remote US", 98_000_00, "in_progress" ],
+  [ "Sam", "Rivera", "sam.rivera@example.com", "1989-05-06", "5551231005", "Operations Manager", "OPS", "Denver Operations Center", 104_000_00, "blocked" ],
+  [ "Taylor", "Brooks", "taylor.brooks@example.com", "1998-08-17", "5551231006", "Client Support Associate", "RET", "Denver Operations Center", 54_000_00, "complete" ]
+].map do |first_name, last_name, email, date_of_birth, phone, title, department_code, location_name, compensation_cents, onboarding_status|
   employee = employer.employees.find_or_initialize_by(email:)
   employee.assign_attributes(
     first_name:,
     last_name:,
     date_of_birth:,
-    vitable_id:,
     title:,
     department: departments.fetch(department_code),
     work_location: locations.fetch(location_name),
@@ -557,11 +554,11 @@ annual_training.refresh_counts!
 benefits_training.refresh_counts!
 
 plans = [
-  [ "Vitable Direct Primary Care", "direct_primary_care", "Vitable", 9_900, 3_900, 6_000, "published", "empl_atlas_dpc" ],
-  [ "Minimum Essential Coverage", "minimum_essential_coverage", "Vitable", 14_900, 5_900, 9_000, "published", "empl_atlas_mec" ],
-  [ "Dental + Vision", "dental_vision", "Vitable", 7_500, 2_500, 5_000, "published", "empl_atlas_dental_vision" ],
-  [ "ICHRA Marketplace", "ichra", "Vitable", 28_500, 8_500, 20_000, "draft", nil ]
-].to_h do |name, category, carrier, monthly_premium_cents, employee_contribution_cents, employer_contribution_cents, review_status, vitable_id|
+  [ "Vitable Direct Primary Care", "direct_primary_care", "Vitable", 9_900, 3_900, 6_000, "published" ],
+  [ "Minimum Essential Coverage", "minimum_essential_coverage", "Vitable", 14_900, 5_900, 9_000, "published" ],
+  [ "Dental + Vision", "dental_vision", "Vitable", 7_500, 2_500, 5_000, "published" ],
+  [ "ICHRA Marketplace", "ichra", "Vitable", 28_500, 8_500, 20_000, "draft" ]
+].to_h do |name, category, carrier, monthly_premium_cents, employee_contribution_cents, employer_contribution_cents, review_status|
   plan = employer.benefit_plans.find_or_initialize_by(name:)
   plan.assign_attributes(
     category:,
@@ -577,7 +574,6 @@ plans = [
     expires_on: Date.current.next_year.end_of_year,
     review_status:,
     published_at: review_status == "published" ? 1.week.ago : nil,
-    vitable_id:,
     metadata: { source: "seeded_plan_catalog", catalog_owner: "benefits_ops" }
   )
   plan.save!

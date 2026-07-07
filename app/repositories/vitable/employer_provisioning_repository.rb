@@ -2,7 +2,7 @@ module Vitable
   class EmployerProvisioningRepository < ApplicationRepository
     PACKET_KEY = "vitable_employer_provisioning_packet"
     PROVISIONING_OPERATIONS = %w[employer_create employer_settings_update].freeze
-    REQUEST_OPERATIONS = %w[employer.create employer.update_settings].freeze
+    REQUEST_OPERATIONS = %w[employer.create employer.update_settings employer.create_eligibility_policy].freeze
 
     def initialize(employer:)
       @employer = employer
@@ -72,6 +72,7 @@ module Vitable
     def mark_succeeded(sync_run, response, packet:)
       response_hash = serialize_response(response)
       remote_employer_id = extract_remote_employer_id(response_hash)
+      eligibility_policy = response_hash.dig("data", "eligibility_policy") || response_hash.fetch("eligibility_policy", nil)
       synced_at = Time.current.iso8601
       settings = @employer.settings.to_h.merge(
         "vitable_employer_provisioned_at" => synced_at,
@@ -82,7 +83,8 @@ module Vitable
           "mode" => packet.fetch("mode"),
           "remote_employer_id" => remote_employer_id.presence || @employer.vitable_id
         },
-        "vitable_pay_frequency" => packet.fetch("settings_payload", {}).fetch("pay_frequency", nil)
+        "vitable_pay_frequency" => packet.fetch("settings_payload", {}).fetch("pay_frequency", nil),
+        "vitable_eligibility_policy" => eligibility_policy.presence || @employer.settings.to_h.fetch("vitable_eligibility_policy", nil)
       )
       @employer.update!(vitable_id: remote_employer_id) if remote_employer_id.present? && @employer.vitable_id.blank?
       @employer.update!(settings:)
@@ -115,8 +117,9 @@ module Vitable
     def build_packet(requested_by:)
       create_payload = create_payload_for(primary_location)
       settings_payload = { "pay_frequency" => vitable_pay_frequency }
+      eligibility_policy_payload = eligibility_policy_payload_for
       mode = @employer.vitable_id.present? ? "update_settings" : "create"
-      holdbacks = holdbacks_for(mode:, create_payload:, settings_payload:)
+      holdbacks = holdbacks_for(mode:, create_payload:, settings_payload:, eligibility_policy_payload:)
       endpoint = mode == "create" ? "/v1/employers" : "/v1/employers/:employer_id/settings"
 
       {
@@ -135,9 +138,13 @@ module Vitable
         },
         "create_payload" => create_payload,
         "settings_payload" => settings_payload,
+        "eligibility_policy_payload" => eligibility_policy_payload,
+        "eligibility_policy_endpoint" => "/v1/employers/:employer_id/benefit-eligibility-policies",
+        "eligibility_policy_action" => eligibility_policy_synced? ? "skip_existing" : "create",
         "api_payload" => {
           "create" => create_payload,
-          "settings" => settings_payload
+          "settings" => settings_payload,
+          "eligibility_policy" => eligibility_policy_payload
         },
         "holdbacks" => holdbacks
       }
@@ -166,7 +173,14 @@ module Vitable
       }.compact
     end
 
-    def holdbacks_for(mode:, create_payload:, settings_payload:)
+    def eligibility_policy_payload_for
+      {
+        "classification" => settings.fetch("eligibility_classification", "All").presence,
+        "waiting_period" => settings.fetch("eligibility_waiting_period", "1st of the following month").presence
+      }.compact
+    end
+
+    def holdbacks_for(mode:, create_payload:, settings_payload:, eligibility_policy_payload:)
       holdbacks = []
 
       if mode == "create"
@@ -179,6 +193,12 @@ module Vitable
 
       if settings_payload.fetch("pay_frequency", nil).blank?
         holdbacks << holdback(field: "pay_frequency", reason_code: "missing_pay_frequency", reason: "Pay frequency is required before Vitable employer settings can be updated.")
+      end
+
+      required_eligibility_policy_fields(eligibility_policy_payload).each do |field, value|
+        next if value.present?
+
+        holdbacks << holdback(field:, reason_code: "missing_eligibility_policy_field", reason: "#{field.to_s.humanize} is required before creating a Vitable eligibility policy.")
       end
 
       holdbacks
@@ -195,6 +215,18 @@ module Vitable
         state: create_payload.dig("address", "state"),
         zipcode: create_payload.dig("address", "zipcode")
       }
+    end
+
+    def required_eligibility_policy_fields(eligibility_policy_payload)
+      {
+        classification: eligibility_policy_payload.fetch("classification", nil),
+        waiting_period: eligibility_policy_payload.fetch("waiting_period", nil)
+      }
+    end
+
+    def eligibility_policy_synced?
+      policy = @employer.settings.to_h.fetch("vitable_eligibility_policy", nil)
+      policy.present? && policy.to_h.fetch("status", nil) != "endpoint_unavailable"
     end
 
     def holdback(field:, reason_code:, reason:)

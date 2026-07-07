@@ -1,7 +1,7 @@
 module Vitable
   class CensusSyncRepository < ApplicationRepository
     MAX_EMPLOYEES = 5_000
-    CENSUS_OPERATIONS = %w[census_manifest census_sync].freeze
+    CENSUS_OPERATIONS = %w[census_manifest census_sync remote_roster_refresh].freeze
 
     def initialize(employer:)
       @employer = employer
@@ -34,7 +34,7 @@ module Vitable
     def request_logs(limit: 12)
       return ApiRequestLog.none unless connection
 
-      connection.api_request_logs.where(operation: "employer.census_sync").recent_first.limit(limit)
+      connection.api_request_logs.where(operation: %w[employer.census_sync employer.list_employees]).recent_first.limit(limit)
     end
 
     def generate_manifest(requested_by:)
@@ -134,6 +134,62 @@ module Vitable
     end
 
     def mark_sync_failed(sync_run, error)
+      sync_run&.update!(
+        status: "failed",
+        completed_at: Time.current,
+        error_message: error.message,
+        stats: sync_run.stats.to_h.merge("error_class" => error.class.name)
+      )
+      sync_run
+    end
+
+    def create_remote_roster_run(requested_by:)
+      connection.sync_runs.create!(
+        resource_type: "employer",
+        operation: "remote_roster_refresh",
+        status: "running",
+        started_at: Time.current,
+        stats: {
+          "requested_by" => requested_by,
+          "resource_id" => @employer.vitable_id,
+          "endpoint" => "/v1/employers/:employer_id/employees"
+        }
+      )
+    end
+
+    def mark_remote_roster_succeeded(sync_run, response)
+      response_hash = serialize_response(response)
+      remote_employees = page_data(response_hash)
+      mapping = apply_remote_employee_ids(remote_employees)
+      fetched_at = Time.current.iso8601
+
+      @employer.update!(
+        settings: @employer.settings.to_h.merge(
+          "vitable_remote_roster" => {
+            "fetched_at" => fetched_at,
+            "remote_employee_count" => remote_employees.count,
+            "matched_employee_count" => mapping.fetch("matched_employee_count"),
+            "unmatched_employee_count" => mapping.fetch("unmatched_employee_count"),
+            "unmatched_remote_ids" => mapping.fetch("unmatched_remote_ids")
+          }
+        )
+      )
+
+      sync_run.update!(
+        status: "succeeded",
+        completed_at: Time.current,
+        error_message: nil,
+        stats: sync_run.stats.to_h.merge(
+          "remote_response" => response_hash,
+          "remote_employee_count" => remote_employees.count,
+          "matched_employee_count" => mapping.fetch("matched_employee_count"),
+          "unmatched_employee_count" => mapping.fetch("unmatched_employee_count")
+        )
+      )
+      sync_run
+    end
+
+    def mark_remote_roster_failed(sync_run, error)
       sync_run&.update!(
         status: "failed",
         completed_at: Time.current,
@@ -254,6 +310,49 @@ module Vitable
       return response.to_h.deep_stringify_keys if response.respond_to?(:to_h)
 
       { "value" => response.to_s }
+    end
+
+    def page_data(response_hash)
+      response_hash.fetch("data", []).map { |entry| entry.to_h.stringify_keys }
+    end
+
+    def apply_remote_employee_ids(remote_employees)
+      matched = []
+      unmatched = []
+
+      remote_employees.each do |remote_employee|
+        employee = employee_for_remote(remote_employee)
+        if employee
+          employee.update!(
+            vitable_id: remote_employee.fetch("id", employee.vitable_id),
+            metadata: employee.metadata.to_h.merge(
+              "vitable_remote_status" => remote_employee.fetch("status", nil),
+              "vitable_member_id" => remote_employee.fetch("member_id", nil),
+              "vitable_last_refreshed_at" => Time.current.iso8601
+            ).compact
+          )
+          matched << remote_employee.fetch("id", nil)
+        else
+          unmatched << remote_employee.fetch("id", nil)
+        end
+      end
+
+      {
+        "matched_employee_count" => matched.compact.count,
+        "unmatched_employee_count" => unmatched.compact.count,
+        "unmatched_remote_ids" => unmatched.compact
+      }
+    end
+
+    def employee_for_remote(remote_employee)
+      reference_id = remote_employee.fetch("reference_id", nil).to_s
+      if reference_id.match?(/\Amusto_employee_\d+\z/)
+        employee_id = reference_id.delete_prefix("musto_employee_").to_i
+        employee = @employer.employees.find_by(id: employee_id)
+        return employee if employee
+      end
+
+      @employer.employees.find_by(email: remote_employee.fetch("email", nil))
     end
   end
 end

@@ -16,4 +16,11 @@ class VitableCensusSyncController < ApplicationController
 
     redirect_to vitable_census_sync_path, notice: result.success? ? "Vitable census sync submitted." : result.errors.to_sentence
   end
+
+  def refresh_remote_roster
+    dto = Vitable::RefreshRemoteRosterDto.from_params(params)
+    result = Vitable::RefreshRemoteRosterCommand.new(dto:).call
+
+    redirect_to vitable_census_sync_path, notice: result.success? ? "Vitable remote roster refreshed." : result.errors.to_sentence
+  end
 end

@@ -47,6 +47,14 @@ module Vitable
       end
     end
 
+    def list_employer_employees(employer_id, limit: 100)
+      query = { limit: }
+
+      instrument("employer.list_employees", :get, "/v1/employers/#{employer_id}/employees", request_body: query) do
+        client.employers.list_employees(employer_id, query)
+      end
+    end
+
     def create_employer(payload)
       body = employer_create_payload(payload)
 
@@ -60,6 +68,18 @@ module Vitable
 
       instrument("employer.update_settings", :put, "/v1/employers/#{employer_id}/settings", request_body: body) do
         client.employers.update_settings(employer_id, body)
+      end
+    end
+
+    def create_eligibility_policy(employer_id, payload)
+      body = eligibility_policy_payload(payload)
+
+      instrument("employer.create_eligibility_policy", :post, "/v1/employers/#{employer_id}/benefit-eligibility-policies", request_body: body) do
+        client.request(
+          method: :post,
+          path: "v1/employers/#{employer_id}/benefit-eligibility-policies",
+          body:
+        )
       end
     end
 
@@ -153,6 +173,10 @@ module Vitable
       attributes = payload.to_h.deep_symbolize_keys
       attributes[:address] = attributes[:address].to_h.deep_symbolize_keys.compact if attributes[:address].present?
       attributes.compact
+    end
+
+    def eligibility_policy_payload(payload)
+      payload.to_h.deep_symbolize_keys.compact
     end
 
     def pay_frequency_value(value)

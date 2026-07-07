@@ -38,10 +38,12 @@ module Vitable
     def metrics(roster, latest_manifest, holdbacks, connection)
       ready_count = latest_manifest&.ready_count || 0
       last_sync = @repository.sync_runs.first
+      remote_id_count = roster.count { |employee| employee.vitable_id.present? }
 
       [
         CensusSyncMetricDto.new(label: "Active employees", value: roster.count, hint: "eligible for census review", status: roster.any? ? "ready" : "empty", accent: "bg-cyan-500", format: "number"),
         CensusSyncMetricDto.new(label: "Ready rows", value: ready_count, hint: "complete required Vitable fields", status: ready_count.positive? ? "ready" : "needs_review", accent: "bg-emerald-500", format: "number"),
+        CensusSyncMetricDto.new(label: "Remote IDs", value: remote_id_count, hint: "mapped from Vitable roster", status: remote_id_count == roster.count && roster.any? ? "ready" : "pending", accent: "bg-violet-500", format: "number"),
         CensusSyncMetricDto.new(label: "Holdbacks", value: holdbacks.count, hint: "missing DOB, phone, or batch capacity", status: holdbacks.any? ? "blocked" : "ready", accent: "bg-rose-500", format: "number"),
         CensusSyncMetricDto.new(label: "Last submit", value: last_sync&.status&.humanize || "Not sent", hint: connection ? "credential-aware sync run" : "no Vitable connection", status: last_sync&.status || "pending", accent: "bg-indigo-500", format: "text")
       ]
@@ -73,6 +75,11 @@ module Vitable
           label: "Batch size",
           status: roster.count > CensusSyncRepository::MAX_EMPLOYEES ? "blocked" : "ready",
           detail: "#{roster.count} of #{CensusSyncRepository::MAX_EMPLOYEES} maximum employees selected."
+        ),
+        CensusSyncPreflightCheckDto.new(
+          label: "Remote roster mapping",
+          status: roster.any? && roster.all? { |employee| employee.vitable_id.present? } ? "ready" : "pending",
+          detail: "#{roster.count { |employee| employee.vitable_id.present? }} of #{roster.count} active employees have Vitable employee IDs."
         ),
         CensusSyncPreflightCheckDto.new(
           label: "Manifest",
