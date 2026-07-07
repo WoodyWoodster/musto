@@ -1,7 +1,9 @@
 module Vitable
   class WebhookReconciliationRepository < ApplicationRepository
-    ACCEPTED_ENROLLMENT_STATUSES = %w[accepted elected granted active].freeze
-    PENDING_ENROLLMENT_STATUSES = %w[pending started waived terminated declined inactive canceled cancelled].freeze
+    ACCEPTED_ENROLLMENT_STATUSES = %w[accepted elected enrolled granted active].freeze
+    PENDING_ENROLLMENT_STATUSES = %w[pending started].freeze
+    WAIVED_ENROLLMENT_STATUSES = %w[waived declined].freeze
+    INACTIVE_ENROLLMENT_STATUSES = %w[inactive terminated canceled cancelled].freeze
 
     def initialize(event:, response_hash:)
       @event = event
@@ -80,27 +82,40 @@ module Vitable
 
       if local_status.present? && enrollment.status != local_status
         update_attributes[:status] = local_status
-        update_attributes[:accepted_at] = local_status == "accepted" ? (enrollment.accepted_at || Time.current) : nil
+        update_attributes[:accepted_at] = local_status == "accepted" ? (remote_time(remote_resource, "answered_at") || enrollment.accepted_at || Time.current) : nil
         applied_changes << "status"
         applied_changes << "accepted_at"
       elsif local_status == "accepted" && enrollment.accepted_at.blank?
-        update_attributes[:accepted_at] = Time.current
+        update_attributes[:accepted_at] = remote_time(remote_resource, "answered_at") || Time.current
         applied_changes << "accepted_at"
+      end
+
+      if remote_date(remote_resource, "coverage_start").present? && enrollment.effective_on != remote_date(remote_resource, "coverage_start")
+        update_attributes[:effective_on] = remote_date(remote_resource, "coverage_start")
+        applied_changes << "effective_on"
       end
 
       metadata_updates = {
         "vitable_remote_status" => remote_status,
         "vitable_remote_employee_id" => remote_employee_id(remote_resource),
         "vitable_remote_plan_id" => remote_plan_id(remote_resource),
+        "vitable_remote_benefit" => remote_benefit_summary(remote_resource),
+        "vitable_remote_answered_at" => remote_time(remote_resource, "answered_at")&.iso8601,
+        "vitable_remote_coverage_start" => remote_date(remote_resource, "coverage_start")&.iso8601,
+        "vitable_remote_coverage_end" => remote_date(remote_resource, "coverage_end")&.iso8601,
+        "vitable_remote_terminated_at" => remote_time(remote_resource, "terminated_at")&.iso8601,
+        "vitable_employee_deduction_cents" => remote_resource.fetch("employee_deduction_in_cents", nil),
+        "vitable_employer_contribution_cents" => remote_resource.fetch("employer_contribution_in_cents", nil),
         "vitable_last_refreshed_at" => timestamp,
         "vitable_last_webhook_event_id" => @event.event_id,
         "vitable_last_webhook_event_name" => @event.event_name,
-        "vitable_last_resource_snapshot" => remote_resource_summary(remote_resource, %w[id status employee_id member_id plan_id product_id])
+        "vitable_last_resource_snapshot" => remote_resource_summary(remote_resource, %w[id status employee_id member_id plan_id product_id coverage_start coverage_end employee_deduction_in_cents employer_contribution_in_cents])
       }.compact
 
       update_attributes[:metadata] = enrollment.metadata.to_h.stringify_keys.merge(metadata_updates)
       applied_changes.concat(metadata_updates.keys.map { |key| "metadata.#{key}" })
       enrollment.update!(update_attributes)
+      applied_changes.concat(apply_enrollment_payroll_deductions(enrollment, local_status, remote_resource))
 
       reconciliation_result(status: "matched", remote_resource:, local_record: enrollment, matched_by:, applied_changes:)
     end
@@ -282,6 +297,7 @@ module Vitable
     def remote_plan_id(remote_resource)
       remote_resource.fetch("plan_id", nil).presence ||
         remote_resource.fetch("product_id", nil).presence ||
+        remote_resource.dig("benefit", "id").presence ||
         remote_resource.dig("plan", "id").presence
     end
 
@@ -289,8 +305,61 @@ module Vitable
       normalized = remote_status.to_s.downcase
       return "accepted" if normalized.in?(ACCEPTED_ENROLLMENT_STATUSES)
       return "pending" if normalized.in?(PENDING_ENROLLMENT_STATUSES)
+      return "waived" if normalized.in?(WAIVED_ENROLLMENT_STATUSES)
+      return "inactive" if normalized.in?(INACTIVE_ENROLLMENT_STATUSES)
 
       nil
+    end
+
+    def remote_benefit_summary(remote_resource)
+      benefit = remote_resource.fetch("benefit", nil)
+      return unless benefit.respond_to?(:to_h)
+
+      benefit.to_h.stringify_keys.slice("id", "name", "category", "product_code").compact
+    end
+
+    def remote_date(remote_resource, key)
+      value = remote_resource.fetch(key, nil)
+      return value if value.is_a?(Date)
+      return value.to_date if value.respond_to?(:to_date)
+      return if value.blank?
+
+      Date.iso8601(value.to_s)
+    rescue ArgumentError
+      nil
+    end
+
+    def remote_time(remote_resource, key)
+      value = remote_resource.fetch(key, nil)
+      return value if value.respond_to?(:iso8601)
+      return if value.blank?
+
+      Time.iso8601(value.to_s)
+    rescue ArgumentError
+      nil
+    end
+
+    def apply_enrollment_payroll_deductions(enrollment, local_status, remote_resource)
+      return [] unless local_status.present?
+
+      amount_cents = remote_resource.fetch("employee_deduction_in_cents", nil)
+      amount_cents = enrollment.benefit_plan.monthly_premium_cents if amount_cents.blank? && local_status == "accepted"
+      amount_cents = 0 if local_status != "accepted"
+      deduction_status = case local_status
+      when "accepted" then "ready"
+      when "waived" then "waived"
+      when "inactive" then "inactive"
+      else "waiting_on_enrollment"
+      end
+
+      changed = []
+      enrollment.payroll_deductions.find_each do |deduction|
+        next if deduction.amount_cents == amount_cents.to_i && deduction.status == deduction_status
+
+        deduction.update!(amount_cents: amount_cents.to_i, status: deduction_status)
+        changed << "payroll_deductions.#{deduction.id}"
+      end
+      changed
     end
 
     def employee_event_metadata(remote_resource, timestamp)

@@ -132,9 +132,25 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
       name: "Vitable Care",
       category: "direct_primary_care",
       carrier: "Vitable",
-      vitable_id: "plan_remote_care"
+      vitable_id: "bprd_remote_care"
     )
     enrollment = employee.enrollments.create!(benefit_plan: plan, status: "pending")
+    payroll_run = employer.payroll_runs.create!(
+      period_start_on: Date.current.beginning_of_month,
+      period_end_on: Date.current.end_of_month,
+      pay_date: Date.current.end_of_month,
+      gross_pay_cents: 0,
+      status: "estimated"
+    )
+    deduction = payroll_run.payroll_deductions.create!(
+      employee:,
+      enrollment:,
+      code: "VITABLE_CARE",
+      amount_cents: 0,
+      status: "waiting_on_enrollment"
+    )
+    answered_at = Time.current.change(usec: 0)
+    coverage_start = Date.current.beginning_of_month
     ENV["VITABLE_CONNECT_API_KEY"] = "vit_apk_test_value"
     gateway_class = Class.new do
       define_method(:initialize) { |_connection| }
@@ -143,8 +159,18 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
           data: {
             id: resource_id,
             employee_id: "empl_remote_casey",
-            plan_id: "plan_remote_care",
-            status: "accepted"
+            benefit: {
+              id: "bprd_remote_care",
+              name: "Vitable Care",
+              category: "Medical",
+              product_code: "VPC"
+            },
+            status: "enrolled",
+            answered_at:,
+            coverage_start:,
+            coverage_end: nil,
+            employee_deduction_in_cents: 7900,
+            employer_contribution_in_cents: 2000
           }
         }
       end
@@ -162,14 +188,108 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
 
     assert_equal "enrl_test_123", enrollment.vitable_id
     assert_equal "accepted", enrollment.status
-    assert_not_nil enrollment.accepted_at
-    assert_equal "accepted", enrollment.metadata.fetch("vitable_remote_status")
+    assert_equal answered_at.to_i, enrollment.accepted_at.to_i
+    assert_equal coverage_start, enrollment.effective_on
+    assert_equal "enrolled", enrollment.metadata.fetch("vitable_remote_status")
     assert_equal "empl_remote_casey", enrollment.metadata.fetch("vitable_remote_employee_id")
-    assert_equal "plan_remote_care", enrollment.metadata.fetch("vitable_remote_plan_id")
+    assert_equal "bprd_remote_care", enrollment.metadata.fetch("vitable_remote_plan_id")
+    assert_equal "VPC", enrollment.metadata.dig("vitable_remote_benefit", "product_code")
+    assert_equal 7900, enrollment.metadata.fetch("vitable_employee_deduction_cents")
+    assert_equal 2000, enrollment.metadata.fetch("vitable_employer_contribution_cents")
+    assert_equal 7900, deduction.reload.amount_cents
+    assert_equal "ready", deduction.status
     assert_equal "matched", reconciliation.fetch("status")
     assert_equal "Enrollment", reconciliation.fetch("local_record_type")
     assert_equal enrollment.id, reconciliation.fetch("local_record_id")
     assert_equal "employee_id+plan_id", reconciliation.fetch("matched_by")
+  ensure
+    ENV.delete("VITABLE_CONNECT_API_KEY")
+  end
+
+  test "reconciles terminated enrollment resources as inactive and stops payroll deductions" do
+    employer = @organization.employers.create!(name: "Terminated Enrollment Employer", status: "active")
+    employee = employer.employees.create!(
+      first_name: "Riley",
+      last_name: "Terminated",
+      email: "riley.enrollment@example.com",
+      vitable_id: "empl_remote_riley"
+    )
+    plan = employer.benefit_plans.create!(
+      name: "Vitable Medical",
+      category: "medical",
+      carrier: "Vitable",
+      vitable_id: "bprd_remote_medical"
+    )
+    enrollment = employee.enrollments.create!(
+      benefit_plan: plan,
+      status: "accepted",
+      accepted_at: 2.months.ago,
+      effective_on: Date.current.beginning_of_month - 2.months,
+      vitable_id: "enrl_remote_riley"
+    )
+    payroll_run = employer.payroll_runs.create!(
+      period_start_on: Date.current.beginning_of_month,
+      period_end_on: Date.current.end_of_month,
+      pay_date: Date.current.end_of_month,
+      gross_pay_cents: 0,
+      status: "estimated"
+    )
+    deduction = payroll_run.payroll_deductions.create!(
+      employee:,
+      enrollment:,
+      code: "VITABLE_MEDICAL",
+      amount_cents: 12_500,
+      status: "ready"
+    )
+    terminated_at = Time.current.change(usec: 0)
+    coverage_end = Date.current.end_of_month
+    ENV["VITABLE_CONNECT_API_KEY"] = "vit_apk_test_value"
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:fetch_resource) do |_resource_type, resource_id|
+        {
+          data: {
+            id: resource_id,
+            employee_id: "empl_remote_riley",
+            benefit: {
+              id: "bprd_remote_medical",
+              name: "Vitable Medical",
+              category: "Medical",
+              product_code: "MEC"
+            },
+            status: "inactive",
+            answered_at: 2.months.ago,
+            coverage_start: Date.current.beginning_of_month - 2.months,
+            coverage_end:,
+            terminated_at:,
+            employee_deduction_in_cents: 0,
+            employer_contribution_in_cents: 0
+          }
+        }
+      end
+    end
+
+    result = Vitable::ProcessWebhookCommand.new(
+      payload: webhook_payload.merge(
+        event_id: "wevt_test_enrollment_terminated",
+        event_name: "enrollment.terminated",
+        resource_type: "enrollment",
+        resource_id: "enrl_remote_riley"
+      ),
+      gateway_class:
+    ).call
+
+    assert result.success?
+    assert_equal "inactive", enrollment.reload.status
+    assert_nil enrollment.accepted_at
+    assert_equal coverage_end.iso8601, enrollment.metadata.fetch("vitable_remote_coverage_end")
+    assert_equal terminated_at.iso8601, enrollment.metadata.fetch("vitable_remote_terminated_at")
+    assert_equal 0, deduction.reload.amount_cents
+    assert_equal "inactive", deduction.status
+    reconciliation = WebhookEvent.find_by!(event_id: "wevt_test_enrollment_terminated").metadata.fetch("resource_reconciliation")
+    assert_equal "matched", reconciliation.fetch("status")
+    assert_includes reconciliation.fetch("applied_changes"), "status"
+    assert_includes reconciliation.fetch("applied_changes"), "payroll_deductions.#{deduction.id}"
   ensure
     ENV.delete("VITABLE_CONNECT_API_KEY")
   end
