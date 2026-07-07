@@ -1,9 +1,10 @@
 module Vitable
   class ProcessWebhookCommand < ApplicationCommand
-    def initialize(payload:, repository: IntegrationRepository.new, signature_verification: WebhookSignatureVerificationDto.skipped)
+    def initialize(payload:, repository: IntegrationRepository.new, signature_verification: WebhookSignatureVerificationDto.skipped, gateway_class: ClientGateway)
       @payload = payload
       @repository = repository
       @signature_verification = signature_verification
+      @gateway_class = gateway_class
     end
 
     def call
@@ -24,9 +25,9 @@ module Vitable
       end
 
       fetch_dto = FetchResourceDto.from_event(connection:, event:)
-      fetch_result = FetchResourceCommand.new(dto: fetch_dto, repository: @repository).call
+      fetch_result = FetchResourceCommand.new(dto: fetch_dto, repository: @repository, gateway_class: @gateway_class).call
       if fetch_result.success?
-        @repository.mark_processed(event)
+        @repository.mark_processed(event, response: fetch_result.value)
         success(record: event, value: fetch_result.value)
       else
         @repository.mark_failed(event, fetch_result.errors)

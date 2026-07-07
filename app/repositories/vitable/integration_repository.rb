@@ -90,8 +90,16 @@ module Vitable
       )
     end
 
-    def mark_processed(event)
-      event.update!(status: "processed", processed_at: Time.current, error_message: nil)
+    def mark_processed(event, response: nil)
+      processed_at = Time.current
+      attributes = {
+        status: "processed",
+        processed_at:,
+        error_message: nil
+      }
+      attributes[:metadata] = event.metadata.to_h.merge("resource_snapshot" => resource_snapshot(event, response, processed_at)) if response
+
+      event.update!(attributes)
     end
 
     def mark_failed(event, errors)
@@ -182,10 +190,16 @@ module Vitable
     end
 
     def succeed_sync_run(sync_run, response)
+      response_hash = serialize_response(response)
+      completed_at = Time.current
       sync_run.update!(
         status: "succeeded",
-        completed_at: Time.current,
-        stats: sync_run.stats.merge(response_class: response.class.name)
+        completed_at:,
+        stats: sync_run.stats.to_h.merge(
+          "response_class" => response.class.name,
+          "remote_response" => response_hash,
+          "fetched_at" => completed_at.iso8601
+        )
       )
       sync_run
     end
@@ -336,6 +350,15 @@ module Vitable
       metadata.to_h.merge("signature_verification" => signature_verification.to_metadata)
     end
 
+    def resource_snapshot(event, response, fetched_at)
+      {
+        "fetched_at" => fetched_at.iso8601,
+        "resource_type" => event.resource_type,
+        "resource_id" => event.resource_id,
+        "response" => serialize_response(response)
+      }
+    end
+
     def snapshot_counts(snapshot)
       {
         "remote_employer_count" => snapshot.fetch("employers", []).count,
@@ -347,11 +370,30 @@ module Vitable
     end
 
     def serialize_response(response)
-      return {} if response.blank?
-      return response.deep_to_h.deep_stringify_keys if response.respond_to?(:deep_to_h)
-      return response.to_h.deep_stringify_keys if response.respond_to?(:to_h)
+      serialized = if response.blank?
+        {}
+      elsif response.respond_to?(:deep_to_h)
+        response.deep_to_h
+      elsif response.respond_to?(:to_h)
+        response.to_h
+      else
+        { value: response.to_s }
+      end
 
-      { "value" => response.to_s }
+      redact_token_values(serialized.deep_stringify_keys)
+    end
+
+    def redact_token_values(value)
+      case value
+      when Hash
+        value.to_h do |key, entry|
+          [ key, key == "access_token" ? "[FILTERED]" : redact_token_values(entry) ]
+        end
+      when Array
+        value.map { |entry| redact_token_values(entry) }
+      else
+        value
+      end
     end
   end
 end

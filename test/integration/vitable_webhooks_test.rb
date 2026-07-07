@@ -37,6 +37,43 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
     assert_response :accepted
   end
 
+  test "fetches and stores current resource snapshot when credentials are present" do
+    ENV["VITABLE_CONNECT_API_KEY"] = "vit_apk_test_value"
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:fetch_resource) do |resource_type, resource_id|
+        {
+          data: {
+            id: resource_id,
+            resource_type:,
+            status: "accepted",
+            access_token: "vit_at_never_store"
+          }
+        }
+      end
+    end
+
+    result = Vitable::ProcessWebhookCommand.new(
+      payload: webhook_payload.merge(event_id: "wevt_test_fetch_snapshot"),
+      gateway_class:
+    ).call
+
+    assert result.success?
+    event = WebhookEvent.find_by!(event_id: "wevt_test_fetch_snapshot")
+    snapshot = event.metadata.fetch("resource_snapshot")
+    sync_run = @connection.sync_runs.where(operation: "fetch").recent_first.first
+
+    assert_equal "processed", event.status
+    assert_not_nil event.processed_at
+    assert_equal "enrollment", snapshot.fetch("resource_type")
+    assert_equal "enrl_test_123", snapshot.fetch("resource_id")
+    assert_equal "accepted", snapshot.dig("response", "data", "status")
+    assert_equal "[FILTERED]", snapshot.dig("response", "data", "access_token")
+    assert_equal "[FILTERED]", sync_run.stats.dig("remote_response", "data", "access_token")
+  ensure
+    ENV.delete("VITABLE_CONNECT_API_KEY")
+  end
+
   test "accepts a signed Vitable webhook when webhook secret is configured" do
     @connection.update!(webhook_secret_reference: "VITABLE_WEBHOOK_SECRET")
     ENV["VITABLE_WEBHOOK_SECRET"] = "whsec_test_value"
