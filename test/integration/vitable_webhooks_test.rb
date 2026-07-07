@@ -135,6 +135,20 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
     ENV.delete("VITABLE_WEBHOOK_SECRET")
   end
 
+  test "rejects webhooks when a configured secret is unavailable" do
+    @connection.update!(webhook_secret_reference: "VITABLE_WEBHOOK_SECRET")
+
+    assert_no_difference "WebhookEvent.count" do
+      post api_v1_webhooks_vitable_path,
+        params: webhook_payload.merge(event_id: "wevt_test_secret_missing"),
+        as: :json
+    end
+
+    assert_response :unauthorized
+    response_payload = JSON.parse(response.body)
+    assert_equal "secret_missing", response_payload.fetch("signature")
+  end
+
   private
 
   def signed_headers(timestamp:, signature:)

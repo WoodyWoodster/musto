@@ -25,7 +25,7 @@ module Vitable
       return result("not_configured", "Webhook secret reference is not configured.", connection:) if connection.webhook_secret_reference.blank?
 
       secret = @secret_lookup.fetch(connection.webhook_secret_reference, nil)
-      return result("not_configured", "#{connection.webhook_secret_reference} is not available to the Rails process.", connection:) if secret.blank?
+      return result("secret_missing", "#{connection.webhook_secret_reference} is not available to the Rails process.", connection:) if secret.blank?
 
       signature_header, signature_value = signature_header(request)
       return result("missing_signature", "Webhook signature header is missing.", connection:) if signature_value.blank?
