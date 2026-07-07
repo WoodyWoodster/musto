@@ -12,4 +12,14 @@ class WebhookEventsController < ApplicationController
       notice: result.success? ? "Webhook replay queued." : result.errors.to_sentence
     )
   end
+
+  def refresh_deliveries
+    dto = Vitable::RefreshWebhookDeliveriesDto.from_params(params)
+    result = Vitable::RefreshWebhookDeliveriesCommand.new(dto:).call
+
+    redirect_to(
+      webhook_event_path(params[:id]),
+      notice: result.success? ? "Webhook deliveries refreshed." : result.errors.to_sentence
+    )
+  end
 end

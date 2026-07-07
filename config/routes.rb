@@ -9,6 +9,7 @@ Rails.application.routes.draw do
   end
   resources :webhook_events, only: [ :show ] do
     post :replay, on: :member
+    post :refresh_deliveries, on: :member
   end
   resources :integration_connections, only: [ :show ] do
     post :verify_credentials, on: :member

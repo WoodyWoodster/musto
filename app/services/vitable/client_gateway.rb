@@ -29,10 +29,37 @@ module Vitable
     end
 
     def fetch_resource(resource_type, resource_id)
-      path = "/#{resource_type.to_s.pluralize}/#{resource_id}"
+      case resource_type.to_s
+      when "employee"
+        retrieve_employee(resource_id)
+      when "employer"
+        retrieve_employer(resource_id)
+      when "enrollment"
+        retrieve_enrollment(resource_id)
+      when "webhook_event"
+        retrieve_webhook_event(resource_id)
+      when "group"
+        retrieve_group(resource_id)
+      else
+        raise ArgumentError, "Vitable SDK does not expose a retrieve endpoint for #{resource_type}"
+      end
+    end
 
-      instrument("resource.fetch", :get, path) do
-        client.request(method: :get, path:)
+    def retrieve_employee(employee_id)
+      instrument("resource.fetch", :get, "/v1/employees/#{employee_id}") do
+        client.employees.retrieve(employee_id)
+      end
+    end
+
+    def retrieve_employer(employer_id)
+      instrument("resource.fetch", :get, "/v1/employers/#{employer_id}") do
+        client.employers.retrieve(employer_id)
+      end
+    end
+
+    def retrieve_enrollment(enrollment_id)
+      instrument("resource.fetch", :get, "/v1/enrollments/#{enrollment_id}") do
+        client.enrollments.retrieve(enrollment_id)
       end
     end
 
@@ -84,6 +111,18 @@ module Vitable
 
       instrument("webhook_event.list", :get, "/v1/webhook-events", request_body: query) do
         client.webhook_events.list(query)
+      end
+    end
+
+    def retrieve_webhook_event(event_id)
+      instrument("webhook_event.retrieve", :get, "/v1/webhook-events/#{event_id}") do
+        client.webhook_events.retrieve(event_id)
+      end
+    end
+
+    def list_webhook_event_deliveries(event_id)
+      instrument("webhook_event.list_deliveries", :get, "/v1/webhook-events/#{event_id}/deliveries") do
+        client.webhook_events.list_deliveries(event_id)
       end
     end
 

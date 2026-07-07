@@ -17,6 +17,8 @@ module Vitable
     :connection,
     :sync_runs,
     :request_logs,
+    :deliveries,
+    :delivery_refreshed_at,
     :preflight_checks,
     :timeline
   ) do
@@ -39,6 +41,8 @@ module Vitable
         connection: record.integration_connection && Operations::IntegrationConnectionDto.from_record(record.integration_connection),
         sync_runs: sync_runs.map { |sync| Operations::SyncRunDto.from_record(sync) },
         request_logs: request_logs.map { |log| Operations::ApiRequestLogDto.from_record(log) },
+        deliveries: delivery_snapshot(record).fetch("deliveries", []).map { |delivery| WebhookDeliveryDto.from_hash(delivery) },
+        delivery_refreshed_at: delivery_snapshot(record).fetch("refreshed_at", nil).presence&.then { |value| Time.iso8601(value) },
         preflight_checks: preflight_checks(record),
         timeline: timeline(record, sync_runs, request_logs)
       )
@@ -80,6 +84,11 @@ module Vitable
           label: "Processing state",
           status: record.processed? ? "processed" : record.status,
           detail: record.processed? ? "Processed #{record.processed_at.strftime('%b %-d, %I:%M %p')}" : "Current status is #{record.status.humanize.downcase}"
+        ),
+        WebhookPreflightCheckDto.new(
+          label: "Delivery history",
+          status: delivery_snapshot(record).present? ? "ready" : "pending",
+          detail: delivery_snapshot(record).present? ? "#{delivery_snapshot(record).fetch("delivery_count", 0)} delivery attempts refreshed" : "Refresh deliveries to read Vitable delivery attempts for this event"
         )
       ]
     end
@@ -125,6 +134,10 @@ module Vitable
       record.metadata.to_h.fetch("signature_verification", {}).to_h
     end
 
+    def self.delivery_snapshot(record)
+      record.metadata.to_h.fetch("delivery_snapshot", {}).to_h
+    end
+
     def self.signature_status_for(record)
       case signature_metadata(record).fetch("status", "not_recorded")
       when "verified" then "verified"
@@ -133,6 +146,6 @@ module Vitable
       end
     end
 
-    private_class_method :preflight_checks, :timeline, :signature_metadata, :signature_status_for
+    private_class_method :preflight_checks, :timeline, :signature_metadata, :delivery_snapshot, :signature_status_for
   end
 end

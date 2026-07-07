@@ -156,7 +156,9 @@ module Vitable
 
       event.integration_connection.sync_runs.recent_first.select do |sync|
         stats = sync.stats.to_h
-        sync.resource_type == event.resource_type && [ stats["resource_id"], stats[:resource_id] ].include?(event.resource_id)
+        matches_resource = sync.resource_type == event.resource_type && [ stats["resource_id"], stats[:resource_id] ].include?(event.resource_id)
+        matches_webhook_event = sync.resource_type == "webhook_event" && [ stats["resource_id"], stats[:resource_id] ].include?(event.event_id)
+        matches_resource || matches_webhook_event
       end.first(limit)
     end
 
@@ -190,6 +192,68 @@ module Vitable
 
     def fail_sync_run(sync_run, error)
       sync_run&.update!(status: "failed", completed_at: Time.current, error_message: error.message)
+      sync_run
+    end
+
+    def create_webhook_delivery_run(event:, requested_by:)
+      event.integration_connection.sync_runs.create!(
+        resource_type: "webhook_event",
+        operation: "webhook_delivery_refresh",
+        status: "running",
+        started_at: Time.current,
+        stats: {
+          "requested_by" => requested_by,
+          "resource_id" => event.event_id,
+          "webhook_event_id" => event.id,
+          "endpoint" => "/v1/webhook-events/:event_id/deliveries"
+        }
+      )
+    end
+
+    def mark_webhook_delivery_needs_credentials(sync_run)
+      message = "#{sync_run.integration_connection.api_key_reference} is not configured"
+      sync_run.update!(
+        status: "needs_credentials",
+        completed_at: Time.current,
+        error_message: message,
+        stats: sync_run.stats.to_h.merge("blocked_reason" => message)
+      )
+      sync_run
+    end
+
+    def succeed_webhook_delivery_run(event, sync_run, response)
+      response_hash = serialize_response(response)
+      deliveries = response_hash.fetch("data", [])
+      refreshed_at = Time.current.iso8601
+      event.update!(
+        metadata: event.metadata.to_h.merge(
+          "delivery_snapshot" => {
+            "refreshed_at" => refreshed_at,
+            "delivery_count" => deliveries.count,
+            "deliveries" => deliveries
+          }
+        )
+      )
+      sync_run.update!(
+        status: "succeeded",
+        completed_at: Time.current,
+        error_message: nil,
+        stats: sync_run.stats.to_h.merge(
+          "remote_response" => response_hash,
+          "delivery_count" => deliveries.count,
+          "refreshed_at" => refreshed_at
+        )
+      )
+      sync_run
+    end
+
+    def fail_webhook_delivery_run(sync_run, error)
+      sync_run&.update!(
+        status: "failed",
+        completed_at: Time.current,
+        error_message: error.message,
+        stats: sync_run.stats.to_h.merge("error_class" => error.class.name)
+      )
       sync_run
     end
 
@@ -280,6 +344,14 @@ module Vitable
         "remote_webhook_event_count" => snapshot.fetch("webhook_events", []).count,
         "remote_employee_enrollment_count" => snapshot.fetch("employee_enrollments", []).sum { |entry| entry.fetch("enrollments", []).count }
       }
+    end
+
+    def serialize_response(response)
+      return {} if response.blank?
+      return response.deep_to_h.deep_stringify_keys if response.respond_to?(:deep_to_h)
+      return response.to_h.deep_stringify_keys if response.respond_to?(:to_h)
+
+      { "value" => response.to_s }
     end
   end
 end

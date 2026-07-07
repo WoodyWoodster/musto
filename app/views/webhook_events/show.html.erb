@@ -13,6 +13,7 @@
         </p>
         <div class="mt-6 flex flex-wrap gap-2">
           <%= button_to "Replay webhook", replay_webhook_event_path(@webhook_event.id), method: :post, class: "rounded-md bg-slate-950 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-slate-800" %>
+          <%= button_to "Refresh deliveries", refresh_deliveries_webhook_event_path(@webhook_event.id), method: :post, params: { requested_by: "Musto Operations" }, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm hover:border-slate-300" %>
           <%= link_to "Webhook API", api_v1_webhooks_vitable_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm hover:border-slate-300" %>
         </div>
       </div>
@@ -52,12 +53,13 @@
     </div>
   </div>
 
-  <div class="grid gap-4 md:grid-cols-4">
+  <div class="grid gap-4 md:grid-cols-5">
     <% [
       ["Resource", "#{@webhook_event.resource_type.humanize} #{@webhook_event.resource_id}", "bg-cyan-500"],
       ["Sync runs", @webhook_event.sync_runs.count, "bg-indigo-500"],
       ["API logs", @webhook_event.request_logs.count, "bg-amber-500"],
       ["Signature", @webhook_event.signature_status.humanize, "bg-pink-500"],
+      ["Deliveries", @webhook_event.deliveries.count, "bg-violet-500"],
       ["Processed", @webhook_event.processed_at&.strftime("%b %-d, %I:%M %p") || "Not yet", "bg-emerald-500"]
     ].each do |label, value, accent| %>
       <article class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
@@ -69,6 +71,54 @@
       </article>
     <% end %>
   </div>
+
+  <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div class="border-b border-slate-100 px-5 py-4">
+      <div class="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+        <div>
+          <h2 class="text-base font-semibold text-slate-950">Delivery attempts</h2>
+          <p class="text-sm text-slate-500">Delivery records returned for this webhook event.</p>
+        </div>
+        <%= status_pill(@webhook_event.delivery_refreshed_at.present? ? "ready" : "pending") %>
+      </div>
+    </div>
+    <% if @webhook_event.deliveries.any? %>
+      <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-slate-100 text-sm">
+          <thead class="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
+            <tr>
+              <th class="px-5 py-3">Delivery</th>
+              <th class="px-5 py-3">Subscription</th>
+              <th class="px-5 py-3">Created</th>
+              <th class="px-5 py-3">Completed</th>
+              <th class="px-5 py-3">Status</th>
+              <th class="px-5 py-3">Failure</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            <% @webhook_event.deliveries.each do |delivery| %>
+              <tr class="hover:bg-slate-50">
+                <td class="px-5 py-4">
+                  <p class="break-all font-mono text-xs text-slate-700"><%= delivery.id %></p>
+                  <p class="mt-1 break-all text-xs text-slate-400"><%= delivery.webhook_event_id %></p>
+                </td>
+                <td class="px-5 py-4 break-all font-mono text-xs text-slate-600"><%= delivery.subscription_id.presence || "n/a" %></td>
+                <td class="px-5 py-4 text-slate-600"><%= delivery.created_at&.strftime("%b %-d, %I:%M %p") || "n/a" %></td>
+                <td class="px-5 py-4 text-slate-600"><%= (delivery.delivered_at || delivery.failed_at || delivery.started_at)&.strftime("%b %-d, %I:%M %p") || "pending" %></td>
+                <td class="px-5 py-4"><%= status_pill(delivery.status_key) %></td>
+                <td class="px-5 py-4 text-slate-600"><%= delivery.failure_reason.presence || "none" %></td>
+              </tr>
+            <% end %>
+          </tbody>
+        </table>
+      </div>
+      <% if @webhook_event.delivery_refreshed_at.present? %>
+        <p class="border-t border-slate-100 px-5 py-3 text-xs text-slate-500">Refreshed <%= time_ago_in_words(@webhook_event.delivery_refreshed_at) %> ago.</p>
+      <% end %>
+    <% else %>
+      <p class="px-5 py-5 text-sm text-slate-500">Refresh deliveries to inspect delivery attempts for this event.</p>
+    <% end %>
+  </section>
 
   <div class="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
     <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">

@@ -2543,6 +2543,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_instance_of Operations::IntegrationConnectionDto, detail.connection
     assert_instance_of Vitable::WebhookPreflightCheckDto, detail.preflight_checks.first
     assert_instance_of Vitable::WebhookTimelineItemDto, detail.timeline.first
+    assert_empty detail.deliveries
 
     get webhook_event_path(@webhook_event)
 
@@ -2550,9 +2551,81 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_select "h1", @webhook_event.event_name
     assert_select "h2", "Replay preflight"
     assert_select "h2", "Stored payload"
+    assert_select "h2", "Delivery attempts"
     assert_select "h2", "Event timeline"
     assert_select "h2", "Sync attempts"
     assert_select "p", "Signature"
+    assert_select "button", "Refresh deliveries"
+  end
+
+  test "refreshes webhook deliveries as missing credentials sync run without API key" do
+    assert_difference -> { @connection.sync_runs.where(operation: "webhook_delivery_refresh").count }, 1 do
+      post refresh_deliveries_webhook_event_path(@webhook_event), params: { requested_by: "integration_admin" }
+    end
+
+    assert_redirected_to webhook_event_path(@webhook_event)
+    sync = @connection.sync_runs.where(operation: "webhook_delivery_refresh").recent_first.first
+    assert_equal "needs_credentials", sync.status
+    assert_match @connection.api_key_reference, sync.error_message
+    assert_equal "integration_admin", sync.stats.fetch("requested_by")
+    assert_equal @webhook_event.event_id, sync.stats.fetch("resource_id")
+  end
+
+  test "successful webhook delivery refresh stores delivery snapshot DTOs" do
+    response_class = Data.define(:data)
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:list_webhook_event_deliveries) do |event_id|
+        response_class.new(
+          data: [
+            {
+              id: "wdlv_ops_123",
+              webhook_event_id: event_id,
+              subscription_id: "wsub_ops_123",
+              status: "Delivered",
+              created_at: Time.current,
+              started_at: Time.current,
+              delivered_at: Time.current,
+              failed_at: nil,
+              failure_reason: ""
+            }
+          ]
+        )
+      end
+    end
+    previous_key = ENV[@connection.api_key_reference]
+    ENV[@connection.api_key_reference] = "vit_apk_test_value"
+
+    result = Vitable::RefreshWebhookDeliveriesCommand.new(
+      dto: Vitable::RefreshWebhookDeliveriesDto.new(webhook_event_id: @webhook_event.id, requested_by: "integration_admin"),
+      gateway_class:
+    ).call
+
+    assert result.success?
+    snapshot = @webhook_event.reload.metadata.fetch("delivery_snapshot")
+    assert_equal 1, snapshot.fetch("delivery_count")
+    assert_equal "wdlv_ops_123", snapshot.fetch("deliveries").first.fetch("id")
+    detail = Vitable::WebhookEventDetailQuery.new.call(@webhook_event.id)
+    assert_instance_of Vitable::WebhookDeliveryDto, detail.deliveries.first
+    assert_equal "delivered", detail.deliveries.first.status_key
+  ensure
+    ENV[@connection.api_key_reference] = previous_key
+  end
+
+  test "unsupported Vitable resource fetches are recorded as failed sync runs" do
+    previous_key = ENV[@connection.api_key_reference]
+    ENV[@connection.api_key_reference] = "vit_apk_test_value"
+
+    result = Vitable::FetchResourceCommand.new(
+      dto: Vitable::FetchResourceDto.new(connection_id: @connection.id, resource_type: "benefit_plan", resource_id: "bpln_ops_123")
+    ).call
+
+    assert result.failure?
+    sync = @connection.sync_runs.where(resource_type: "benefit_plan", operation: "fetch").recent_first.first
+    assert_equal "failed", sync.status
+    assert_match "does not expose a retrieve endpoint", sync.error_message
+  ensure
+    ENV[@connection.api_key_reference] = previous_key
   end
 
   test "integration connection workspace exposes credential and coverage DTOs" do

@@ -20,6 +20,9 @@ module Vitable
     rescue VitableConnect::Errors::APIError => e
       @repository.fail_sync_run(sync_run, e)
       failure(record: sync_run, errors: "#{e.class}: #{e.message}")
+    rescue ArgumentError => e
+      @repository.fail_sync_run(sync_run, e)
+      failure(record: sync_run, errors: e.message)
     end
   end
 end
