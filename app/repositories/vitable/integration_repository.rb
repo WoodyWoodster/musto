@@ -202,7 +202,7 @@ module Vitable
         stats: {
           "requested_by" => requested_by,
           "resource_id" => "connection_#{connection.id}",
-          "endpoints" => %w[/v1/employers /v1/plans /v1/webhook-events /v1/employees/:id/enrollments]
+          "endpoints" => %w[/v1/employers /v1/groups /v1/plans /v1/webhook-events /v1/employees/:id/enrollments]
         }
       )
     end
@@ -275,6 +275,7 @@ module Vitable
     def snapshot_counts(snapshot)
       {
         "remote_employer_count" => snapshot.fetch("employers", []).count,
+        "remote_group_count" => snapshot.fetch("groups", []).count,
         "remote_plan_count" => snapshot.fetch("plans", []).count,
         "remote_webhook_event_count" => snapshot.fetch("webhook_events", []).count,
         "remote_employee_enrollment_count" => snapshot.fetch("employee_enrollments", []).sum { |entry| entry.fetch("enrollments", []).count }

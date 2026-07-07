@@ -1,6 +1,6 @@
 # Musto
 
-Musto is a Rails 8.1 prototype for pushing a Vitable Connect integration in a Gusto-style benefits and payroll operations platform.
+Musto is a Rails 8.1 prototype for a Gusto-style HR, payroll, benefits, and compliance operations platform with a deep Vitable Connect integration.
 
 It models the local system of record for organizations, employers, employees, benefit plans, enrollments, payroll runs, payroll deductions, Vitable integration connections, webhook events, sync runs, and API request logs. The app is intentionally credential-aware: it works without a Vitable API key, records missing-credential states, and is ready to call the Vitable SDK when `VITABLE_CONNECT_API_KEY` is configured.
 
@@ -38,6 +38,8 @@ The Vitable census sync workspace builds a local review manifest for `POST /v1/e
 
 The embedded enrollment session workspace prepares employee-bound access-token requests for Vitable's embedded flows. It uses `bound_entity: { type: :employee, id: "empl_..." }`, records every issue attempt as a `SyncRun`, and filters token values before any API telemetry is persisted.
 
+The care groups workspace covers Vitable Embedded Care group creation plus asynchronous group member sync. Member manifests require remote Vitable plan IDs; missing plan mappings are recorded as holdbacks so demo submissions do not fabricate partner identifiers.
+
 ## CQRS Layout
 
 - Commands: `app/commands`
@@ -59,6 +61,7 @@ Read-side UI:
 - `GET /integrations/vitable/employer-provisioning`
 - `GET /integrations/vitable/census`
 - `GET /integrations/vitable/embedded-sessions`
+- `GET /integrations/vitable/care-groups`
 
 ## Local Setup
 

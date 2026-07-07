@@ -428,6 +428,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       vitable_employer_provisioning_path,
       vitable_census_sync_path,
       vitable_embedded_sessions_path,
+      vitable_care_groups_path,
       integration_connection_path(@connection),
       webhook_event_path(@webhook_event),
       employee_path(@employee)
@@ -482,6 +483,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     employer_provisioning = Vitable::EmployerProvisioningQuery.new.call
     census = Vitable::CensusSyncQuery.new.call
     embedded_sessions = Vitable::EmbeddedSessionsQuery.new.call
+    care_group = Vitable::CareGroupQuery.new.call
 
     assert_instance_of Employers::EmployerSummaryDto, dashboard.fetch(:employers).first
     assert_instance_of Dashboard::IntegrationHealthDto, dashboard.fetch(:integration_health)
@@ -665,6 +667,9 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_instance_of Vitable::EmbeddedSessionsCenterDto, embedded_sessions
     assert_instance_of Vitable::EmbeddedSessionMetricDto, embedded_sessions.metrics.first
     assert_instance_of Vitable::EmbeddedSessionPreflightCheckDto, embedded_sessions.preflight_checks.first
+    assert_instance_of Vitable::CareGroupCenterDto, care_group
+    assert_instance_of Vitable::CareGroupMetricDto, care_group.metrics.first
+    assert_instance_of Vitable::CareGroupPreflightCheckDto, care_group.preflight_checks.first
   end
 
   test "reports workspace exposes finance and risk DTOs" do
@@ -2597,6 +2602,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     gateway_class = Class.new do
       define_method(:initialize) { |_connection| }
       define_method(:list_employers) { response_class.new(data: [ { id: "empr_ops_123", name: "Atlas Global Services" } ]) }
+      define_method(:list_groups) { response_class.new(data: [ { id: "grp_ops_123", name: "Atlas Care Group" } ]) }
       define_method(:list_plans) { response_class.new(data: [ { id: "plan_dpc", name: "Direct Primary Care" }, { id: "plan_mec", name: "MEC" } ]) }
       define_method(:list_webhook_events) { response_class.new(data: [ { id: "wevt_remote_123", event_name: "employee.eligibility_granted" } ]) }
       define_method(:list_employee_enrollments) do |employee_id|
@@ -2614,6 +2620,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert result.success?
     snapshot = @connection.reload.metadata.fetch("api_snapshot")
     assert_equal 1, snapshot.dig("counts", "remote_employer_count")
+    assert_equal 1, snapshot.dig("counts", "remote_group_count")
     assert_equal 2, snapshot.dig("counts", "remote_plan_count")
     assert_equal 1, snapshot.dig("counts", "remote_webhook_event_count")
     assert_equal 1, snapshot.dig("counts", "remote_employee_enrollment_count")
@@ -2958,6 +2965,181 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     ENV[@connection.api_key_reference] = previous_key
   end
 
+  test "care groups workspace exposes group and member DTOs" do
+    prepare_care_group_profile(remote_group_id: "grp_ops_123")
+    holdback_employee = create_care_member_holdback_employee
+    Vitable::GenerateCareGroupPacketCommand.new(dto: Vitable::GenerateCareGroupPacketDto.new(requested_by: "ops_test")).call
+    Vitable::GenerateCareMemberSyncCommand.new(dto: Vitable::GenerateCareMemberSyncDto.new(requested_by: "ops_test")).call
+
+    detail = Vitable::CareGroupQuery.new.call
+
+    assert_instance_of Vitable::CareGroupCenterDto, detail
+    assert_instance_of Vitable::CareGroupMetricDto, detail.metrics.first
+    assert_instance_of Vitable::CareGroupPreflightCheckDto, detail.preflight_checks.first
+    assert_instance_of Vitable::CareGroupPacketDto, detail.group_packet
+    assert_instance_of Vitable::CareMemberSyncManifestDto, detail.member_manifest
+    assert_instance_of Vitable::CareMemberSyncMemberDto, detail.members.first
+    assert_instance_of Vitable::CareMemberSyncHoldbackDto, detail.holdbacks.first
+    assert_equal @employee.id, detail.members.first.employee_id
+    assert_equal holdback_employee.id, detail.holdbacks.first.employee_id
+    assert_equal "update", detail.group_packet.mode
+    assert_equal "grp_ops_123", detail.remote_group_id
+
+    get vitable_care_groups_path
+
+    assert_response :success
+    assert_select "h1", "Care groups"
+    assert_select "h2", "Member sync preflight"
+    assert_select "h2", "Ready members"
+    assert_select "h2", "Member holdbacks"
+    assert_select "h2", "Sync attempts"
+    assert_select "h2", "API activity"
+    assert_select "button", "Refresh member sync"
+  end
+
+  test "generates a Vitable care group packet through command action" do
+    prepare_care_group_profile
+
+    post generate_vitable_care_group_packet_path, params: { requested_by: "integration_admin" }
+
+    assert_redirected_to vitable_care_groups_path
+    packet = @employer.reload.settings.fetch("vitable_care_group_packet")
+    assert_match(/\Avitable_care_group_#{@employer.id}_/, packet.fetch("packet_id"))
+    assert_equal "integration_admin", packet.fetch("requested_by")
+    assert_equal "create", packet.fetch("mode")
+    assert_equal "ready", packet.fetch("status")
+    assert_equal "/v1/groups", packet.fetch("endpoint")
+    assert_equal "musto_care_group_#{@employer.id}", packet.fetch("api_payload").fetch("external_reference_id")
+    assert_equal @employer.name, packet.fetch("api_payload").fetch("name")
+    assert_empty packet.fetch("holdbacks")
+  end
+
+  test "submits care group as missing credentials sync run without API key" do
+    prepare_care_group_profile
+    Vitable::GenerateCareGroupPacketCommand.new(dto: Vitable::GenerateCareGroupPacketDto.new(requested_by: "ops_test")).call
+
+    assert_difference -> { @connection.sync_runs.where(operation: "care_group_upsert").count }, 1 do
+      post submit_vitable_care_group_path, params: { requested_by: "integration_admin" }
+    end
+
+    assert_redirected_to vitable_care_groups_path
+    sync = @connection.sync_runs.where(operation: "care_group_upsert").recent_first.first
+    assert_equal "needs_credentials", sync.status
+    assert_match @connection.api_key_reference, sync.error_message
+    assert_equal "integration_admin", sync.stats.fetch("requested_by")
+    assert_equal @employer.name, sync.stats.dig("payload", "name")
+  end
+
+  test "successful care group submit stores remote group id" do
+    prepare_care_group_profile
+    response_class = Data.define(:data)
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:create_group) do |payload|
+        response_class.new(data: { id: "grp_created_123", name: payload.fetch("name"), external_reference_id: payload.fetch("external_reference_id") })
+      end
+    end
+    previous_key = ENV[@connection.api_key_reference]
+    ENV[@connection.api_key_reference] = "vit_apk_test_value"
+
+    result = Vitable::SubmitCareGroupCommand.new(
+      dto: Vitable::SubmitCareGroupDto.new(requested_by: "integration_admin"),
+      gateway_class:
+    ).call
+
+    assert result.success?
+    assert_equal "grp_created_123", @employer.reload.settings.fetch("vitable_care_group_id")
+    sync = @connection.sync_runs.where(operation: "care_group_upsert").recent_first.first
+    assert_equal "succeeded", sync.status
+    assert_equal "grp_created_123", sync.stats.fetch("remote_group_id")
+  ensure
+    ENV[@connection.api_key_reference] = previous_key
+  end
+
+  test "generates a Vitable care member manifest through command action" do
+    prepare_care_group_profile(remote_group_id: "grp_ops_123")
+    create_care_member_holdback_employee
+
+    post generate_vitable_care_member_manifest_path, params: { requested_by: "integration_admin" }
+
+    assert_redirected_to vitable_care_groups_path
+    manifest = @employer.reload.settings.fetch("vitable_care_member_sync_manifest")
+    assert_match(/\Avitable_care_members_#{@employer.id}_/, manifest.fetch("manifest_id"))
+    assert_equal "integration_admin", manifest.fetch("requested_by")
+    assert_equal "needs_review", manifest.fetch("status")
+    assert_equal 2, manifest.fetch("totals").fetch("employee_count")
+    assert_equal 1, manifest.fetch("totals").fetch("ready_count")
+    assert_equal 1, manifest.fetch("totals").fetch("holdback_count")
+    assert_equal "plan_care_123", manifest.fetch("members").first.fetch("plan_id")
+    assert_equal "missing_remote_plan_id", manifest.fetch("holdbacks").first.fetch("reason_code")
+    assert_equal "/v1/groups/:group_id/members/sync", manifest.fetch("endpoint")
+  end
+
+  test "submits care member sync as missing credentials sync run without API key" do
+    prepare_care_group_profile(remote_group_id: "grp_ops_123")
+    Vitable::GenerateCareMemberSyncCommand.new(dto: Vitable::GenerateCareMemberSyncDto.new(requested_by: "ops_test")).call
+
+    assert_difference -> { @connection.sync_runs.where(operation: "care_member_sync_submit").count }, 1 do
+      post submit_vitable_care_members_path, params: { requested_by: "integration_admin" }
+    end
+
+    assert_redirected_to vitable_care_groups_path
+    sync = @connection.sync_runs.where(operation: "care_member_sync_submit").recent_first.first
+    assert_equal "needs_credentials", sync.status
+    assert_match @connection.api_key_reference, sync.error_message
+    assert_equal "integration_admin", sync.stats.fetch("requested_by")
+    assert_equal @employee.email, sync.stats.fetch("payload").fetch("members").first.fetch("email")
+  end
+
+  test "successful care member sync stores request status and refresh results" do
+    prepare_care_group_profile(remote_group_id: "grp_ops_123")
+    Vitable::GenerateCareMemberSyncCommand.new(dto: Vitable::GenerateCareMemberSyncDto.new(requested_by: "ops_test")).call
+    response_class = Data.define(:data)
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:submit_group_member_sync) do |group_id, members|
+        response_class.new(data: { group_id:, request_id: "grpmsr_ops_123", accepted_at: Time.current, member_count: members.count })
+      end
+      define_method(:retrieve_group_member_sync) do |group_id, request_id|
+        response_class.new(
+          data: {
+            group_id:,
+            request_id:,
+            accepted_at: 1.minute.ago,
+            completed_at: Time.current,
+            results: {
+              added_group_member_ids: [ "grpmem_casey" ],
+              removed_group_member_ids: [],
+              failures: []
+            }
+          }
+        )
+      end
+    end
+    previous_key = ENV[@connection.api_key_reference]
+    ENV[@connection.api_key_reference] = "vit_apk_test_value"
+
+    submit_result = Vitable::SubmitCareMemberSyncCommand.new(
+      dto: Vitable::SubmitCareMemberSyncDto.new(requested_by: "integration_admin"),
+      gateway_class:
+    ).call
+    refresh_result = Vitable::RefreshCareMemberSyncCommand.new(
+      dto: Vitable::RefreshCareMemberSyncDto.new(requested_by: "integration_admin"),
+      gateway_class:
+    ).call
+
+    assert submit_result.success?
+    assert refresh_result.success?
+    request = @employer.reload.settings.fetch("vitable_care_member_sync_last_request")
+    assert_equal "grpmsr_ops_123", request.fetch("request_id")
+    assert_equal "complete", request.fetch("status")
+    assert_equal [ "grpmem_casey" ], request.dig("results", "added_group_member_ids")
+    assert_equal "succeeded", @connection.sync_runs.where(operation: "care_member_sync_submit").recent_first.first.status
+    assert_equal "succeeded", @connection.sync_runs.where(operation: "care_member_sync_refresh").recent_first.first.status
+  ensure
+    ENV[@connection.api_key_reference] = previous_key
+  end
+
   test "verifies integration connection credentials without leaking secrets" do
     @connection.update!(status: "active", metadata: { existing: "value" })
 
@@ -3250,6 +3432,24 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     end
   end
 
+  def prepare_care_group_profile(remote_group_id: nil, remote_plan_id: "plan_care_123")
+    prepare_provisioning_profile
+    care_location = @employer.work_locations.find_by!(name: "Ops HQ")
+    @employee.update!(work_location: care_location)
+    @plan.update!(
+      carrier: "Vitable",
+      category: "direct_primary_care",
+      vitable_id: remote_plan_id,
+      metadata: @plan.metadata.to_h.merge("vitable_plan_id" => remote_plan_id)
+    )
+    @enrollment.update!(status: "accepted")
+    return if remote_group_id.blank?
+
+    @employer.update!(
+      settings: @employer.settings.to_h.merge("vitable_care_group_id" => remote_group_id)
+    )
+  end
+
   def create_census_holdback_employee
     @employer.employees.create!(
       first_name: "Alex",
@@ -3278,6 +3478,29 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
         benefit_plan: @pending_plan,
         status: "pending",
         effective_on: Date.current.next_month.beginning_of_month
+      )
+    end
+  end
+
+  def create_care_member_holdback_employee
+    care_location = @employer.work_locations.find_by!(name: "Ops HQ")
+    @employer.employees.create!(
+      first_name: "Riley",
+      last_name: "Planless",
+      email: "riley.planless@example.com",
+      department: @department,
+      work_location: care_location,
+      title: "Care Coordinator",
+      date_of_birth: Date.new(1992, 4, 7),
+      start_on: Date.current - 1.year,
+      compensation_cents: 83_000_00,
+      onboarding_status: "complete",
+      metadata: { phone: "5551237788" }
+    ).tap do |employee|
+      employee.enrollments.create!(
+        benefit_plan: @pending_plan,
+        status: "accepted",
+        effective_on: Date.current.beginning_of_month
       )
     end
   end

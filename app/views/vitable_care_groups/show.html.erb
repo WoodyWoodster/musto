@@ -1,0 +1,225 @@
+<section class="space-y-7">
+  <div class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div class="grid gap-0 xl:grid-cols-[1.12fr_0.88fr]">
+      <div class="p-6 lg:p-8">
+        <div class="flex flex-wrap items-center gap-2">
+          <%= status_pill(@care_group.member_manifest&.status || @care_group.group_packet&.status || "pending") %>
+          <span class="rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-800 ring-1 ring-inset ring-indigo-200">Group setup</span>
+          <span class="rounded-full bg-cyan-50 px-3 py-1 text-xs font-semibold text-cyan-800 ring-1 ring-inset ring-cyan-200">Member sync</span>
+        </div>
+
+        <h1 class="mt-5 text-4xl font-semibold text-slate-950">Care groups</h1>
+        <p class="mt-3 max-w-3xl text-base leading-7 text-slate-600">
+          Create the care group for <%= @care_group.employer&.name || "your employer portfolio" %>, prepare member rosters, and track asynchronous member processing from a single integration workspace.
+        </p>
+
+        <div class="mt-6 flex flex-wrap gap-3">
+          <%= button_to "Generate group packet", generate_vitable_care_group_packet_path, method: :post, params: { requested_by: "Musto Operations" }, class: "rounded-md bg-slate-950 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-slate-800" %>
+          <%= button_to "Submit group", submit_vitable_care_group_path, method: :post, params: { requested_by: "Musto Operations" }, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
+          <%= button_to "Generate member manifest", generate_vitable_care_member_manifest_path, method: :post, params: { requested_by: "Musto Operations" }, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
+          <%= button_to "Submit members", submit_vitable_care_members_path, method: :post, params: { requested_by: "Musto Operations" }, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
+          <%= button_to "Refresh member sync", refresh_vitable_care_member_sync_path, method: :post, params: { requested_by: "Musto Operations" }, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
+        </div>
+      </div>
+
+      <aside class="border-t border-slate-200 bg-[#f8fafc] p-6 text-slate-950 xl:border-l xl:border-t-0 xl:p-8">
+        <p class="text-xs font-semibold uppercase text-slate-500">Current group</p>
+        <% if @care_group.group_packet.present? %>
+          <p class="mt-6 break-all font-mono text-sm font-semibold"><%= @care_group.group_packet.packet_id %></p>
+          <p class="mt-3 text-sm text-slate-600">Generated <%= time_ago_in_words(@care_group.group_packet.generated_at) %> ago by <%= operator_name(@care_group.group_packet.requested_by) %></p>
+          <div class="mt-6 grid grid-cols-2 gap-3">
+            <div class="rounded-md border border-slate-200 bg-white p-4">
+              <p class="text-xs font-semibold uppercase text-slate-400">Mode</p>
+              <p class="mt-2 text-2xl font-semibold"><%= @care_group.group_packet.mode.humanize %></p>
+            </div>
+            <div class="rounded-md border border-slate-200 bg-white p-4">
+              <p class="text-xs font-semibold uppercase text-slate-400">Missing</p>
+              <p class="mt-2 text-2xl font-semibold"><%= compact_number(@care_group.group_packet.missing_field_count) %></p>
+            </div>
+          </div>
+          <div class="mt-5 rounded-md border border-slate-200 bg-white p-4">
+            <p class="text-xs font-semibold uppercase text-slate-400">Group ID</p>
+            <p class="mt-2 break-all font-mono text-xs text-slate-600"><%= @care_group.remote_group_id.presence || "Create pending" %></p>
+            <p class="mt-2 break-all font-mono text-xs text-slate-400"><%= @care_group.group_packet.external_reference_id %></p>
+          </div>
+        <% else %>
+          <p class="mt-6 text-3xl font-semibold">No group packet</p>
+          <p class="mt-2 text-sm leading-6 text-slate-600">Generate a packet to review the group profile before submission.</p>
+        <% end %>
+      </aside>
+    </div>
+  </div>
+
+  <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+    <% @care_group.metrics.each do |metric| %>
+      <article class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <div class="flex items-center justify-between gap-3">
+          <p class="text-sm font-medium text-slate-500"><%= metric.label %></p>
+          <span class="h-2.5 w-2.5 shrink-0 rounded-full <%= metric.accent %>"></span>
+        </div>
+        <p class="mt-4 break-words text-3xl font-semibold text-slate-950">
+          <%= metric.format == "number" ? compact_number(metric.value) : metric.value %>
+        </p>
+        <div class="mt-2 flex flex-wrap items-center gap-2">
+          <%= status_pill(metric.status) %>
+          <p class="text-sm text-slate-500"><%= metric.hint %></p>
+        </div>
+      </article>
+    <% end %>
+  </div>
+
+  <div class="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
+    <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="border-b border-slate-100 px-5 py-4">
+        <h2 class="text-base font-semibold text-slate-950">Member sync preflight</h2>
+        <p class="text-sm text-slate-500">Checks that decide whether the group and member roster can be submitted.</p>
+      </div>
+      <div class="divide-y divide-slate-100">
+        <% @care_group.preflight_checks.each do |check| %>
+          <div class="flex items-start justify-between gap-4 px-5 py-4">
+            <div class="min-w-0">
+              <p class="font-semibold text-slate-950"><%= check.label %></p>
+              <p class="mt-1 break-words text-sm text-slate-500"><%= check.detail %></p>
+            </div>
+            <%= status_pill(check.status) %>
+          </div>
+        <% end %>
+      </div>
+    </section>
+
+    <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="border-b border-slate-100 px-5 py-4">
+        <h2 class="text-base font-semibold text-slate-950">Sync attempts</h2>
+        <p class="text-sm text-slate-500">Group and member requests with processing status and credential state.</p>
+      </div>
+      <div class="divide-y divide-slate-100">
+        <% @care_group.sync_runs.each do |sync| %>
+          <div class="flex items-start justify-between gap-4 px-5 py-4">
+            <div class="min-w-0">
+              <p class="font-semibold text-slate-950"><%= sync.operation.humanize %> <%= sync.resource_type %></p>
+              <p class="mt-1 text-sm text-slate-500"><%= sync.started_at&.strftime("%b %-d, %I:%M %p") || "n/a" %></p>
+              <% if sync.error_message.present? %>
+                <p class="mt-1 break-words text-xs text-rose-600"><%= sync.error_message %></p>
+              <% end %>
+            </div>
+            <%= status_pill(sync.status) %>
+          </div>
+        <% end %>
+        <% if @care_group.sync_runs.empty? %>
+          <p class="px-5 py-5 text-sm text-slate-500">No care group sync attempts have been recorded yet.</p>
+        <% end %>
+      </div>
+    </section>
+  </div>
+
+  <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div class="border-b border-slate-100 px-5 py-4">
+      <h2 class="text-base font-semibold text-slate-950">Ready members</h2>
+      <p class="text-sm text-slate-500">Employees with the required group member fields and remote plan mappings.</p>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="min-w-full divide-y divide-slate-100 text-sm">
+        <thead class="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
+          <tr>
+            <th class="px-5 py-3">Employee</th>
+            <th class="px-5 py-3">Contact</th>
+            <th class="px-5 py-3">Plan</th>
+            <th class="px-5 py-3">Reference</th>
+            <th class="px-5 py-3">Remote employee</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          <% @care_group.members.each do |member| %>
+            <tr class="hover:bg-slate-50">
+              <td class="px-5 py-4">
+                <%= link_to member.employee_name, employee_path(member.employee_id), class: "font-semibold text-slate-950 hover:text-cyan-700" %>
+                <p class="mt-1 text-xs text-slate-500"><%= member.department_name %> · <%= member.location_name %></p>
+              </td>
+              <td class="px-5 py-4">
+                <p class="break-all text-slate-700"><%= member.email %></p>
+                <p class="mt-1 font-mono text-xs text-slate-500"><%= member.phone %></p>
+                <p class="mt-1 text-xs text-slate-500"><%= member.date_of_birth.strftime("%b %-d, %Y") %></p>
+              </td>
+              <td class="px-5 py-4">
+                <p class="font-semibold text-slate-950"><%= member.plan_name %></p>
+                <p class="mt-1 break-all font-mono text-xs text-slate-500"><%= member.plan_id %></p>
+              </td>
+              <td class="px-5 py-4">
+                <%= status_pill(member.readiness_status) %>
+                <p class="mt-1 break-all font-mono text-xs text-slate-500"><%= member.reference_id %></p>
+              </td>
+              <td class="px-5 py-4">
+                <p class="max-w-40 truncate font-mono text-xs text-slate-500"><%= member.remote_employee_id.presence || "Created or matched during sync" %></p>
+              </td>
+            </tr>
+          <% end %>
+          <% if @care_group.members.empty? %>
+            <tr>
+              <td colspan="5" class="px-5 py-5 text-sm text-slate-500">Generate a member manifest to populate ready rows.</td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <div class="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
+    <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="border-b border-slate-100 px-5 py-4">
+        <h2 class="text-base font-semibold text-slate-950">Member holdbacks</h2>
+        <p class="text-sm text-slate-500">Employees excluded until required fields or remote plan mappings are resolved.</p>
+      </div>
+      <div class="divide-y divide-slate-100">
+        <% @care_group.holdbacks.each do |holdback| %>
+          <div class="p-5">
+            <div class="flex flex-wrap items-start justify-between gap-3">
+              <div class="min-w-0">
+                <p class="text-xs font-semibold uppercase text-slate-400"><%= holdback.department_name %> · <%= holdback.location_name %></p>
+                <h3 class="mt-2 text-base font-semibold text-slate-950"><%= holdback.employee_name %></h3>
+              </div>
+              <%= status_pill(holdback.status) %>
+            </div>
+            <p class="mt-3 text-sm leading-6 text-slate-600"><%= holdback.reason %></p>
+            <p class="mt-2 break-all text-xs text-slate-400"><%= [ holdback.plan_name, holdback.reason_code ].compact_blank.join(" · ") %></p>
+          </div>
+        <% end %>
+        <% if @care_group.holdbacks.empty? %>
+          <p class="px-5 py-5 text-sm text-slate-500">No holdbacks in the latest member manifest.</p>
+        <% end %>
+      </div>
+    </section>
+
+    <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="border-b border-slate-100 px-5 py-4">
+        <h2 class="text-base font-semibold text-slate-950">API activity</h2>
+        <p class="text-sm text-slate-500">Requests for group setup, member submission, and status refresh.</p>
+      </div>
+      <% if @care_group.member_sync_request.present? %>
+        <div class="border-b border-slate-100 bg-slate-50 px-5 py-4">
+          <p class="text-xs font-semibold uppercase text-slate-400">Latest member request</p>
+          <p class="mt-2 break-all font-mono text-xs text-slate-600"><%= @care_group.member_sync_request.fetch("request_id", "pending") %></p>
+          <p class="mt-1 text-sm text-slate-500"><%= @care_group.member_sync_request.fetch("status", "processing").humanize %></p>
+        </div>
+      <% end %>
+      <div class="divide-y divide-slate-100">
+        <% @care_group.request_logs.each do |log| %>
+          <div class="px-5 py-4">
+            <div class="flex items-start justify-between gap-4">
+              <div class="min-w-0">
+                <p class="font-semibold text-slate-950"><%= log.method %> <%= log.path %></p>
+                <p class="mt-1 text-sm text-slate-500"><%= log.operation %> · <%= log.duration_ms || 0 %>ms</p>
+                <% if log.error_class.present? %>
+                  <p class="mt-1 break-all text-xs text-rose-600"><%= log.error_class %></p>
+                <% end %>
+              </div>
+              <%= status_pill(log.error_class.present? ? "failed" : "ready") %>
+            </div>
+          </div>
+        <% end %>
+        <% if @care_group.request_logs.empty? %>
+          <p class="px-5 py-5 text-sm text-slate-500">No care group requests have been sent yet.</p>
+        <% end %>
+      </div>
+    </section>
+  </div>
+</section>

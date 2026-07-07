@@ -41,6 +41,33 @@ module Vitable
       assert_equal :semi_monthly, gateway.send(:pay_frequency_value, "semimonthly")
     end
 
+    test "normalizes group member sync payloads for the SDK" do
+      organization = Organization.create!(name: "Gateway Group Payload Test", external_id: "org_gateway_group_payload_test")
+      connection = organization.integration_connections.create!(provider: "vitable", environment: "production")
+      gateway = ClientGateway.new(connection)
+
+      payload = gateway.send(:group_member_payload, {
+        "reference_id" => "musto_employee_123",
+        "first_name" => "Casey",
+        "last_name" => "Ng",
+        "email" => "casey@example.com",
+        "phone" => "5551234567",
+        "date_of_birth" => "1990-01-15",
+        "plan_id" => "plan_care_123",
+        "address" => {
+          "address_line_1" => "214 Market Street",
+          "city" => "Philadelphia",
+          "state" => "PA",
+          "zipcode" => "19106"
+        }
+      })
+
+      assert_equal "musto_employee_123", payload.fetch(:reference_id)
+      assert_equal Date.new(1990, 1, 15), payload.fetch(:date_of_birth)
+      assert_equal "plan_care_123", payload.fetch(:plan_id)
+      assert_equal "PA", payload.dig(:address, :state)
+    end
+
     test "targets the Vitable demo base URL for demo connections" do
       ENV["VITABLE_TEST_API_KEY"] = "vit_apk_test"
       organization = Organization.create!(name: "Gateway Demo Test", external_id: "org_gateway_demo_test")

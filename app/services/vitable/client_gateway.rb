@@ -87,6 +87,14 @@ module Vitable
       end
     end
 
+    def list_groups(limit: 100)
+      query = { limit: }
+
+      instrument("group.list", :get, "/v1/groups", request_body: query) do
+        client.groups.list(query)
+      end
+    end
+
     def create_employer(payload)
       body = employer_create_payload(payload)
 
@@ -112,6 +120,45 @@ module Vitable
           path: "v1/employers/#{employer_id}/benefit-eligibility-policies",
           body:
         )
+      end
+    end
+
+    def create_group(payload)
+      body = group_payload(payload)
+
+      instrument("group.create", :post, "/v1/groups", request_body: body) do
+        client.groups.create(body)
+      end
+    end
+
+    def update_group(group_id, payload)
+      body = group_payload(payload)
+
+      instrument("group.update", :patch, "/v1/groups/#{group_id}", request_body: body) do
+        client.groups.update(group_id, body)
+      end
+    end
+
+    def retrieve_group(group_id)
+      instrument("group.retrieve", :get, "/v1/groups/#{group_id}") do
+        client.groups.retrieve(group_id)
+      end
+    end
+
+    def submit_group_member_sync(group_id, members)
+      body = {
+        group_id:,
+        members: members.map { |member| group_member_payload(member) }
+      }
+
+      instrument("group.member_sync.submit", :post, "/v1/groups/#{group_id}/members/sync", request_body: body) do
+        client.groups.members.sync.submit(group_id, members: body.fetch(:members))
+      end
+    end
+
+    def retrieve_group_member_sync(group_id, request_id)
+      instrument("group.member_sync.retrieve", :get, "/v1/groups/#{group_id}/members/sync/#{request_id}") do
+        client.groups.members.sync.retrieve(request_id, group_id:)
       end
     end
 
@@ -209,6 +256,26 @@ module Vitable
 
     def eligibility_policy_payload(payload)
       payload.to_h.deep_symbolize_keys.compact
+    end
+
+    def group_payload(payload)
+      payload.to_h.deep_symbolize_keys.slice(:external_reference_id, :name).compact
+    end
+
+    def group_member_payload(member)
+      attributes = member.to_h.deep_symbolize_keys
+      attributes[:date_of_birth] = Date.iso8601(attributes.fetch(:date_of_birth)) if attributes[:date_of_birth].is_a?(String)
+      attributes[:address] = attributes.fetch(:address, {}).to_h.deep_symbolize_keys.compact
+      attributes.slice(
+        :reference_id,
+        :first_name,
+        :last_name,
+        :email,
+        :phone,
+        :date_of_birth,
+        :plan_id,
+        :address
+      ).compact
     end
 
     def pay_frequency_value(value)

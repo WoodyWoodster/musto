@@ -39,6 +39,7 @@ module Vitable
       {
         "requested_by" => @dto.requested_by,
         "employers" => page_data(gateway.list_employers),
+        "groups" => page_data(gateway.list_groups),
         "plans" => page_data(gateway.list_plans),
         "webhook_events" => page_data(gateway.list_webhook_events),
         "employee_enrollments" => employee_enrollment_snapshot(gateway, connection)

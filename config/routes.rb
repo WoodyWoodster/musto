@@ -138,6 +138,12 @@ Rails.application.routes.draw do
   get "integrations/vitable/embedded-sessions", to: "vitable_embedded_sessions#show", as: :vitable_embedded_sessions
   post "integrations/vitable/embedded-sessions/packet", to: "vitable_embedded_sessions#generate_packet", as: :generate_vitable_embedded_sessions
   post "integrations/vitable/embedded-sessions/employees/:employee_id/issue", to: "vitable_embedded_sessions#issue", as: :issue_vitable_embedded_session
+  get "integrations/vitable/care-groups", to: "vitable_care_groups#show", as: :vitable_care_groups
+  post "integrations/vitable/care-groups/group-packet", to: "vitable_care_groups#generate_group_packet", as: :generate_vitable_care_group_packet
+  post "integrations/vitable/care-groups/submit-group", to: "vitable_care_groups#submit_group", as: :submit_vitable_care_group
+  post "integrations/vitable/care-groups/member-manifest", to: "vitable_care_groups#generate_member_manifest", as: :generate_vitable_care_member_manifest
+  post "integrations/vitable/care-groups/submit-members", to: "vitable_care_groups#submit_members", as: :submit_vitable_care_members
+  post "integrations/vitable/care-groups/refresh-member-sync", to: "vitable_care_groups#refresh_member_sync", as: :refresh_vitable_care_member_sync
 
   resources :onboarding_tasks, only: [] do
     post :complete, on: :member

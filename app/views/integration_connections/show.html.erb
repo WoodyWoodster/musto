@@ -68,13 +68,13 @@
       <div class="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
         <div>
           <h2 class="text-base font-semibold text-slate-950">Remote API snapshot</h2>
-          <p class="text-sm text-slate-500">Latest read mirror from Vitable employers, plans, webhook events, and employee enrollments.</p>
+          <p class="text-sm text-slate-500">Latest read mirror from Vitable employers, groups, plans, webhook events, and employee enrollments.</p>
         </div>
         <%= status_pill(@connection.api_snapshot.present? ? "ready" : "pending") %>
       </div>
     </div>
     <% if @connection.api_snapshot.present? %>
-      <div class="grid gap-0 divide-y divide-slate-100 md:grid-cols-5 md:divide-x md:divide-y-0">
+      <div class="grid gap-0 divide-y divide-slate-100 md:grid-cols-6 md:divide-x md:divide-y-0">
         <div class="p-5">
           <p class="text-xs font-semibold uppercase text-slate-400">Refreshed</p>
           <p class="mt-2 text-sm font-semibold text-slate-950"><%= time_ago_in_words(@connection.api_snapshot.refreshed_at) %> ago</p>
@@ -82,6 +82,10 @@
         <div class="p-5">
           <p class="text-xs font-semibold uppercase text-slate-400">Employers</p>
           <p class="mt-2 text-2xl font-semibold text-slate-950"><%= compact_number(@connection.api_snapshot.remote_employer_count) %></p>
+        </div>
+        <div class="p-5">
+          <p class="text-xs font-semibold uppercase text-slate-400">Groups</p>
+          <p class="mt-2 text-2xl font-semibold text-slate-950"><%= compact_number(@connection.api_snapshot.remote_group_count) %></p>
         </div>
         <div class="p-5">
           <p class="text-xs font-semibold uppercase text-slate-400">Plans</p>
