@@ -5,6 +5,8 @@ module Vitable
     :remote_group_count,
     :remote_plan_count,
     :remote_webhook_event_count,
+    :imported_webhook_event_count,
+    :existing_webhook_event_count,
     :remote_employee_enrollment_count,
     :mapped_employee_count
   ) do
@@ -19,6 +21,8 @@ module Vitable
         remote_group_count: counts.fetch("remote_group_count", 0),
         remote_plan_count: counts.fetch("remote_plan_count", 0),
         remote_webhook_event_count: counts.fetch("remote_webhook_event_count", 0),
+        imported_webhook_event_count: counts.fetch("imported_webhook_event_count", 0),
+        existing_webhook_event_count: counts.fetch("existing_webhook_event_count", 0),
         remote_employee_enrollment_count: counts.fetch("remote_employee_enrollment_count", 0),
         mapped_employee_count: employee_enrollments.count
       )

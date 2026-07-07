@@ -2745,13 +2745,47 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
 
   test "successful Vitable API snapshot refresh stores remote read counts" do
     @employee.update!(vitable_id: "empl_ops_casey")
+    existing_event = @connection.webhook_events.create!(
+      event_id: "wevt_existing_remote",
+      organization_external_id: @organization.external_id,
+      event_name: "enrollment.enrolled",
+      resource_type: "enrollment",
+      resource_id: "enrl_existing",
+      occurred_at: 1.hour.ago,
+      status: "processed",
+      processed_at: 30.minutes.ago,
+      payload: { "event_id" => "wevt_existing_remote" },
+      metadata: { "processed_by" => "fixture" }
+    )
+    remote_webhook_events = [
+      {
+        id: "wevt_remote_123",
+        organization_id: @organization.external_id,
+        event_name: "employee.eligibility_granted",
+        resource_type: "employee",
+        resource_id: "empl_remote_casey",
+        created_at: 2.minutes.ago.iso8601
+      },
+      {
+        id: existing_event.event_id,
+        organization_id: @organization.external_id,
+        event_name: existing_event.event_name,
+        resource_type: existing_event.resource_type,
+        resource_id: existing_event.resource_id,
+        created_at: existing_event.occurred_at.iso8601
+      },
+      {
+        id: "wevt_incomplete_remote",
+        event_name: "employee.updated"
+      }
+    ]
     response_class = Data.define(:data)
     gateway_class = Class.new do
       define_method(:initialize) { |_connection| }
       define_method(:list_all_employers) { response_class.new(data: [ { id: "empr_ops_123", name: "Atlas Global Services" } ]) }
       define_method(:list_all_groups) { response_class.new(data: [ { id: "grp_ops_123", name: "Atlas Care Group" } ]) }
       define_method(:list_all_plans) { response_class.new(data: [ { id: "plan_dpc", name: "Direct Primary Care" }, { id: "plan_mec", name: "MEC" } ]) }
-      define_method(:list_all_webhook_events) { response_class.new(data: [ { id: "wevt_remote_123", event_name: "employee.eligibility_granted" } ]) }
+      define_method(:list_all_webhook_events) { response_class.new(data: remote_webhook_events) }
       define_method(:list_all_employee_enrollments) do |employee_id|
         response_class.new(data: [ { id: "enrl_remote_123", employee_id:, status: "pending" } ])
       end
@@ -2759,19 +2793,44 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     previous_key = ENV[@connection.api_key_reference]
     ENV[@connection.api_key_reference] = "vit_apk_test_value"
 
-    result = Vitable::RefreshApiSnapshotCommand.new(
-      dto: Vitable::RefreshApiSnapshotDto.new(connection_id: @connection.id, requested_by: "integration_admin"),
-      gateway_class:
-    ).call
+    assert_difference -> { WebhookEvent.count }, 1 do
+      result = Vitable::RefreshApiSnapshotCommand.new(
+        dto: Vitable::RefreshApiSnapshotDto.new(connection_id: @connection.id, requested_by: "integration_admin"),
+        gateway_class:
+      ).call
 
-    assert result.success?
+      assert result.success?
+    end
+
     snapshot = @connection.reload.metadata.fetch("api_snapshot")
     assert_equal 1, snapshot.dig("counts", "remote_employer_count")
     assert_equal 1, snapshot.dig("counts", "remote_group_count")
     assert_equal 2, snapshot.dig("counts", "remote_plan_count")
-    assert_equal 1, snapshot.dig("counts", "remote_webhook_event_count")
+    assert_equal 3, snapshot.dig("counts", "remote_webhook_event_count")
+    assert_equal 1, snapshot.dig("counts", "imported_webhook_event_count")
+    assert_equal 1, snapshot.dig("counts", "existing_webhook_event_count")
     assert_equal 1, snapshot.dig("counts", "remote_employee_enrollment_count")
     assert_equal @employee.id, snapshot.fetch("employee_enrollments").first.fetch("local_employee_id")
+    assert_equal 1, snapshot.dig("webhook_event_ingestion", "skipped_count")
+    assert_equal [ "wevt_incomplete_remote" ], snapshot.dig("webhook_event_ingestion", "skipped_event_ids")
+
+    imported_event = WebhookEvent.find_by!(event_id: "wevt_remote_123")
+    assert_equal @connection.id, imported_event.integration_connection_id
+    assert_equal "received", imported_event.status
+    assert_equal "employee.eligibility_granted", imported_event.event_name
+    assert_equal "vitable_webhook_events_api", imported_event.metadata.dig("remote_webhook_event_snapshot", "source")
+
+    assert_equal "processed", existing_event.reload.status
+    assert existing_event.processed_at.present?
+    assert_equal "vitable_webhook_events_api", existing_event.metadata.dig("remote_webhook_event_snapshot", "source")
+
+    sync = @connection.sync_runs.where(operation: "api_snapshot_refresh").recent_first.first
+    assert_equal 1, sync.stats.dig("webhook_event_ingestion", "created_count")
+    assert_equal 1, sync.stats.dig("webhook_event_ingestion", "existing_count")
+
+    detail = Vitable::ConnectionDetailQuery.new.call(@connection.id)
+    assert_equal 1, detail.api_snapshot.imported_webhook_event_count
+    assert_equal 1, detail.api_snapshot.existing_webhook_event_count
   ensure
     ENV[@connection.api_key_reference] = previous_key
   end

@@ -302,6 +302,8 @@ module Vitable
 
     def succeed_api_snapshot_run(connection, sync_run, snapshot)
       refreshed_at = Time.current
+      webhook_ingestion = ingest_remote_webhook_events(connection, snapshot.fetch("webhook_events", []), refreshed_at:)
+      snapshot = snapshot.merge("webhook_event_ingestion" => webhook_ingestion)
       counts = snapshot_counts(snapshot)
       connection.update!(
         status: "active",
@@ -317,7 +319,10 @@ module Vitable
         status: "succeeded",
         completed_at: refreshed_at,
         error_message: nil,
-        stats: sync_run.stats.to_h.merge(counts).merge("refreshed_at" => refreshed_at.iso8601)
+        stats: sync_run.stats.to_h.merge(counts).merge(
+          "refreshed_at" => refreshed_at.iso8601,
+          "webhook_event_ingestion" => webhook_ingestion
+        )
       )
       sync_run
     end
@@ -454,13 +459,72 @@ module Vitable
     end
 
     def snapshot_counts(snapshot)
+      webhook_ingestion = snapshot.fetch("webhook_event_ingestion", {}).to_h
+
       {
         "remote_employer_count" => snapshot.fetch("employers", []).count,
         "remote_group_count" => snapshot.fetch("groups", []).count,
         "remote_plan_count" => snapshot.fetch("plans", []).count,
         "remote_webhook_event_count" => snapshot.fetch("webhook_events", []).count,
-        "remote_employee_enrollment_count" => snapshot.fetch("employee_enrollments", []).sum { |entry| entry.fetch("enrollments", []).count }
+        "remote_employee_enrollment_count" => snapshot.fetch("employee_enrollments", []).sum { |entry| entry.fetch("enrollments", []).count },
+        "imported_webhook_event_count" => webhook_ingestion.fetch("created_count", 0),
+        "existing_webhook_event_count" => webhook_ingestion.fetch("existing_count", 0)
       }
+    end
+
+    def ingest_remote_webhook_events(connection, remote_events, refreshed_at:)
+      created_event_ids = []
+      existing_event_ids = []
+      skipped_event_ids = []
+
+      remote_events.each do |remote_event|
+        dto = RemoteWebhookEventDto.from_remote_event(
+          remote_event,
+          default_organization_id: connection.organization.external_id
+        )
+
+        if dto.blank?
+          skipped_event_ids << RemoteWebhookEventDto.remote_event_id(remote_event)
+          next
+        end
+
+        event = WebhookEvent.find_or_initialize_by(event_id: dto.event_id)
+        if event.persisted?
+          existing_event_ids << event.event_id
+        else
+          event.status = "received"
+          created_event_ids << dto.event_id
+        end
+
+        event.assign_attributes(remote_webhook_event_attributes(dto, connection, refreshed_at:, existing_event: event))
+        event.save!
+      end
+
+      {
+        "source" => "vitable_webhook_events_api",
+        "created_count" => created_event_ids.count,
+        "existing_count" => existing_event_ids.count,
+        "skipped_count" => skipped_event_ids.count,
+        "created_event_ids" => created_event_ids,
+        "existing_event_ids" => existing_event_ids,
+        "skipped_event_ids" => skipped_event_ids,
+        "refreshed_at" => refreshed_at.iso8601
+      }
+    end
+
+    def remote_webhook_event_attributes(dto, connection, refreshed_at:, existing_event:)
+      metadata = existing_event.metadata.to_h.merge(
+        "remote_webhook_event_snapshot" => {
+          "source" => "vitable_webhook_events_api",
+          "refreshed_at" => refreshed_at.iso8601
+        }
+      )
+
+      dto.to_event_attributes.merge(
+        integration_connection: existing_event.integration_connection || connection,
+        payload: existing_event.payload.to_h.merge(dto.payload),
+        metadata:
+      )
     end
 
     def serialize_response(response)

@@ -94,6 +94,7 @@
         <div class="p-5">
           <p class="text-xs font-semibold uppercase text-slate-400">Webhook events</p>
           <p class="mt-2 text-2xl font-semibold text-slate-950"><%= compact_number(@connection.api_snapshot.remote_webhook_event_count) %></p>
+          <p class="mt-1 text-xs text-slate-500"><%= compact_number(@connection.api_snapshot.imported_webhook_event_count) %> imported - <%= compact_number(@connection.api_snapshot.existing_webhook_event_count) %> existing</p>
         </div>
         <div class="p-5">
           <p class="text-xs font-semibold uppercase text-slate-400">Enrollments</p>
