@@ -40,5 +40,21 @@ module Vitable
       assert_equal :bi_weekly, gateway.send(:pay_frequency_value, "bi_weekly")
       assert_equal :semi_monthly, gateway.send(:pay_frequency_value, "semimonthly")
     end
+
+    test "targets the Vitable demo base URL for demo connections" do
+      ENV["VITABLE_TEST_API_KEY"] = "vit_apk_test"
+      organization = Organization.create!(name: "Gateway Demo Test", external_id: "org_gateway_demo_test")
+      connection = organization.integration_connections.create!(
+        provider: "vitable",
+        environment: "demo",
+        api_key_reference: "VITABLE_TEST_API_KEY"
+      )
+
+      client = ClientGateway.new(connection).send(:client)
+
+      assert_equal "https://api.demo.vitablehealth.com", client.base_url.to_s
+    ensure
+      ENV.delete("VITABLE_TEST_API_KEY")
+    end
   end
 end

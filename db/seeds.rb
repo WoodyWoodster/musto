@@ -6,12 +6,18 @@ organization.assign_attributes(
 )
 organization.save!
 
-connection = organization.integration_connections.find_or_initialize_by(provider: "vitable", environment: "production")
+connection = organization.integration_connections.find_by(provider: "vitable", environment: "demo") ||
+  organization.integration_connections.find_by(provider: "vitable", environment: "production") ||
+  organization.integration_connections.build(provider: "vitable")
 connection.assign_attributes(
+  environment: "demo",
   api_key_reference: "VITABLE_CONNECT_API_KEY",
   webhook_secret_reference: "VITABLE_WEBHOOK_SECRET",
   status: ENV["VITABLE_CONNECT_API_KEY"].present? ? "active" : "needs_credentials",
-  metadata: { docs: "https://developer.vitablehealth.com/" }
+  metadata: {
+    docs: "https://developer.vitablehealth.com/",
+    api_base_url: "https://api.demo.vitablehealth.com"
+  }
 )
 connection.save!
 

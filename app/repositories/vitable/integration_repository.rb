@@ -34,8 +34,7 @@ module Vitable
 
     def connection_for_organization_external_id(external_id)
       organization = Organization.find_by(external_id:)
-      organization&.integration_connections&.vitable&.find_by(environment: "production") ||
-        organization&.integration_connections&.vitable&.first
+      vitable_connection_for(organization)
     end
 
     def find_connection(id)

@@ -7,8 +7,7 @@ module Vitable
     end
 
     def connection
-      @connection ||= @employer&.organization&.integration_connections&.vitable&.find_by(environment: "production") ||
-        @employer&.organization&.integration_connections&.vitable&.first
+      @connection ||= vitable_connection_for(@employer&.organization)
     end
 
     def employees

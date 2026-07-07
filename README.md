@@ -25,6 +25,8 @@ The SDK is initialized through `Vitable::ClientGateway`, using `IntegrationConne
 
 ```sh
 VITABLE_CONNECT_API_KEY=...
+VITABLE_CONNECT_ENVIRONMENT=demo
+VITABLE_CONNECT_BASE_URL=https://api.demo.vitablehealth.com
 VITABLE_WEBHOOK_SECRET=...
 ```
 

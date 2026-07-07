@@ -38,7 +38,7 @@ module Company
       new(
         connection_id: nil,
         provider: "vitable",
-        environment: "production",
+        environment: "demo",
         status: "not_configured",
         api_key_reference: "VITABLE_CONNECT_API_KEY",
         webhook_secret_reference: "VITABLE_WEBHOOK_SECRET",
