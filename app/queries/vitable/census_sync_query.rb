@@ -7,7 +7,9 @@ module Vitable
 
     def call
       manifest_payload = @repository.latest_manifest
+      submission_payload = @repository.latest_submission
       latest_manifest = manifest_payload.present? ? CensusSyncManifestDto.from_hash(manifest_payload) : nil
+      latest_submission = submission_payload.present? ? CensusSyncSubmissionDto.from_hash(submission_payload) : nil
       employees = manifest_payload.to_h.fetch("employees", []).map { |payload| CensusSyncEmployeeDto.from_hash(payload) }
       holdbacks = manifest_payload.to_h.fetch("holdbacks", []).map { |payload| CensusSyncHoldbackDto.from_hash(payload) }
       connection = @repository.connection
@@ -25,6 +27,7 @@ module Vitable
         employees:,
         holdbacks:,
         latest_manifest:,
+        latest_submission:,
         sync_runs: @repository.sync_runs.map { |sync| Operations::SyncRunDto.from_record(sync) },
         request_logs: @repository.request_logs.map { |log| Operations::ApiRequestLogDto.from_record(log) },
         endpoint_path: "/v1/employers/:employer_id/census-sync",

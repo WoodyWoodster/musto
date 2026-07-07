@@ -11,6 +11,7 @@ module Vitable
     :employees,
     :holdbacks,
     :latest_manifest,
+    :latest_submission,
     :sync_runs,
     :request_logs,
     :endpoint_path,

@@ -1,5 +1,7 @@
 module Vitable
   class CensusSyncRepository < ApplicationRepository
+    MANIFEST_KEY = "vitable_census_sync_batch"
+    SUBMISSION_KEY = "vitable_census_sync_last_submission"
     MAX_EMPLOYEES = 5_000
     CENSUS_OPERATIONS = %w[census_manifest census_sync remote_roster_refresh].freeze
 
@@ -22,7 +24,11 @@ module Vitable
     end
 
     def latest_manifest
-      @employer&.settings.to_h.fetch("vitable_census_sync_batch", nil)
+      @employer&.settings.to_h.fetch(MANIFEST_KEY, nil)
+    end
+
+    def latest_submission
+      @employer&.settings.to_h.fetch(SUBMISSION_KEY, nil)
     end
 
     def sync_runs(limit: 12)
@@ -83,7 +89,7 @@ module Vitable
         }
       }
 
-      @employer.update!(settings: @employer.settings.to_h.merge("vitable_census_sync_batch" => manifest))
+      @employer.update!(settings: @employer.settings.to_h.merge(MANIFEST_KEY => manifest))
       manifest
     end
 
@@ -120,14 +126,27 @@ module Vitable
 
     def mark_sync_succeeded(sync_run, response)
       response_hash = serialize_response(response)
+      data = response_hash.fetch("data", response_hash)
+      accepted_at = data.fetch("accepted_at", nil)
+      remote_employer_id = data.fetch("employer_id", @employer.vitable_id)
+      submitted_at = Time.current.iso8601
+      submission = census_submission_payload(
+        manifest: latest_manifest,
+        accepted_at:,
+        remote_employer_id:,
+        submitted_at:
+      )
+      mark_manifest_submitted(submission)
+
       sync_run.update!(
         status: "succeeded",
         completed_at: Time.current,
         error_message: nil,
         stats: sync_run.stats.to_h.merge(
           "remote_response" => response_hash,
-          "remote_accepted_at" => response_hash.dig("data", "accepted_at"),
-          "remote_employer_id" => response_hash.dig("data", "employer_id") || @employer.vitable_id
+          "remote_accepted_at" => accepted_at,
+          "remote_employer_id" => remote_employer_id,
+          "submitted_employee_count" => submission.fetch("ready_count", 0)
         )
       )
       sync_run
@@ -161,18 +180,24 @@ module Vitable
       response_hash = serialize_response(response)
       remote_employees = page_data(response_hash)
       mapping = apply_remote_employee_ids(remote_employees)
+      manifest = reconcile_manifest_from_remote_roster(remote_employees)
+      manifest_lines = manifest.to_h.fetch("employees", [])
       fetched_at = Time.current.iso8601
+      settings_update = {
+        "vitable_remote_roster" => {
+          "fetched_at" => fetched_at,
+          "remote_employee_count" => remote_employees.count,
+          "matched_employee_count" => mapping.fetch("matched_employee_count"),
+          "unmatched_employee_count" => mapping.fetch("unmatched_employee_count"),
+          "matched_employee_ids" => mapping.fetch("matched_employee_ids"),
+          "matched_remote_ids" => mapping.fetch("matched_remote_ids"),
+          "unmatched_remote_ids" => mapping.fetch("unmatched_remote_ids")
+        }
+      }
+      settings_update[MANIFEST_KEY] = manifest if manifest.present?
 
       @employer.update!(
-        settings: @employer.settings.to_h.merge(
-          "vitable_remote_roster" => {
-            "fetched_at" => fetched_at,
-            "remote_employee_count" => remote_employees.count,
-            "matched_employee_count" => mapping.fetch("matched_employee_count"),
-            "unmatched_employee_count" => mapping.fetch("unmatched_employee_count"),
-            "unmatched_remote_ids" => mapping.fetch("unmatched_remote_ids")
-          }
-        )
+        settings: @employer.settings.to_h.merge(settings_update)
       )
 
       sync_run.update!(
@@ -183,7 +208,9 @@ module Vitable
           "remote_response" => response_hash,
           "remote_employee_count" => remote_employees.count,
           "matched_employee_count" => mapping.fetch("matched_employee_count"),
-          "unmatched_employee_count" => mapping.fetch("unmatched_employee_count")
+          "unmatched_employee_count" => mapping.fetch("unmatched_employee_count"),
+          "manifest_synced_count" => manifest_lines.count { |line| line.fetch("status", nil) == "synced" },
+          "manifest_remote_pending_count" => manifest.to_h.dig("totals", "remote_pending_count")
         )
       )
       sync_run
@@ -319,19 +346,25 @@ module Vitable
     def apply_remote_employee_ids(remote_employees)
       matched = []
       unmatched = []
+      matched_employee_ids = []
 
       remote_employees.each do |remote_employee|
         employee = employee_for_remote(remote_employee)
         if employee
+          remote_employee_id = remote_employee.fetch("id", employee.vitable_id)
           employee.update!(
-            vitable_id: remote_employee.fetch("id", employee.vitable_id),
-            metadata: employee.metadata.to_h.merge(
+            vitable_id: remote_employee_id,
+            metadata: employee.metadata.to_h.stringify_keys.merge(
+              "vitable_census_sync_status" => "synced",
               "vitable_remote_status" => remote_employee.fetch("status", nil),
               "vitable_member_id" => remote_employee.fetch("member_id", nil),
+              "vitable_remote_reference_id" => remote_employee.fetch("reference_id", nil),
+              "vitable_remote_deductions" => remote_employee.fetch("deductions", []),
               "vitable_last_refreshed_at" => Time.current.iso8601
             ).compact
           )
-          matched << remote_employee.fetch("id", nil)
+          matched << remote_employee_id
+          matched_employee_ids << employee.id
         else
           unmatched << remote_employee.fetch("id", nil)
         end
@@ -340,6 +373,8 @@ module Vitable
       {
         "matched_employee_count" => matched.compact.count,
         "unmatched_employee_count" => unmatched.compact.count,
+        "matched_employee_ids" => matched_employee_ids.compact,
+        "matched_remote_ids" => matched.compact,
         "unmatched_remote_ids" => unmatched.compact
       }
     end
@@ -353,6 +388,107 @@ module Vitable
       end
 
       @employer.employees.find_by(email: remote_employee.fetch("email", nil))
+    end
+
+    def census_submission_payload(manifest:, accepted_at:, remote_employer_id:, submitted_at:)
+      manifest = manifest.to_h.stringify_keys
+      employees = manifest.fetch("employees", [])
+
+      {
+        "batch_id" => manifest.fetch("batch_id", nil),
+        "status" => "accepted",
+        "accepted_at" => accepted_at,
+        "submitted_at" => submitted_at,
+        "remote_employer_id" => remote_employer_id,
+        "ready_count" => employees.count,
+        "employee_reference_ids" => employees.filter_map { |employee| employee.to_h.stringify_keys.fetch("reference_id", nil) }
+      }.compact
+    end
+
+    def mark_manifest_submitted(submission)
+      manifest = latest_manifest.to_h.deep_dup
+      submitted_at = submission.fetch("submitted_at")
+      accepted_at = submission.fetch("accepted_at", nil)
+
+      manifest["employees"] = manifest.fetch("employees", []).map do |line|
+        employee = employee_for_manifest_line(line)
+        mark_employee_census_submitted(employee, submission) if employee
+
+        line.to_h.stringify_keys.merge(
+          "status" => "submitted",
+          "readiness_status" => "submitted",
+          "readiness_reason" => "Accepted by Vitable census sync; refresh the remote roster for employee IDs.",
+          "submitted_at" => submitted_at,
+          "accepted_at" => accepted_at
+        ).compact
+      end
+
+      @employer.update!(
+        settings: @employer.settings.to_h.merge(
+          MANIFEST_KEY => manifest,
+          SUBMISSION_KEY => submission
+        )
+      )
+    end
+
+    def mark_employee_census_submitted(employee, submission)
+      employee.update!(
+        metadata: employee.metadata.to_h.stringify_keys.merge(
+          "vitable_census_sync_status" => "submitted",
+          "vitable_census_sync_batch_id" => submission.fetch("batch_id", nil),
+          "vitable_census_sync_accepted_at" => submission.fetch("accepted_at", nil),
+          "vitable_census_sync_submitted_at" => submission.fetch("submitted_at", nil)
+        ).compact
+      )
+    end
+
+    def reconcile_manifest_from_remote_roster(remote_employees)
+      manifest_payload = latest_manifest
+      return unless manifest_payload.present?
+
+      manifest = manifest_payload.to_h.deep_dup
+      employees = manifest.fetch("employees", [])
+      remote_by_reference = remote_employees.index_by { |remote_employee| remote_employee.fetch("reference_id", nil) }
+      remote_by_email = remote_employees.index_by { |remote_employee| remote_employee.fetch("email", nil).to_s.downcase }
+
+      manifest["employees"] = employees.map do |line|
+        attributes = line.to_h.stringify_keys
+        remote_employee = remote_by_reference[attributes.fetch("reference_id", nil)] ||
+          remote_by_email[attributes.fetch("email", nil).to_s.downcase]
+        next remote_pending_line(attributes) unless remote_employee
+
+        attributes.merge(
+          "remote_employee_id" => remote_employee.fetch("id", nil),
+          "remote_member_id" => remote_employee.fetch("member_id", nil),
+          "remote_status" => remote_employee.fetch("status", nil),
+          "remote_deduction_count" => Array(remote_employee.fetch("deductions", [])).count,
+          "status" => "synced",
+          "readiness_status" => "synced",
+          "readiness_reason" => "Matched Vitable employee from remote roster."
+        ).compact
+      end
+
+      totals = manifest.fetch("totals", {}).to_h.stringify_keys
+      manifest["totals"] = totals.merge(
+        "remote_pending_count" => manifest.fetch("employees", []).count { |line| line.fetch("remote_employee_id", nil).blank? },
+        "remote_synced_count" => manifest.fetch("employees", []).count { |line| line.fetch("remote_employee_id", nil).present? }
+      )
+      manifest
+    end
+
+    def remote_pending_line(attributes)
+      attributes.merge(
+        "status" => "remote_pending",
+        "readiness_status" => "pending",
+        "readiness_reason" => "Not present in the latest Vitable remote roster."
+      )
+    end
+
+    def employee_for_manifest_line(line)
+      attributes = line.to_h.stringify_keys
+      employee_id = attributes.fetch("employee_id", nil)
+      employee = @employer.employees.find_by(id: employee_id) if employee_id.present?
+      employee || employee_for_remote(attributes)
     end
   end
 end

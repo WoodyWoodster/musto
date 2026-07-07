@@ -2897,6 +2897,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_instance_of Vitable::CensusSyncManifestDto, detail.latest_manifest
     assert_instance_of Vitable::CensusSyncEmployeeDto, detail.employees.first
     assert_instance_of Vitable::CensusSyncHoldbackDto, detail.holdbacks.first
+    assert_nil detail.latest_submission
     assert_equal @employee.id, detail.employees.first.employee_id
     assert_equal holdback_employee.id, detail.holdbacks.first.employee_id
 
@@ -2946,6 +2947,42 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal @employee.email, sync.stats.fetch("payload").fetch("employees").first.fetch("email")
   end
 
+  test "successful Vitable census sync stores accepted submission state" do
+    @employer.update!(vitable_id: "empr_ops_123")
+    Vitable::GenerateCensusManifestCommand.new(dto: Vitable::GenerateCensusManifestDto.new(requested_by: "ops_test")).call
+    response_class = Data.define(:data)
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:submit_census_sync) do |employer_id, employees|
+        response_class.new(data: { employer_id:, accepted_at: Time.current, employee_count: employees.count })
+      end
+    end
+    previous_key = ENV[@connection.api_key_reference]
+    ENV[@connection.api_key_reference] = "vit_apk_test_value"
+
+    result = Vitable::SubmitCensusSyncCommand.new(
+      dto: Vitable::SubmitCensusSyncDto.new(requested_by: "integration_admin"),
+      gateway_class:
+    ).call
+
+    assert result.success?
+    submission = @employer.reload.settings.fetch("vitable_census_sync_last_submission")
+    assert_equal "accepted", submission.fetch("status")
+    assert_equal "empr_ops_123", submission.fetch("remote_employer_id")
+    assert_equal 1, submission.fetch("ready_count")
+    assert_equal [ "musto_employee_#{@employee.id}" ], submission.fetch("employee_reference_ids")
+    manifest_line = @employer.settings.fetch("vitable_census_sync_batch").fetch("employees").first
+    assert_equal "submitted", manifest_line.fetch("status")
+    assert_equal "submitted", @employee.reload.metadata.fetch("vitable_census_sync_status")
+    assert_equal submission.fetch("batch_id"), @employee.metadata.fetch("vitable_census_sync_batch_id")
+
+    detail = Vitable::CensusSyncQuery.new.call
+    assert_instance_of Vitable::CensusSyncSubmissionDto, detail.latest_submission
+    assert_equal "accepted", detail.latest_submission.status
+  ensure
+    ENV[@connection.api_key_reference] = previous_key
+  end
+
   test "refreshes Vitable remote roster as missing credentials sync run without API key" do
     @employer.update!(vitable_id: "empr_ops_123")
 
@@ -2962,6 +2999,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
 
   test "successful remote roster refresh stores Vitable employee IDs" do
     @employer.update!(vitable_id: "empr_ops_123")
+    Vitable::GenerateCensusManifestCommand.new(dto: Vitable::GenerateCensusManifestDto.new(requested_by: "ops_test")).call
     response_class = Data.define(:data)
     gateway_class = Class.new do
       define_method(:initialize) { |_connection| }
@@ -2975,7 +3013,18 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
               last_name: "Nguyen",
               reference_id: "musto_employee_#{Employee.find_by!(email: "casey@example.com").id}",
               status: "active",
-              member_id: "mem_remote_casey"
+              member_id: "mem_remote_casey",
+              deductions: [
+                {
+                  benefit_name: "Primary Care",
+                  deduction_amount_in_cents: 9900,
+                  deduction_category: nil,
+                  frequency: "bi_weekly",
+                  period_start_date: Date.current.beginning_of_month,
+                  period_end_date: Date.current.end_of_month,
+                  tax_classification: "Post-tax"
+                }
+              ]
             }
           ]
         )
@@ -2991,12 +3040,20 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
 
     assert result.success?
     assert_equal "empl_remote_casey", @employee.reload.vitable_id
+    assert_equal "synced", @employee.metadata.fetch("vitable_census_sync_status")
     assert_equal "active", @employee.metadata.fetch("vitable_remote_status")
     assert_equal "mem_remote_casey", @employee.metadata.fetch("vitable_member_id")
+    assert_equal 1, @employee.metadata.fetch("vitable_remote_deductions").count
+    manifest_line = @employer.reload.settings.fetch("vitable_census_sync_batch").fetch("employees").first
+    assert_equal "synced", manifest_line.fetch("status")
+    assert_equal "empl_remote_casey", manifest_line.fetch("remote_employee_id")
+    assert_equal "mem_remote_casey", manifest_line.fetch("remote_member_id")
+    assert_equal 1, manifest_line.fetch("remote_deduction_count")
     sync = @connection.sync_runs.where(operation: "remote_roster_refresh").recent_first.first
     assert_equal "succeeded", sync.status
     assert_equal 1, sync.stats.fetch("remote_employee_count")
     assert_equal 1, sync.stats.fetch("matched_employee_count")
+    assert_equal 1, sync.stats.fetch("manifest_synced_count")
   ensure
     ENV[@connection.api_key_reference] = previous_key
   end
