@@ -3222,6 +3222,21 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
 
   test "successful care member sync stores request status and refresh results" do
     prepare_care_group_profile(remote_group_id: "grp_ops_123")
+    care_location = @employer.work_locations.find_by!(name: "Ops HQ")
+    failed_employee = @employer.employees.create!(
+      first_name: "Jordan",
+      last_name: "Review",
+      email: "jordan.review@example.com",
+      department: @department,
+      work_location: care_location,
+      title: "Care Reviewer",
+      date_of_birth: Date.new(1988, 6, 12),
+      start_on: Date.current - 18.months,
+      compensation_cents: 91_000_00,
+      onboarding_status: "complete",
+      metadata: { phone: "5551236677" }
+    )
+    failed_enrollment = failed_employee.enrollments.create!(benefit_plan: @plan, status: "accepted", effective_on: Date.current.beginning_of_month)
     Vitable::GenerateCareMemberSyncCommand.new(dto: Vitable::GenerateCareMemberSyncDto.new(requested_by: "ops_test")).call
     response_class = Data.define(:data)
     gateway_class = Class.new do
@@ -3239,7 +3254,13 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
             results: {
               added_group_member_ids: [ "grpmem_casey" ],
               removed_group_member_ids: [],
-              failures: []
+              failures: [
+                {
+                  operation: "add",
+                  reference_id: "musto_employee_#{Employee.find_by!(email: "jordan.review@example.com").id}",
+                  reason: "Plan is not available for this member."
+                }
+              ]
             }
           }
         )
@@ -3263,8 +3284,25 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal "grpmsr_ops_123", request.fetch("request_id")
     assert_equal "complete", request.fetch("status")
     assert_equal [ "grpmem_casey" ], request.dig("results", "added_group_member_ids")
+    assert_equal 2, request.dig("reconciliation", "submitted_count")
+    assert_equal 1, request.dig("reconciliation", "succeeded_count")
+    assert_equal 1, request.dig("reconciliation", "failed_count")
+    assert_equal [ "musto_employee_#{failed_employee.id}" ], request.dig("reconciliation", "failure_reference_ids")
+    member_statuses = @employer.settings.fetch("vitable_care_member_sync_manifest").fetch("members").index_by { |member| member.fetch("reference_id") }
+    assert_equal "synced", member_statuses.fetch("musto_employee_#{@employee.id}").fetch("status")
+    assert_equal "failed", member_statuses.fetch("musto_employee_#{failed_employee.id}").fetch("status")
+    assert_equal "succeeded", @employee.reload.metadata.fetch("vitable_care_member_sync_status")
+    assert_equal "grpmsr_ops_123", @employee.metadata.fetch("vitable_care_member_sync_request_id")
+    assert_nil @employee.metadata.fetch("vitable_care_member_sync_failure", nil)
+    assert_equal "succeeded", @enrollment.reload.metadata.fetch("vitable_care_member_sync_status")
+    assert_equal "failed", failed_employee.reload.metadata.fetch("vitable_care_member_sync_status")
+    assert_equal "Plan is not available for this member.", failed_employee.metadata.dig("vitable_care_member_sync_failure", "reason")
+    assert_equal "failed", failed_enrollment.reload.metadata.fetch("vitable_care_member_sync_status")
     assert_equal "succeeded", @connection.sync_runs.where(operation: "care_member_sync_submit").recent_first.first.status
-    assert_equal "succeeded", @connection.sync_runs.where(operation: "care_member_sync_refresh").recent_first.first.status
+    refresh_sync = @connection.sync_runs.where(operation: "care_member_sync_refresh").recent_first.first
+    assert_equal "succeeded", refresh_sync.status
+    assert_equal 1, refresh_sync.stats.fetch("succeeded_member_count")
+    assert_equal 1, refresh_sync.stats.fetch("failed_member_count")
   ensure
     ENV[@connection.api_key_reference] = previous_key
   end

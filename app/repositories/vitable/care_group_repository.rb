@@ -262,6 +262,8 @@ module Vitable
       response_hash = serialize_response(response)
       data = response_hash.fetch("data", response_hash)
       previous = latest_member_sync_request.to_h
+      results = member_sync_results(data)
+      reconciliation = reconcile_member_sync_results(data, results:)
 
       merge_settings(
         MEMBER_SYNC_REQUEST_KEY => previous.merge(
@@ -271,6 +273,7 @@ module Vitable
           "completed_at" => data.fetch("completed_at", nil),
           "results" => data.fetch("results", nil),
           "status" => data.fetch("completed_at", nil).present? ? "complete" : "processing",
+          "reconciliation" => reconciliation.to_h,
           "refreshed_at" => Time.current.iso8601
         ).compact
       )
@@ -282,7 +285,10 @@ module Vitable
         stats: sync_run.stats.to_h.merge(
           "remote_response" => response_hash,
           "completed_at" => data.fetch("completed_at", nil),
-          "failure_count" => data.dig("results", "failures").to_a.count
+          "failure_count" => member_sync_failures(results).count,
+          "member_reconciliation_status" => reconciliation.status,
+          "succeeded_member_count" => reconciliation.succeeded_count,
+          "failed_member_count" => reconciliation.failed_count
         )
       )
       sync_run
@@ -383,6 +389,7 @@ module Vitable
         "location_name" => employee.work_location&.name || "No location",
         "plan_name" => enrollment.benefit_plan.name,
         "plan_id" => payload.fetch("plan_id"),
+        "enrollment_id" => enrollment.id,
         "reference_id" => payload.fetch("reference_id"),
         "remote_employee_id" => employee.vitable_id,
         "status" => "ready",
@@ -465,6 +472,120 @@ module Vitable
       response_hash.dig("data", "id") ||
         response_hash.dig("data", "group", "id") ||
         response_hash.fetch("id", nil)
+    end
+
+    def member_sync_results(data)
+      results = data.fetch("results", nil)
+      return {} unless results.respond_to?(:to_h)
+
+      results.to_h.stringify_keys
+    end
+
+    def member_sync_failures(results)
+      Array(results.fetch("failures", [])).map { |failure| failure.to_h.stringify_keys }
+    end
+
+    def reconcile_member_sync_results(data, results:)
+      manifest = latest_member_manifest.to_h.deep_dup
+      submitted_members = manifest.fetch("members", [])
+      return empty_member_reconciliation(status: "processing", submitted_count: submitted_members.count) if results.blank?
+
+      failures = member_sync_failures(results)
+      failures_by_reference = failures.index_by { |failure| failure.fetch("reference_id", nil) }
+      submitted_reference_ids = submitted_members.filter_map { |member| member.to_h.stringify_keys.fetch("reference_id", nil) }
+      submitted_failures_by_reference = failures_by_reference.slice(*submitted_reference_ids)
+      reconciled_at = Time.current.iso8601
+      applied_employee_ids = []
+      applied_enrollment_ids = []
+
+      manifest["members"] = submitted_members.map do |member|
+        member = member.to_h.stringify_keys
+        failure = submitted_failures_by_reference[member.fetch("reference_id", nil)]
+        status = failure ? "failed" : "succeeded"
+        employee = employee_for_member(member)
+        enrollment = enrollment_for_member(member, employee)
+
+        if employee
+          apply_member_sync_metadata(employee, member:, data:, failure:, status:, reconciled_at:)
+          applied_employee_ids << employee.id
+        end
+
+        if enrollment
+          apply_member_sync_metadata(enrollment, member:, data:, failure:, status:, reconciled_at:)
+          applied_enrollment_ids << enrollment.id
+        end
+
+        member.merge(
+          "status" => status == "succeeded" ? "synced" : "failed",
+          "readiness_status" => status == "succeeded" ? "synced" : "failed",
+          "readiness_reason" => failure ? failure.fetch("reason", "Vitable member sync failed.") : "Vitable member sync completed."
+        )
+      end
+
+      merge_settings(MEMBER_MANIFEST_KEY => manifest)
+      failed_count = submitted_failures_by_reference.keys.compact.count
+      succeeded_count = [ submitted_members.count - failed_count, 0 ].max
+
+      CareMemberSyncReconciliationDto.new(
+        status: "complete",
+        submitted_count: submitted_members.count,
+        succeeded_count:,
+        failed_count:,
+        added_group_member_ids: Array(results.fetch("added_group_member_ids", [])),
+        removed_group_member_ids: Array(results.fetch("removed_group_member_ids", [])),
+        failure_reference_ids: submitted_failures_by_reference.keys.compact,
+        applied_employee_ids: applied_employee_ids.uniq,
+        applied_enrollment_ids: applied_enrollment_ids.uniq
+      )
+    end
+
+    def empty_member_reconciliation(status:, submitted_count:)
+      CareMemberSyncReconciliationDto.new(
+        status:,
+        submitted_count:,
+        succeeded_count: 0,
+        failed_count: 0,
+        added_group_member_ids: [],
+        removed_group_member_ids: [],
+        failure_reference_ids: [],
+        applied_employee_ids: [],
+        applied_enrollment_ids: []
+      )
+    end
+
+    def employee_for_member(member)
+      employee_id = member.fetch("employee_id", nil)
+      employee = @employer.employees.find_by(id: employee_id) if employee_id.present?
+      employee || employee_from_reference_id(member.fetch("reference_id", nil))
+    end
+
+    def employee_from_reference_id(reference_id)
+      value = reference_id.to_s
+      return unless value.match?(/\Amusto_employee_\d+\z/)
+
+      @employer.employees.find_by(id: value.delete_prefix("musto_employee_").to_i)
+    end
+
+    def enrollment_for_member(member, employee)
+      return unless employee
+
+      enrollment_id = member.fetch("enrollment_id", nil)
+      enrollment = employee.enrollments.find_by(id: enrollment_id) if enrollment_id.present?
+      enrollment || employee.enrollments.includes(:benefit_plan).find { |candidate| plan_id_for(candidate.benefit_plan) == member.fetch("plan_id", nil) }
+    end
+
+    def apply_member_sync_metadata(record, member:, data:, failure:, status:, reconciled_at:)
+      metadata = record.metadata.to_h.stringify_keys.merge(
+        "vitable_care_member_sync_status" => status,
+        "vitable_care_member_sync_request_id" => data.fetch("request_id", nil),
+        "vitable_care_group_id" => data.fetch("group_id", remote_group_id),
+        "vitable_care_member_reference_id" => member.fetch("reference_id", nil),
+        "vitable_care_member_plan_id" => member.fetch("plan_id", nil),
+        "vitable_care_member_synced_at" => reconciled_at,
+        "vitable_care_member_sync_failure" => failure&.slice("operation", "reason", "reference_id")
+      )
+      metadata.delete("vitable_care_member_sync_failure") unless failure
+      record.update!(metadata:)
     end
 
     def merge_settings(attributes)

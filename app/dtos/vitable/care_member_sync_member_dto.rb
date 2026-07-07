@@ -1,6 +1,7 @@
 module Vitable
   CareMemberSyncMemberDto = Data.define(
     :employee_id,
+    :enrollment_id,
     :employee_name,
     :email,
     :phone,
@@ -20,6 +21,7 @@ module Vitable
 
       new(
         employee_id: attributes.fetch("employee_id"),
+        enrollment_id: attributes.fetch("enrollment_id", nil),
         employee_name: attributes.fetch("employee_name"),
         email: attributes.fetch("email"),
         phone: attributes.fetch("phone"),

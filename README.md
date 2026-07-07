@@ -40,7 +40,7 @@ The benefit plan administration workspace reconciles local plans against Vitable
 
 The embedded enrollment session workspace prepares employee-bound access-token requests for Vitable's embedded flows. It uses `bound_entity: { type: :employee, id: "empl_..." }`, records every issue attempt as a `SyncRun`, and filters token values before any API telemetry is persisted.
 
-The care groups workspace covers Vitable Embedded Care group creation plus asynchronous group member sync. Member manifests require remote Vitable plan IDs; missing plan mappings are recorded as holdbacks so demo submissions do not fabricate partner identifiers.
+The care groups workspace covers Vitable Embedded Care group creation plus asynchronous group member sync. Member manifests require remote Vitable plan IDs; missing plan mappings are recorded as holdbacks so demo submissions do not fabricate partner identifiers. Completed member-sync retrieve results are reconciled back into local employee and enrollment metadata by `reference_id`, including per-member failure reasons.
 
 Run a read-only demo smoke check with:
 
