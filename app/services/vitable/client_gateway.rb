@@ -198,18 +198,6 @@ module Vitable
       end
     end
 
-    def create_eligibility_policy(employer_id, payload)
-      body = eligibility_policy_payload(payload)
-
-      instrument("employer.create_eligibility_policy", :post, "/v1/employers/#{employer_id}/benefit-eligibility-policies", request_body: body) do
-        client.request(
-          method: :post,
-          path: "v1/employers/#{employer_id}/benefit-eligibility-policies",
-          body:
-        )
-      end
-    end
-
     def create_group(payload)
       body = group_payload(payload)
 
@@ -362,10 +350,6 @@ module Vitable
       attributes = payload.to_h.deep_symbolize_keys
       attributes[:address] = attributes[:address].to_h.deep_symbolize_keys.compact if attributes[:address].present?
       attributes.compact
-    end
-
-    def eligibility_policy_payload(payload)
-      payload.to_h.deep_symbolize_keys.compact
     end
 
     def group_payload(payload)

@@ -137,8 +137,8 @@
               [ "Phone", @provisioning.payload.phone_number.presence || "Optional", "create.phone_number" ],
               [ "Reference ID", @provisioning.payload.reference_id, "create.reference_id" ],
               [ "Pay frequency", @provisioning.payload.pay_frequency, "settings.pay_frequency" ],
-              [ "Eligibility classification", @provisioning.payload.eligibility_classification, "eligibility_policy.classification" ],
-              [ "Eligibility waiting period", @provisioning.payload.eligibility_waiting_period, "eligibility_policy.waiting_period" ]
+              [ "Eligibility classification", @provisioning.payload.eligibility_classification, "local_eligibility_profile.classification" ],
+              [ "Eligibility waiting period", @provisioning.payload.eligibility_waiting_period, "local_eligibility_profile.waiting_period" ]
             ].each do |label, value, key| %>
               <tr class="hover:bg-slate-50">
                 <td class="px-5 py-4 font-semibold text-slate-950"><%= label %></td>

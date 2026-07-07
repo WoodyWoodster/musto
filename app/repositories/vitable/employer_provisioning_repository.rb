@@ -2,7 +2,7 @@ module Vitable
   class EmployerProvisioningRepository < ApplicationRepository
     PACKET_KEY = "vitable_employer_provisioning_packet"
     PROVISIONING_OPERATIONS = %w[employer_create employer_settings_update].freeze
-    REQUEST_OPERATIONS = %w[employer.create employer.update_settings employer.create_eligibility_policy].freeze
+    REQUEST_OPERATIONS = %w[employer.create employer.update_settings].freeze
 
     def initialize(employer:)
       @employer = employer
@@ -72,7 +72,6 @@ module Vitable
     def mark_succeeded(sync_run, response, packet:)
       response_hash = serialize_response(response)
       remote_employer_id = extract_remote_employer_id(response_hash)
-      eligibility_policy = response_hash.dig("data", "eligibility_policy") || response_hash.fetch("eligibility_policy", nil)
       synced_at = Time.current.iso8601
       settings = @employer.settings.to_h.merge(
         "vitable_employer_provisioned_at" => synced_at,
@@ -84,7 +83,7 @@ module Vitable
           "remote_employer_id" => remote_employer_id.presence || @employer.vitable_id
         },
         "vitable_pay_frequency" => packet.fetch("settings_payload", {}).fetch("pay_frequency", nil),
-        "vitable_eligibility_policy" => eligibility_policy.presence || @employer.settings.to_h.fetch("vitable_eligibility_policy", nil)
+        "vitable_eligibility_policy" => local_eligibility_profile(packet, synced_at)
       )
       @employer.update!(vitable_id: remote_employer_id) if remote_employer_id.present? && @employer.vitable_id.blank?
       @employer.update!(settings:)
@@ -117,9 +116,9 @@ module Vitable
     def build_packet(requested_by:)
       create_payload = create_payload_for(primary_location)
       settings_payload = { "pay_frequency" => vitable_pay_frequency }
-      eligibility_policy_payload = eligibility_policy_payload_for
+      eligibility_profile = eligibility_profile_for
       mode = @employer.vitable_id.present? ? "update_settings" : "create"
-      holdbacks = holdbacks_for(mode:, create_payload:, settings_payload:, eligibility_policy_payload:)
+      holdbacks = holdbacks_for(mode:, create_payload:, settings_payload:, eligibility_profile:)
       endpoint = mode == "create" ? "/v1/employers" : "/v1/employers/:employer_id/settings"
 
       {
@@ -138,13 +137,13 @@ module Vitable
         },
         "create_payload" => create_payload,
         "settings_payload" => settings_payload,
-        "eligibility_policy_payload" => eligibility_policy_payload,
-        "eligibility_policy_endpoint" => "/v1/employers/:employer_id/benefit-eligibility-policies",
-        "eligibility_policy_action" => eligibility_policy_synced? ? "skip_existing" : "create",
+        "eligibility_policy_payload" => eligibility_profile,
+        "eligibility_policy_endpoint" => "employer.eligibility_policy_created webhook",
+        "eligibility_policy_action" => "local_profile_only",
         "api_payload" => {
           "create" => create_payload,
           "settings" => settings_payload,
-          "eligibility_policy" => eligibility_policy_payload
+          "local_eligibility_profile" => eligibility_profile
         },
         "holdbacks" => holdbacks
       }
@@ -173,14 +172,14 @@ module Vitable
       }.compact
     end
 
-    def eligibility_policy_payload_for
+    def eligibility_profile_for
       {
         "classification" => settings.fetch("eligibility_classification", "All").presence,
         "waiting_period" => settings.fetch("eligibility_waiting_period", "1st of the following month").presence
       }.compact
     end
 
-    def holdbacks_for(mode:, create_payload:, settings_payload:, eligibility_policy_payload:)
+    def holdbacks_for(mode:, create_payload:, settings_payload:, eligibility_profile:)
       holdbacks = []
 
       if mode == "create"
@@ -195,10 +194,10 @@ module Vitable
         holdbacks << holdback(field: "pay_frequency", reason_code: "missing_pay_frequency", reason: "Pay frequency is required before Vitable employer settings can be updated.")
       end
 
-      required_eligibility_policy_fields(eligibility_policy_payload).each do |field, value|
+      required_eligibility_profile_fields(eligibility_profile).each do |field, value|
         next if value.present?
 
-        holdbacks << holdback(field:, reason_code: "missing_eligibility_policy_field", reason: "#{field.to_s.humanize} is required before creating a Vitable eligibility policy.")
+        holdbacks << holdback(field:, reason_code: "missing_eligibility_profile_field", reason: "#{field.to_s.humanize} is required before the Vitable eligibility profile is ready.")
       end
 
       holdbacks
@@ -217,16 +216,11 @@ module Vitable
       }
     end
 
-    def required_eligibility_policy_fields(eligibility_policy_payload)
+    def required_eligibility_profile_fields(eligibility_profile)
       {
-        classification: eligibility_policy_payload.fetch("classification", nil),
-        waiting_period: eligibility_policy_payload.fetch("waiting_period", nil)
+        classification: eligibility_profile.fetch("classification", nil),
+        waiting_period: eligibility_profile.fetch("waiting_period", nil)
       }
-    end
-
-    def eligibility_policy_synced?
-      policy = @employer.settings.to_h.fetch("vitable_eligibility_policy", nil)
-      policy.present? && policy.to_h.fetch("status", nil) != "endpoint_unavailable"
     end
 
     def holdback(field:, reason_code:, reason:)
@@ -298,6 +292,20 @@ module Vitable
       response_hash.dig("data", "id") ||
         response_hash.dig("data", "employer", "id") ||
         response_hash.fetch("id", nil)
+    end
+
+    def local_eligibility_profile(packet, synced_at)
+      profile = packet.fetch("eligibility_policy_payload", {}).to_h.stringify_keys
+      previous = @employer.settings.to_h.fetch("vitable_eligibility_policy", {}).to_h.stringify_keys
+
+      previous.merge(
+        profile.merge(
+          "status" => "local_ready",
+          "source" => "local_profile",
+          "synced_with_employer_at" => synced_at,
+          "webhook_event_name" => "employer.eligibility_policy_created"
+        )
+      ).compact
     end
   end
 end

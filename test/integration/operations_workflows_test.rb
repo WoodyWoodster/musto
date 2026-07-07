@@ -2805,7 +2805,8 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal "bi_weekly", packet.fetch("settings_payload").fetch("pay_frequency")
     assert_equal "All", packet.fetch("eligibility_policy_payload").fetch("classification")
     assert_equal "1st of the following month", packet.fetch("eligibility_policy_payload").fetch("waiting_period")
-    assert_equal "create", packet.fetch("eligibility_policy_action")
+    assert_equal "local_profile_only", packet.fetch("eligibility_policy_action")
+    assert_equal "employer.eligibility_policy_created webhook", packet.fetch("eligibility_policy_endpoint")
     assert_empty packet.fetch("holdbacks")
   end
 
@@ -2823,19 +2824,16 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_match @connection.api_key_reference, sync.error_message
     assert_equal "integration_admin", sync.stats.fetch("requested_by")
     assert_equal "ops-benefits@example.com", sync.stats.dig("payload", "create", "email")
-    assert_equal "All", sync.stats.dig("payload", "eligibility_policy", "classification")
+    assert_equal "All", sync.stats.dig("payload", "local_eligibility_profile", "classification")
   end
 
-  test "successful employer provisioning command stores remote id and eligibility policy" do
+  test "successful employer provisioning command stores remote id and local eligibility profile" do
     prepare_provisioning_profile
     response_class = Data.define(:data)
     gateway_class = Class.new do
       define_method(:initialize) { |_connection| }
       define_method(:create_employer) do |payload|
         response_class.new(data: { id: "empr_created_123", name: payload.fetch("name") })
-      end
-      define_method(:create_eligibility_policy) do |employer_id, payload|
-        response_class.new(data: { id: "bep_created_123", employer_id:, classification: payload.fetch("classification"), waiting_period: payload.fetch("waiting_period") })
       end
     end
     previous_key = ENV[@connection.api_key_reference]
@@ -2849,11 +2847,12 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert result.success?
     assert_equal "empr_created_123", @employer.reload.vitable_id
     assert_equal "bi_weekly", @employer.settings.fetch("vitable_pay_frequency")
-    assert_equal "bep_created_123", @employer.settings.dig("vitable_eligibility_policy", "data", "id")
+    assert_equal "local_profile", @employer.settings.dig("vitable_eligibility_policy", "source")
+    assert_equal "All", @employer.settings.dig("vitable_eligibility_policy", "classification")
     sync = @connection.sync_runs.where(operation: "employer_create").recent_first.first
     assert_equal "succeeded", sync.status
     assert_equal "empr_created_123", sync.stats.fetch("remote_employer_id")
-    assert_equal "bep_created_123", sync.stats.dig("remote_response", "data", "eligibility_policy", "data", "id")
+    assert_nil sync.stats.dig("remote_response", "data", "eligibility_policy")
   ensure
     ENV[@connection.api_key_reference] = previous_key
   end
@@ -2865,9 +2864,6 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       define_method(:initialize) { |_connection| }
       define_method(:update_employer_settings) do |employer_id, pay_frequency|
         response_class.new(data: { employer_id:, pay_frequency: })
-      end
-      define_method(:create_eligibility_policy) do |employer_id, payload|
-        response_class.new(data: { id: "bep_updated_123", employer_id:, classification: payload.fetch("classification") })
       end
     end
     previous_key = ENV[@connection.api_key_reference]
@@ -2884,7 +2880,8 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     sync = @connection.sync_runs.where(operation: "employer_settings_update").recent_first.first
     assert_equal "succeeded", sync.status
     assert_equal "bi_weekly", sync.stats.dig("payload", "settings", "pay_frequency")
-    assert_equal "bep_updated_123", sync.stats.dig("remote_response", "data", "eligibility_policy", "data", "id")
+    assert_nil sync.stats.dig("remote_response", "data", "eligibility_policy")
+    assert_equal "local_profile", @employer.settings.dig("vitable_eligibility_policy", "source")
   ensure
     ENV[@connection.api_key_reference] = previous_key
   end

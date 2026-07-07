@@ -42,7 +42,7 @@ module Vitable
         EmployerProvisioningMetricDto.new(label: "Remote employer", value: @employer&.vitable_id.presence || "Create pending", hint: "Vitable employer identifier", status: @employer&.vitable_id.present? ? "ready" : "pending", accent: "bg-indigo-500", format: "text"),
         EmployerProvisioningMetricDto.new(label: "Required fields", value: holdbacks.count.zero? ? "Complete" : "#{holdbacks.count} missing", hint: "legal entity, billing email, address, payroll cadence", status: holdbacks.any? ? "blocked" : "ready", accent: "bg-emerald-500", format: "text"),
         EmployerProvisioningMetricDto.new(label: "Pay frequency", value: @employer&.settings.to_h.fetch("pay_frequency", "missing").to_s.humanize, hint: "mapped to Vitable settings enum", status: @employer&.settings.to_h.fetch("pay_frequency", nil).present? ? "ready" : "blocked", accent: "bg-cyan-500", format: "text"),
-        EmployerProvisioningMetricDto.new(label: "Eligibility policy", value: eligibility_policy_value, hint: "classification and waiting period", status: eligibility_policy_status, accent: "bg-violet-500", format: "text"),
+        EmployerProvisioningMetricDto.new(label: "Eligibility profile", value: eligibility_profile_value, hint: "classification and waiting period", status: eligibility_profile_status, accent: "bg-violet-500", format: "text"),
         EmployerProvisioningMetricDto.new(label: "Last provision", value: last_run&.status&.humanize || "Not sent", hint: connection ? "credential-aware provisioning attempt" : "no Vitable connection", status: last_run&.status || "pending", accent: "bg-amber-500", format: "text")
       ]
     end
@@ -70,9 +70,9 @@ module Vitable
           detail: [ payload.address_line_1, payload.city, payload.state, payload.zipcode ].compact_blank.join(", ").presence || "A non-remote employer address is required for create."
         ),
         EmployerProvisioningPreflightCheckDto.new(
-          label: "Eligibility policy",
+          label: "Eligibility profile",
           status: [ payload.eligibility_classification, payload.eligibility_waiting_period ].all?(&:present?) ? "ready" : "blocked",
-          detail: [ payload.eligibility_classification, payload.eligibility_waiting_period ].compact_blank.join(" · ").presence || "Classification and waiting period are required before eligibility policy creation."
+          detail: [ payload.eligibility_classification, payload.eligibility_waiting_period ].compact_blank.join(" · ").presence || "Classification and waiting period are required before eligibility is ready."
         ),
         EmployerProvisioningPreflightCheckDto.new(
           label: "Provisioning packet",
@@ -87,20 +87,19 @@ module Vitable
       ]
     end
 
-    def eligibility_policy
+    def eligibility_profile
       @employer&.settings.to_h.fetch("vitable_eligibility_policy", nil).to_h
     end
 
-    def eligibility_policy_status
-      return "needs_review" if eligibility_policy.fetch("status", nil) == "endpoint_unavailable"
-      return "ready" if eligibility_policy.present?
+    def eligibility_profile_status
+      return "ready" if eligibility_profile.present?
 
       "pending"
     end
 
-    def eligibility_policy_value
-      return "Demo unavailable" if eligibility_policy.fetch("status", nil) == "endpoint_unavailable"
-      return "Synced" if eligibility_policy.present?
+    def eligibility_profile_value
+      return "Local ready" if eligibility_profile.fetch("source", nil) == "local_profile"
+      return "Webhook received" if eligibility_profile.present?
 
       "Create pending"
     end

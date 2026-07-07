@@ -41,6 +41,13 @@ module Vitable
       assert_equal :semi_monthly, gateway.send(:pay_frequency_value, "semimonthly")
     end
 
+    test "does not expose undocumented eligibility policy writes" do
+      organization = Organization.create!(name: "Gateway Capability Test", external_id: "org_gateway_capability_test")
+      connection = organization.integration_connections.create!(provider: "vitable", environment: "production")
+
+      assert_not_respond_to ClientGateway.new(connection), :create_eligibility_policy
+    end
+
     test "normalizes group member sync payloads for the SDK" do
       organization = Organization.create!(name: "Gateway Group Payload Test", external_id: "org_gateway_group_payload_test")
       connection = organization.integration_connections.create!(provider: "vitable", environment: "production")

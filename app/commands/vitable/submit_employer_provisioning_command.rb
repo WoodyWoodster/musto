@@ -36,43 +36,15 @@ module Vitable
 
     def submit_packet(packet)
       gateway = @gateway_class.new(@repository.connection)
-      eligibility_policy_response = nil
 
       if packet.fetch("mode") == "create"
         employer_response = gateway.create_employer(packet.fetch("create_payload"))
         remote_employer_id = remote_employer_id_from(employer_response) || @employer.vitable_id
         @employer.update!(vitable_id: remote_employer_id) if remote_employer_id.present? && @employer.vitable_id.blank?
-        eligibility_policy_response = create_eligibility_policy_if_needed(gateway, remote_employer_id, packet)
-        combined_response(employer_response, eligibility_policy_response)
+        employer_response
       else
-        settings_response = gateway.update_employer_settings(@employer.vitable_id, packet.fetch("settings_payload").fetch("pay_frequency"))
-        eligibility_policy_response = create_eligibility_policy_if_needed(gateway, @employer.vitable_id, packet)
-        combined_response(settings_response, eligibility_policy_response)
+        gateway.update_employer_settings(@employer.vitable_id, packet.fetch("settings_payload").fetch("pay_frequency"))
       end
-    end
-
-    def create_eligibility_policy_if_needed(gateway, employer_id, packet)
-      return if employer_id.blank?
-      return if packet.fetch("eligibility_policy_action", "create") == "skip_existing"
-
-      gateway.create_eligibility_policy(employer_id, packet.fetch("eligibility_policy_payload"))
-    rescue VitableConnect::Errors::NotFoundError => e
-      raise unless @repository.connection.effective_api_base_url == IntegrationConnection::DEMO_BASE_URL
-
-      {
-        status: "endpoint_unavailable",
-        endpoint: "/v1/employers/#{employer_id}/benefit-eligibility-policies",
-        message: "Vitable demo returned 404 for eligibility policy creation.",
-        error_class: e.class.name
-      }
-    end
-
-    def combined_response(primary_response, eligibility_policy_response)
-      primary_hash = serialize_response(primary_response)
-      eligibility_policy_hash = serialize_response(eligibility_policy_response)
-      data = primary_hash.fetch("data", primary_hash).merge("eligibility_policy" => eligibility_policy_hash.presence)
-
-      { "data" => data.compact }
     end
 
     def remote_employer_id_from(response)
