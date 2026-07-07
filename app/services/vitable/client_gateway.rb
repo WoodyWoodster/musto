@@ -36,6 +36,14 @@ module Vitable
       end
     end
 
+    def list_employers(limit: 100)
+      query = { limit: }
+
+      instrument("employer.list", :get, "/v1/employers", request_body: query) do
+        client.employers.list(query)
+      end
+    end
+
     def submit_census_sync(employer_id, employees)
       body = {
         employer_id:,
@@ -52,6 +60,30 @@ module Vitable
 
       instrument("employer.list_employees", :get, "/v1/employers/#{employer_id}/employees", request_body: query) do
         client.employers.list_employees(employer_id, query)
+      end
+    end
+
+    def list_employee_enrollments(employee_id, limit: 100)
+      query = { limit: }
+
+      instrument("employee.list_enrollments", :get, "/v1/employees/#{employee_id}/enrollments", request_body: query) do
+        client.employees.list_enrollments(employee_id, query)
+      end
+    end
+
+    def list_plans(limit: 100)
+      query = { limit: }
+
+      instrument("plan.list", :get, "/v1/plans", request_body: query) do
+        client.plans.list(query)
+      end
+    end
+
+    def list_webhook_events(limit: 20)
+      query = { limit: }
+
+      instrument("webhook_event.list", :get, "/v1/webhook-events", request_body: query) do
+        client.webhook_events.list(query)
       end
     end
 

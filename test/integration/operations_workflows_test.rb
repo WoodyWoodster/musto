@@ -2558,6 +2558,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_instance_of Vitable::ConnectionHealthCheckDto, detail.health_checks.first
     assert_instance_of Vitable::EndpointCoverageDto, detail.endpoint_coverage.first
     assert_instance_of Vitable::ConnectionTimelineItemDto, detail.timeline.first
+    assert_instance_of Vitable::ApiSnapshotDto, detail.api_snapshot
     assert_instance_of Vitable::WebhookSimulatorDto, detail.simulator
     assert_instance_of Vitable::WebhookSimulationEventOptionDto, detail.simulator.event_options.first
     assert_equal @sync_run.id, detail.sync_runs.first.id
@@ -2568,12 +2569,57 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_select "h1", "#{@organization.name} Vitable connection"
+    assert_select "h2", "Remote API snapshot"
     assert_select "h2", "Test event composer"
     assert_select "h2", "Readiness checks"
     assert_select "h2", "Resource coverage"
     assert_select "h2", "Connection timeline"
     assert_select "h2", "Webhook queue"
     assert_select "h2", "Connection activity"
+  end
+
+  test "refreshes Vitable API snapshot as missing credentials sync run without API key" do
+    assert_difference -> { @connection.sync_runs.where(operation: "api_snapshot_refresh").count }, 1 do
+      post refresh_api_snapshot_integration_connection_path(@connection), params: { requested_by: "integration_admin" }
+    end
+
+    assert_redirected_to integration_connection_path(@connection)
+    sync = @connection.sync_runs.where(operation: "api_snapshot_refresh").recent_first.first
+    assert_equal "needs_credentials", sync.status
+    assert_match @connection.api_key_reference, sync.error_message
+    assert_equal "integration_admin", sync.stats.fetch("requested_by")
+    assert_equal "needs_credentials", @connection.reload.status
+  end
+
+  test "successful Vitable API snapshot refresh stores remote read counts" do
+    @employee.update!(vitable_id: "empl_ops_casey")
+    response_class = Data.define(:data)
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:list_employers) { response_class.new(data: [ { id: "empr_ops_123", name: "Atlas Global Services" } ]) }
+      define_method(:list_plans) { response_class.new(data: [ { id: "plan_dpc", name: "Direct Primary Care" }, { id: "plan_mec", name: "MEC" } ]) }
+      define_method(:list_webhook_events) { response_class.new(data: [ { id: "wevt_remote_123", event_name: "employee.eligibility_granted" } ]) }
+      define_method(:list_employee_enrollments) do |employee_id|
+        response_class.new(data: [ { id: "enrl_remote_123", employee_id:, status: "pending" } ])
+      end
+    end
+    previous_key = ENV[@connection.api_key_reference]
+    ENV[@connection.api_key_reference] = "vit_apk_test_value"
+
+    result = Vitable::RefreshApiSnapshotCommand.new(
+      dto: Vitable::RefreshApiSnapshotDto.new(connection_id: @connection.id, requested_by: "integration_admin"),
+      gateway_class:
+    ).call
+
+    assert result.success?
+    snapshot = @connection.reload.metadata.fetch("api_snapshot")
+    assert_equal 1, snapshot.dig("counts", "remote_employer_count")
+    assert_equal 2, snapshot.dig("counts", "remote_plan_count")
+    assert_equal 1, snapshot.dig("counts", "remote_webhook_event_count")
+    assert_equal 1, snapshot.dig("counts", "remote_employee_enrollment_count")
+    assert_equal @employee.id, snapshot.fetch("employee_enrollments").first.fetch("local_employee_id")
+  ensure
+    ENV[@connection.api_key_reference] = previous_key
   end
 
   test "vitable employer provisioning workspace exposes packet DTOs" do

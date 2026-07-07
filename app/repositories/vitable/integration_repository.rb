@@ -193,6 +193,62 @@ module Vitable
       sync_run
     end
 
+    def create_api_snapshot_run(connection:, requested_by:)
+      connection.sync_runs.create!(
+        resource_type: "connection",
+        operation: "api_snapshot_refresh",
+        status: "running",
+        started_at: Time.current,
+        stats: {
+          "requested_by" => requested_by,
+          "resource_id" => "connection_#{connection.id}",
+          "endpoints" => %w[/v1/employers /v1/plans /v1/webhook-events /v1/employees/:id/enrollments]
+        }
+      )
+    end
+
+    def succeed_api_snapshot_run(connection, sync_run, snapshot)
+      refreshed_at = Time.current
+      counts = snapshot_counts(snapshot)
+      connection.update!(
+        status: "active",
+        last_synced_at: refreshed_at,
+        metadata: connection.metadata.to_h.merge(
+          "api_snapshot" => snapshot.merge(
+            "refreshed_at" => refreshed_at.iso8601,
+            "counts" => counts
+          )
+        )
+      )
+      sync_run.update!(
+        status: "succeeded",
+        completed_at: refreshed_at,
+        error_message: nil,
+        stats: sync_run.stats.to_h.merge(counts).merge("refreshed_at" => refreshed_at.iso8601)
+      )
+      sync_run
+    end
+
+    def fail_api_snapshot_run(connection, sync_run, error)
+      connection.update!(
+        status: "failed",
+        metadata: connection.metadata.to_h.merge(
+          "api_snapshot_error" => {
+            "message" => error.message,
+            "error_class" => error.class.name,
+            "checked_at" => Time.current.iso8601
+          }
+        )
+      )
+      sync_run&.update!(
+        status: "failed",
+        completed_at: Time.current,
+        error_message: error.message,
+        stats: sync_run.stats.to_h.merge("error_class" => error.class.name)
+      )
+      sync_run
+    end
+
     private
 
     def update_connection_verification(connection, status:, verification:, last_synced_at: connection.last_synced_at)
@@ -214,6 +270,15 @@ module Vitable
       return metadata.to_h unless signature_verification
 
       metadata.to_h.merge("signature_verification" => signature_verification.to_metadata)
+    end
+
+    def snapshot_counts(snapshot)
+      {
+        "remote_employer_count" => snapshot.fetch("employers", []).count,
+        "remote_plan_count" => snapshot.fetch("plans", []).count,
+        "remote_webhook_event_count" => snapshot.fetch("webhook_events", []).count,
+        "remote_employee_enrollment_count" => snapshot.fetch("employee_enrollments", []).sum { |entry| entry.fetch("enrollments", []).count }
+      }
     end
   end
 end

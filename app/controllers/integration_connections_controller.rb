@@ -13,6 +13,16 @@ class IntegrationConnectionsController < ApplicationController
     )
   end
 
+  def refresh_api_snapshot
+    dto = Vitable::RefreshApiSnapshotDto.from_params(params)
+    result = Vitable::RefreshApiSnapshotCommand.new(dto:).call
+
+    redirect_to(
+      result.record ? integration_connection_path(dto.connection_id) : integrations_path,
+      notice: result.success? ? "Vitable API snapshot refreshed." : result.errors.to_sentence
+    )
+  end
+
   def simulate_webhook
     dto = Vitable::SimulateWebhookEventDto.from_params(params)
     result = Vitable::SimulateWebhookEventCommand.new(dto:).call

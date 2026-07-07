@@ -12,6 +12,7 @@ Rails.application.routes.draw do
   end
   resources :integration_connections, only: [ :show ] do
     post :verify_credentials, on: :member
+    post :refresh_api_snapshot, on: :member
     post :simulate_webhook, on: :member
   end
 
