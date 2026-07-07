@@ -361,17 +361,17 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       error_message: "Unauthorized"
     )
     @webhook_event = @connection.webhook_events.create!(
-      event_id: "wevt_ops_employee_created",
+      event_id: "wevt_ops_eligibility_granted",
       organization_external_id: @organization.external_id,
-      event_name: "employee.created",
+      event_name: "employee.eligibility_granted",
       resource_type: "employee",
       resource_id: "empl_ops_123",
       occurred_at: Time.current,
       status: "needs_credentials",
       payload: {
-        event_id: "wevt_ops_employee_created",
+        event_id: "wevt_ops_eligibility_granted",
         organization_id: @organization.external_id,
-        event_name: "employee.created",
+        event_name: "employee.eligibility_granted",
         resource_type: "employee",
         resource_id: "empl_ops_123",
         created_at: Time.current.iso8601
@@ -2693,6 +2693,11 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_instance_of Vitable::ApiSnapshotDto, detail.api_snapshot
     assert_instance_of Vitable::WebhookSimulatorDto, detail.simulator
     assert_instance_of Vitable::WebhookSimulationEventOptionDto, detail.simulator.event_options.first
+    assert_equal 11, detail.simulator.event_options.count
+    assert_equal %w[enrollment employee employer], detail.simulator.resource_options
+    assert_includes detail.simulator.event_options.map(&:event_name), "employee.deduction_created"
+    assert_not_includes detail.simulator.event_options.map(&:event_name), "benefit_plan.updated"
+    assert_equal %w[enrollment employee employer], detail.endpoint_coverage.map(&:resource_type)
     assert_equal @sync_run.id, detail.sync_runs.first.id
     assert_equal @request_log.id, detail.request_logs.first.id
     assert_not detail.webhook_secret_present
@@ -3294,21 +3299,21 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
   test "simulates a Vitable webhook through the connection workspace" do
     assert_difference -> { WebhookEvent.count }, 1 do
       post simulate_webhook_integration_connection_path(@connection), params: {
-        event_id: "wevt_ops_simulated_benefit_plan",
-        event_name: "benefit_plan.updated",
-        resource_type: "benefit_plan",
-        resource_id: "bpln_ops_primary_care"
+        event_id: "wevt_ops_simulated_enrollment",
+        event_name: "enrollment.accepted",
+        resource_type: "enrollment",
+        resource_id: "enrl_ops_primary_care"
       }
     end
 
-    event = WebhookEvent.find_by!(event_id: "wevt_ops_simulated_benefit_plan")
+    event = WebhookEvent.find_by!(event_id: "wevt_ops_simulated_enrollment")
     assert_redirected_to webhook_event_path(event)
     assert_equal @connection, event.integration_connection
     assert_equal @organization.external_id, event.organization_external_id
-    assert_equal "benefit_plan.updated", event.event_name
+    assert_equal "enrollment.accepted", event.event_name
     assert_equal "needs_credentials", event.status
     assert_equal "skipped", event.metadata.dig("signature_verification", "status")
-    assert_equal "bpln_ops_primary_care", event.payload.fetch("resource_id")
+    assert_equal "enrl_ops_primary_care", event.payload.fetch("resource_id")
   end
 
   test "replays webhook event through command action" do

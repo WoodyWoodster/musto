@@ -22,7 +22,7 @@ module Vitable
     :api_snapshot,
     :simulator
   ) do
-    RESOURCE_TYPES = %w[employee enrollment benefit_plan group payroll_deduction].freeze
+    RESOURCE_TYPES = %w[enrollment employee employer].freeze
 
     def self.from_record(record, webhook_events:, sync_runs:, request_logs:)
       event_dtos = webhook_events.map { |event| Operations::IntegrationWebhookEventDto.from_record(event) }
