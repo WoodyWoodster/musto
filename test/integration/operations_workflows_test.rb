@@ -2697,7 +2697,22 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal %w[enrollment employee employer], detail.simulator.resource_options
     assert_includes detail.simulator.event_options.map(&:event_name), "employee.deduction_created"
     assert_not_includes detail.simulator.event_options.map(&:event_name), "benefit_plan.updated"
-    assert_equal %w[enrollment employee employer], detail.endpoint_coverage.map(&:resource_type)
+    assert_equal [
+      "auth tokens",
+      "employers",
+      "employer settings",
+      "census sync",
+      "remote roster",
+      "employees",
+      "employee enrollments",
+      "enrollments",
+      "plans",
+      "groups",
+      "group member sync",
+      "webhook events"
+    ], detail.endpoint_coverage.map(&:resource_type)
+    employee_coverage = detail.endpoint_coverage.find { |coverage| coverage.resource_type == "employees" }
+    assert_operator employee_coverage.activity_count, :>=, 2
     assert_equal @sync_run.id, detail.sync_runs.first.id
     assert_equal @request_log.id, detail.request_logs.first.id
     assert_not detail.webhook_secret_present
@@ -2709,7 +2724,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_select "h2", "Remote API snapshot"
     assert_select "h2", "Test event composer"
     assert_select "h2", "Readiness checks"
-    assert_select "h2", "Resource coverage"
+    assert_select "h2", "API coverage"
     assert_select "h2", "Connection timeline"
     assert_select "h2", "Webhook queue"
     assert_select "h2", "Connection activity"

@@ -196,17 +196,18 @@
 
     <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
       <div class="border-b border-slate-100 px-5 py-4">
-        <h2 class="text-base font-semibold text-slate-950">Resource coverage</h2>
-        <p class="text-sm text-slate-500">Webhook activity mapped to the local fetch contracts this platform can exercise.</p>
+        <h2 class="text-base font-semibold text-slate-950">API coverage</h2>
+        <p class="text-sm text-slate-500">Documented Vitable endpoints exercised by request logs, sync runs, snapshots, and resource events.</p>
       </div>
       <div class="overflow-x-auto">
         <table class="min-w-full divide-y divide-slate-100 text-sm">
           <thead class="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
             <tr>
               <th class="px-5 py-3">Resource</th>
+              <th class="px-5 py-3">Method</th>
               <th class="px-5 py-3">Fetch path</th>
-              <th class="px-5 py-3">Events</th>
-              <th class="px-5 py-3">Last seen</th>
+              <th class="px-5 py-3">Activity</th>
+              <th class="px-5 py-3">Last activity</th>
               <th class="px-5 py-3">Status</th>
             </tr>
           </thead>
@@ -214,8 +215,9 @@
             <% @connection.endpoint_coverage.each do |coverage| %>
               <tr class="hover:bg-slate-50">
                 <td class="px-5 py-4 font-medium text-slate-950"><%= coverage.resource_type.humanize %></td>
+                <td class="px-5 py-4 text-xs font-semibold text-slate-500"><%= coverage.method %></td>
                 <td class="px-5 py-4 font-mono text-xs text-slate-600"><%= coverage.fetch_path %></td>
-                <td class="px-5 py-4 text-slate-600"><%= coverage.events_count %></td>
+                <td class="px-5 py-4 text-slate-600"><%= coverage.activity_count %></td>
                 <td class="px-5 py-4 text-slate-600"><%= coverage.last_seen_at ? time_ago_in_words(coverage.last_seen_at) + " ago" : "n/a" %></td>
                 <td class="px-5 py-4"><%= status_pill(coverage.status) %></td>
               </tr>
