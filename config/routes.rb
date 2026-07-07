@@ -102,6 +102,7 @@ Rails.application.routes.draw do
   get "benefits", to: "operations#benefits"
   get "benefits/plans", to: "benefits_plan_admin#show", as: :benefits_plan_admin
   post "benefits/plans/catalog_packet", to: "benefits_plan_admin#generate_packet", as: :generate_benefit_plan_catalog_packet
+  post "benefits/plans/vitable_mappings", to: "benefits_plan_admin#refresh_vitable_mappings", as: :refresh_vitable_plan_mappings
   post "benefits/plans/:id/publish", to: "benefits_plan_admin#publish", as: :publish_benefit_plan
   get "benefits/open-enrollment", to: "open_enrollment#show", as: :benefits_open_enrollment
   post "benefits/open-enrollment/launch", to: "open_enrollment#launch", as: :launch_open_enrollment

@@ -2026,6 +2026,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_instance_of Benefits::PlanAdminMetricDto, detail.metrics.first
     assert_instance_of Benefits::PlanDesignDto, detail.plans.first
     assert_instance_of Benefits::PlanReadinessIssueDto, detail.issues.first
+    assert_instance_of Benefits::VitablePlanCatalogSnapshotDto, detail.remote_snapshot
     assert detail.plans.any? { |plan| plan.id == @plan.id }
     assert detail.issues.any? { |issue| issue.plan_id == @plan.id }
 
@@ -2033,10 +2034,63 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_select "h1", "Benefit plan administration"
+    assert_select "h2", "Remote plan mappings"
     assert_select "h2", "Plan design catalog"
     assert_select "h2", "Readiness issues"
     assert_select "h2", "Catalog packet lines"
     assert_select "h2", "Packet holdbacks"
+    assert_select "button", "Refresh plan mappings"
+  end
+
+  test "refreshes Vitable plan mappings as missing credentials sync run without API key" do
+    assert_difference -> { @connection.sync_runs.where(operation: "plan_mapping_refresh").count }, 1 do
+      post refresh_vitable_plan_mappings_path, params: { requested_by: "benefits_admin" }
+    end
+
+    assert_redirected_to benefits_plan_admin_path
+    sync = @connection.sync_runs.where(operation: "plan_mapping_refresh").recent_first.first
+    assert_equal "needs_credentials", sync.status
+    assert_match @connection.api_key_reference, sync.error_message
+    assert_equal "benefits_admin", sync.stats.fetch("requested_by")
+    assert_equal "/v1/plans", sync.stats.fetch("endpoint")
+  end
+
+  test "successful Vitable plan mapping refresh stores remote plan ids" do
+    response_class = Data.define(:data)
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:list_plans) do
+        response_class.new(
+          data: [
+            { id: "plan_remote_primary", name: "Primary Care" },
+            { id: "plan_remote_dental", name: "Dental" },
+            { id: "plan_remote_unknown", name: "Hospital Indemnity" }
+          ]
+        )
+      end
+    end
+    previous_key = ENV[@connection.api_key_reference]
+    ENV[@connection.api_key_reference] = "vit_apk_test_value"
+
+    result = Benefits::RefreshVitablePlanMappingsCommand.new(
+      dto: Benefits::RefreshVitablePlanMappingsDto.new(requested_by: "benefits_admin"),
+      gateway_class:
+    ).call
+
+    assert result.success?
+    assert_equal "plan_remote_primary", @plan.reload.vitable_id
+    assert_equal "plan_remote_dental", @pending_plan.reload.vitable_id
+    snapshot = @employer.reload.settings.fetch("vitable_plan_catalog_snapshot")
+    assert_equal 3, snapshot.fetch("remote_plans").count
+    assert_equal 2, snapshot.fetch("mapped_plan_count")
+    assert_equal "plan_remote_unknown", snapshot.fetch("unmatched_remote_plans").first.fetch("id")
+    assert_equal "plans.list", @plan.metadata.dig("vitable_plan_mapping", "matched_by")
+
+    detail = Benefits::PlanAdministrationQuery.new.call
+    assert_instance_of Benefits::VitablePlanMappingDto, detail.mapped_plans.first
+    assert_instance_of Benefits::VitablePlanMappingIssueDto, detail.mapping_issues.first
+  ensure
+    ENV[@connection.api_key_reference] = previous_key
   end
 
   test "publishes a ready benefit plan through command action" do

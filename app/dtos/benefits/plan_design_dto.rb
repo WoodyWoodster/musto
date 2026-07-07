@@ -53,7 +53,7 @@ module Benefits
     end
 
     def publishable?
-      readiness_issues.none? { |issue| issue.reason_code != "unpublished_plan" }
+      readiness_issues.none? { |issue| !issue.reason_code.in?(%w[unpublished_plan missing_remote_plan_id]) }
     end
   end
 end

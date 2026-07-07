@@ -36,6 +36,8 @@ The Vitable employer provisioning workspace builds the `POST /v1/employers` payl
 
 The Vitable census sync workspace builds a local review manifest for `POST /v1/employers/:id/census-sync`, separates ready employee rows from holdbacks, and records submit attempts as `SyncRun` rows. Without `VITABLE_CONNECT_API_KEY`, submits are accepted by the app as `needs_credentials` runs so the full workflow can be proofed before live credentials exist.
 
+The benefit plan administration workspace reconciles local plans against Vitable's read-only `GET /v1/plans` catalog. It records mapped, unmatched, and ambiguous plans so downstream member sync uses real Vitable plan IDs instead of generated placeholders.
+
 The embedded enrollment session workspace prepares employee-bound access-token requests for Vitable's embedded flows. It uses `bound_entity: { type: :employee, id: "empl_..." }`, records every issue attempt as a `SyncRun`, and filters token values before any API telemetry is persisted.
 
 The care groups workspace covers Vitable Embedded Care group creation plus asynchronous group member sync. Member manifests require remote Vitable plan IDs; missing plan mappings are recorded as holdbacks so demo submissions do not fabricate partner identifiers.
