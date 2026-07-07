@@ -30,7 +30,7 @@ VITABLE_CONNECT_BASE_URL=https://api.demo.vitablehealth.com
 VITABLE_WEBHOOK_SECRET=...
 ```
 
-Webhook payloads are stored idempotently by `event_id`. Vitable webhook events include identifiers only, so `Vitable::ProcessWebhookCommand` records the event and, when credentials exist, calls `Vitable::FetchResourceCommand` to retrieve the fresh resource state.
+Webhook payloads are stored idempotently by `event_id`. Vitable webhook events include identifiers only, so `Vitable::ProcessWebhookCommand` records the event and, when credentials exist, calls `Vitable::FetchResourceCommand` to retrieve the fresh resource state. Fetched employee, enrollment, and employer resources are reconciled back to local records when a tenant-scoped Vitable ID, reference ID, or unambiguous local match exists; conflicts and unmatched resources are recorded on the webhook metadata instead of silently mutating the wrong record.
 
 The Vitable employer provisioning workspace builds the `POST /v1/employers` payload and, once a remote employer ID exists, switches to the settings update path for pay frequency. It uses DTO-backed packet review, repository-generated holdbacks, and `needs_credentials` sync runs so the create path can be proofed before an API key exists.
 

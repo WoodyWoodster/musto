@@ -1,0 +1,353 @@
+module Vitable
+  class WebhookReconciliationRepository < ApplicationRepository
+    ACCEPTED_ENROLLMENT_STATUSES = %w[accepted elected granted active].freeze
+    PENDING_ENROLLMENT_STATUSES = %w[pending started waived terminated declined inactive canceled cancelled].freeze
+
+    def initialize(event:, response_hash:)
+      @event = event
+      @response_hash = response_hash.to_h.stringify_keys
+    end
+
+    def call
+      remote_resource = response_resource(@response_hash)
+      return reconciliation_result(status: "skipped", warnings: [ "Fetched resource response did not include attributes." ]) if remote_resource.blank?
+
+      case @event.resource_type
+      when "employee"
+        reconcile_employee_resource(remote_resource)
+      when "enrollment"
+        reconcile_enrollment_resource(remote_resource)
+      when "employer"
+        reconcile_employer_resource(remote_resource)
+      else
+        reconciliation_result(status: "skipped", remote_resource:, warnings: [ "#{@event.resource_type} webhooks are stored as snapshots only." ])
+      end
+    rescue ActiveRecord::RecordInvalid => e
+      reconciliation_result(status: "failed", remote_resource:, local_record: e.record, warnings: e.record.errors.full_messages)
+    end
+
+    private
+
+    def reconcile_employee_resource(remote_resource)
+      employee, matched_by = employee_match_for(remote_resource)
+      return reconciliation_result(status: "unmatched", remote_resource:, warnings: [ "No local employee matched this Vitable resource." ]) unless employee
+
+      remote_id = remote_resource_id(remote_resource)
+      return remote_id_conflict_result(remote_resource, employee, matched_by) if remote_id_conflict?(employee, remote_id)
+
+      timestamp = Time.current.iso8601
+      applied_changes = []
+      update_attributes = {}
+
+      if remote_id.present? && employee.vitable_id != remote_id
+        update_attributes[:vitable_id] = remote_id
+        applied_changes << "vitable_id"
+      end
+
+      metadata_updates = {
+        "vitable_remote_status" => remote_resource.fetch("status", nil),
+        "vitable_member_id" => remote_resource.fetch("member_id", nil),
+        "vitable_last_refreshed_at" => timestamp,
+        "vitable_last_webhook_event_id" => @event.event_id,
+        "vitable_last_webhook_event_name" => @event.event_name,
+        "vitable_last_resource_snapshot" => remote_resource_summary(remote_resource, %w[id reference_id email status member_id])
+      }.merge(employee_event_metadata(remote_resource, timestamp)).compact
+
+      update_attributes[:metadata] = employee.metadata.to_h.stringify_keys.merge(metadata_updates)
+      applied_changes.concat(metadata_updates.keys.map { |key| "metadata.#{key}" })
+      employee.update!(update_attributes)
+
+      reconciliation_result(status: "matched", remote_resource:, local_record: employee, matched_by:, applied_changes:)
+    end
+
+    def reconcile_enrollment_resource(remote_resource)
+      enrollment, matched_by = enrollment_match_for(remote_resource)
+      return reconciliation_result(status: "unmatched", remote_resource:, warnings: [ "No local enrollment matched this Vitable resource." ]) unless enrollment
+
+      remote_id = remote_resource_id(remote_resource)
+      return remote_id_conflict_result(remote_resource, enrollment, matched_by) if remote_id_conflict?(enrollment, remote_id)
+
+      timestamp = Time.current.iso8601
+      remote_status = remote_resource.fetch("status", nil).presence || @event.event_name.to_s.split(".").last
+      local_status = local_enrollment_status(remote_status)
+      applied_changes = []
+      update_attributes = {}
+
+      if remote_id.present? && enrollment.vitable_id != remote_id
+        update_attributes[:vitable_id] = remote_id
+        applied_changes << "vitable_id"
+      end
+
+      if local_status.present? && enrollment.status != local_status
+        update_attributes[:status] = local_status
+        update_attributes[:accepted_at] = local_status == "accepted" ? (enrollment.accepted_at || Time.current) : nil
+        applied_changes << "status"
+        applied_changes << "accepted_at"
+      elsif local_status == "accepted" && enrollment.accepted_at.blank?
+        update_attributes[:accepted_at] = Time.current
+        applied_changes << "accepted_at"
+      end
+
+      metadata_updates = {
+        "vitable_remote_status" => remote_status,
+        "vitable_remote_employee_id" => remote_employee_id(remote_resource),
+        "vitable_remote_plan_id" => remote_plan_id(remote_resource),
+        "vitable_last_refreshed_at" => timestamp,
+        "vitable_last_webhook_event_id" => @event.event_id,
+        "vitable_last_webhook_event_name" => @event.event_name,
+        "vitable_last_resource_snapshot" => remote_resource_summary(remote_resource, %w[id status employee_id member_id plan_id product_id])
+      }.compact
+
+      update_attributes[:metadata] = enrollment.metadata.to_h.stringify_keys.merge(metadata_updates)
+      applied_changes.concat(metadata_updates.keys.map { |key| "metadata.#{key}" })
+      enrollment.update!(update_attributes)
+
+      reconciliation_result(status: "matched", remote_resource:, local_record: enrollment, matched_by:, applied_changes:)
+    end
+
+    def reconcile_employer_resource(remote_resource)
+      employer, matched_by = employer_match_for(remote_resource)
+      return reconciliation_result(status: "unmatched", remote_resource:, warnings: [ "No local employer matched this Vitable resource." ]) unless employer
+
+      remote_id = remote_resource_id(remote_resource)
+      return remote_id_conflict_result(remote_resource, employer, matched_by) if remote_id_conflict?(employer, remote_id)
+
+      timestamp = Time.current.iso8601
+      applied_changes = []
+      update_attributes = {}
+
+      if remote_id.present? && employer.vitable_id != remote_id
+        update_attributes[:vitable_id] = remote_id
+        applied_changes << "vitable_id"
+      end
+
+      settings_updates = {
+        "vitable_remote_status" => remote_resource.fetch("status", nil),
+        "vitable_last_refreshed_at" => timestamp,
+        "vitable_last_webhook_event_id" => @event.event_id,
+        "vitable_last_webhook_event_name" => @event.event_name,
+        "vitable_remote_employer" => remote_resource_summary(remote_resource, %w[id reference_id external_reference_id name legal_name status])
+      }.merge(employer_event_settings(remote_resource, timestamp)).compact
+
+      update_attributes[:settings] = employer.settings.to_h.stringify_keys.merge(settings_updates)
+      applied_changes.concat(settings_updates.keys.map { |key| "settings.#{key}" })
+      employer.update!(update_attributes)
+
+      reconciliation_result(status: "matched", remote_resource:, local_record: employer, matched_by:, applied_changes:)
+    end
+
+    def response_resource(response_hash)
+      resource = response_hash.fetch("data", response_hash)
+      resource = resource.first if resource.is_a?(Array)
+      return {} unless resource.respond_to?(:to_h)
+
+      resource.to_h.stringify_keys
+    end
+
+    def employee_match_for(remote_resource)
+      remote_id = remote_resource_id(remote_resource)
+      scope = employee_scope
+
+      if remote_id.present?
+        employee = scope.find_by(vitable_id: remote_id)
+        return [ employee, "vitable_id" ] if employee
+      end
+
+      employee = employee_from_reference_id(scope, remote_resource.fetch("reference_id", nil))
+      return [ employee, "reference_id" ] if employee
+
+      email = remote_resource.fetch("email", nil).presence
+      if email
+        matches = scope.where(email:).to_a
+        return [ matches.first, "email" ] if matches.one?
+      end
+
+      [ nil, nil ]
+    end
+
+    def enrollment_match_for(remote_resource)
+      remote_id = remote_resource_id(remote_resource)
+      scope = enrollment_scope
+
+      if remote_id.present?
+        enrollment = scope.find_by(vitable_id: remote_id)
+        return [ enrollment, "vitable_id" ] if enrollment
+      end
+
+      enrollment = enrollment_from_reference_id(scope, remote_resource.fetch("reference_id", nil))
+      return [ enrollment, "reference_id" ] if enrollment
+
+      employee = employee_by_remote_id(remote_employee_id(remote_resource))
+      plan = plan_by_remote_id(remote_plan_id(remote_resource))
+      if employee && plan
+        enrollment = employee.enrollments.find_by(benefit_plan: plan)
+        return [ enrollment, "employee_id+plan_id" ] if enrollment
+      end
+
+      [ nil, nil ]
+    end
+
+    def employer_match_for(remote_resource)
+      remote_id = remote_resource_id(remote_resource)
+      scope = employer_scope
+
+      if remote_id.present?
+        employer = scope.find_by(vitable_id: remote_id)
+        return [ employer, "vitable_id" ] if employer
+      end
+
+      reference_id = remote_resource.fetch("reference_id", nil).presence || remote_resource.fetch("external_reference_id", nil)
+      employer = employer_from_reference_id(scope, reference_id)
+      return [ employer, "reference_id" ] if employer
+
+      employers = scope.to_a
+      return [ employers.first, "single_employer_connection" ] if employers.one?
+
+      [ nil, nil ]
+    end
+
+    def employee_scope
+      Employee.where(employer_id: employer_scope.select(:id))
+    end
+
+    def employer_scope
+      @event.integration_connection&.organization&.employers || Employer.none
+    end
+
+    def enrollment_scope
+      Enrollment.joins(:employee).where(employees: { employer_id: employer_scope.select(:id) })
+    end
+
+    def plan_scope
+      BenefitPlan.where(employer_id: employer_scope.select(:id))
+    end
+
+    def employee_from_reference_id(scope, reference_id)
+      value = reference_id.to_s
+      return unless value.match?(/\Amusto_employee_\d+\z/)
+
+      scope.find_by(id: value.delete_prefix("musto_employee_").to_i)
+    end
+
+    def enrollment_from_reference_id(scope, reference_id)
+      value = reference_id.to_s
+      return unless value.match?(/\Amusto_enrollment_\d+\z/)
+
+      scope.find_by(id: value.delete_prefix("musto_enrollment_").to_i)
+    end
+
+    def employer_from_reference_id(scope, reference_id)
+      value = reference_id.to_s
+      return unless value.match?(/\Amusto_employer_\d+\z/)
+
+      scope.find_by(id: value.delete_prefix("musto_employer_").to_i)
+    end
+
+    def employee_by_remote_id(remote_id)
+      return if remote_id.blank?
+
+      employee_scope.find_by(vitable_id: remote_id)
+    end
+
+    def plan_by_remote_id(remote_id)
+      return if remote_id.blank?
+
+      plan_scope.find_by(vitable_id: remote_id)
+    end
+
+    def remote_id_conflict?(record, remote_id)
+      record.vitable_id.present? && remote_id.present? && record.vitable_id != remote_id
+    end
+
+    def remote_id_conflict_result(remote_resource, record, matched_by)
+      reconciliation_result(
+        status: "conflict",
+        remote_resource:,
+        local_record: record,
+        matched_by:,
+        warnings: [ "#{record.class.name} #{record.id} is already linked to #{record.vitable_id}." ]
+      )
+    end
+
+    def remote_resource_id(remote_resource)
+      remote_resource.fetch("id", nil).presence || @event.resource_id
+    end
+
+    def remote_employee_id(remote_resource)
+      remote_resource.fetch("employee_id", nil).presence ||
+        remote_resource.fetch("member_id", nil).presence ||
+        remote_resource.dig("employee", "id").presence
+    end
+
+    def remote_plan_id(remote_resource)
+      remote_resource.fetch("plan_id", nil).presence ||
+        remote_resource.fetch("product_id", nil).presence ||
+        remote_resource.dig("plan", "id").presence
+    end
+
+    def local_enrollment_status(remote_status)
+      normalized = remote_status.to_s.downcase
+      return "accepted" if normalized.in?(ACCEPTED_ENROLLMENT_STATUSES)
+      return "pending" if normalized.in?(PENDING_ENROLLMENT_STATUSES)
+
+      nil
+    end
+
+    def employee_event_metadata(remote_resource, timestamp)
+      case @event.event_name
+      when "employee.eligibility_granted"
+        {
+          "vitable_eligibility_status" => "granted",
+          "vitable_eligibility_changed_at" => timestamp
+        }
+      when "employee.eligibility_terminated"
+        {
+          "vitable_eligibility_status" => "terminated",
+          "vitable_eligibility_changed_at" => timestamp
+        }
+      when "employee.deactivated"
+        {
+          "vitable_lifecycle_status" => "deactivated",
+          "vitable_lifecycle_changed_at" => timestamp
+        }
+      when "employee.deduction_created"
+        {
+          "vitable_last_deduction_event_at" => timestamp,
+          "vitable_last_deduction" => remote_resource_summary(remote_resource, %w[id status deduction_type amount_cents starts_on])
+        }
+      else
+        {}
+      end
+    end
+
+    def employer_event_settings(remote_resource, timestamp)
+      return {} unless @event.event_name == "employer.eligibility_policy_created"
+
+      {
+        "vitable_eligibility_policy_last_event" => {
+          "event_id" => @event.event_id,
+          "resource_id" => @event.resource_id,
+          "recorded_at" => timestamp,
+          "remote_status" => remote_resource.fetch("status", nil)
+        }.compact
+      }
+    end
+
+    def remote_resource_summary(remote_resource, keys)
+      remote_resource.slice(*keys).compact
+    end
+
+    def reconciliation_result(status:, remote_resource: nil, local_record: nil, matched_by: nil, applied_changes: [], warnings: [])
+      WebhookResourceReconciliationDto.new(
+        status:,
+        resource_type: @event.resource_type,
+        resource_id: remote_resource ? remote_resource_id(remote_resource) : @event.resource_id,
+        local_record_type: local_record&.class&.name,
+        local_record_id: local_record&.id,
+        matched_by:,
+        applied_changes: Array(applied_changes).compact.uniq,
+        warnings: Array(warnings).compact
+      )
+    end
+  end
+end

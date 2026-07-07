@@ -95,14 +95,24 @@ module Vitable
       )
     end
 
-    def mark_processed(event, response: nil)
+    def reconcile_webhook_resource(event, response)
+      response_hash = serialize_response(response)
+      WebhookReconciliationRepository.new(event:, response_hash:).call
+    end
+
+    def mark_processed(event, response: nil, reconciliation: nil)
       processed_at = Time.current
       attributes = {
         status: "processed",
         processed_at:,
         error_message: nil
       }
-      attributes[:metadata] = event.metadata.to_h.merge("resource_snapshot" => resource_snapshot(event, response, processed_at)) if response
+      if response || reconciliation
+        metadata = event.metadata.to_h
+        metadata["resource_snapshot"] = resource_snapshot(event, response, processed_at) if response
+        metadata["resource_reconciliation"] = reconciliation.to_metadata if reconciliation
+        attributes[:metadata] = metadata
+      end
 
       event.update!(attributes)
     end

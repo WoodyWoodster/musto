@@ -74,6 +74,149 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
     ENV.delete("VITABLE_CONNECT_API_KEY")
   end
 
+  test "reconciles fetched employee resources into the local directory" do
+    employer = @organization.employers.create!(name: "Webhook Employer", status: "active")
+    employee = employer.employees.create!(first_name: "Casey", last_name: "Nguyen", email: "casey@example.com")
+    ENV["VITABLE_CONNECT_API_KEY"] = "vit_apk_test_value"
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:fetch_resource) do |_resource_type, resource_id|
+        {
+          data: {
+            id: resource_id,
+            reference_id: "musto_employee_#{Employee.find_by!(email: "casey@example.com").id}",
+            email: "casey@example.com",
+            status: "active",
+            member_id: "mem_remote_casey"
+          }
+        }
+      end
+    end
+
+    result = Vitable::ProcessWebhookCommand.new(
+      payload: webhook_payload.merge(
+        event_id: "wevt_test_employee_reconcile",
+        event_name: "employee.eligibility_granted",
+        resource_type: "employee",
+        resource_id: "empl_remote_casey"
+      ),
+      gateway_class:
+    ).call
+
+    assert result.success?
+    employee.reload
+    event = WebhookEvent.find_by!(event_id: "wevt_test_employee_reconcile")
+    reconciliation = event.metadata.fetch("resource_reconciliation")
+
+    assert_equal "empl_remote_casey", employee.vitable_id
+    assert_equal "active", employee.metadata.fetch("vitable_remote_status")
+    assert_equal "mem_remote_casey", employee.metadata.fetch("vitable_member_id")
+    assert_equal "granted", employee.metadata.fetch("vitable_eligibility_status")
+    assert_equal "matched", reconciliation.fetch("status")
+    assert_equal "Employee", reconciliation.fetch("local_record_type")
+    assert_equal employee.id, reconciliation.fetch("local_record_id")
+    assert_equal "reference_id", reconciliation.fetch("matched_by")
+  ensure
+    ENV.delete("VITABLE_CONNECT_API_KEY")
+  end
+
+  test "reconciles fetched enrollment resources into local enrollment state" do
+    employer = @organization.employers.create!(name: "Enrollment Employer", status: "active")
+    employee = employer.employees.create!(
+      first_name: "Casey",
+      last_name: "Nguyen",
+      email: "casey.enrollment@example.com",
+      vitable_id: "empl_remote_casey"
+    )
+    plan = employer.benefit_plans.create!(
+      name: "Vitable Care",
+      category: "direct_primary_care",
+      carrier: "Vitable",
+      vitable_id: "plan_remote_care"
+    )
+    enrollment = employee.enrollments.create!(benefit_plan: plan, status: "pending")
+    ENV["VITABLE_CONNECT_API_KEY"] = "vit_apk_test_value"
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:fetch_resource) do |_resource_type, resource_id|
+        {
+          data: {
+            id: resource_id,
+            employee_id: "empl_remote_casey",
+            plan_id: "plan_remote_care",
+            status: "accepted"
+          }
+        }
+      end
+    end
+
+    result = Vitable::ProcessWebhookCommand.new(
+      payload: webhook_payload.merge(event_id: "wevt_test_enrollment_reconcile"),
+      gateway_class:
+    ).call
+
+    assert result.success?
+    enrollment.reload
+    event = WebhookEvent.find_by!(event_id: "wevt_test_enrollment_reconcile")
+    reconciliation = event.metadata.fetch("resource_reconciliation")
+
+    assert_equal "enrl_test_123", enrollment.vitable_id
+    assert_equal "accepted", enrollment.status
+    assert_not_nil enrollment.accepted_at
+    assert_equal "accepted", enrollment.metadata.fetch("vitable_remote_status")
+    assert_equal "empl_remote_casey", enrollment.metadata.fetch("vitable_remote_employee_id")
+    assert_equal "plan_remote_care", enrollment.metadata.fetch("vitable_remote_plan_id")
+    assert_equal "matched", reconciliation.fetch("status")
+    assert_equal "Enrollment", reconciliation.fetch("local_record_type")
+    assert_equal enrollment.id, reconciliation.fetch("local_record_id")
+    assert_equal "employee_id+plan_id", reconciliation.fetch("matched_by")
+  ensure
+    ENV.delete("VITABLE_CONNECT_API_KEY")
+  end
+
+  test "reconciles fetched employer resources into local employer settings" do
+    employer = @organization.employers.create!(name: "Policy Employer", status: "active")
+    ENV["VITABLE_CONNECT_API_KEY"] = "vit_apk_test_value"
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:fetch_resource) do |_resource_type, resource_id|
+        {
+          data: {
+            id: resource_id,
+            reference_id: "musto_employer_#{Employer.find_by!(name: "Policy Employer").id}",
+            name: "Policy Employer",
+            status: "active"
+          }
+        }
+      end
+    end
+
+    result = Vitable::ProcessWebhookCommand.new(
+      payload: webhook_payload.merge(
+        event_id: "wevt_test_employer_reconcile",
+        event_name: "employer.eligibility_policy_created",
+        resource_type: "employer",
+        resource_id: "empr_remote_policy"
+      ),
+      gateway_class:
+    ).call
+
+    assert result.success?
+    employer.reload
+    event = WebhookEvent.find_by!(event_id: "wevt_test_employer_reconcile")
+    reconciliation = event.metadata.fetch("resource_reconciliation")
+
+    assert_equal "empr_remote_policy", employer.vitable_id
+    assert_equal "active", employer.settings.fetch("vitable_remote_status")
+    assert_equal "wevt_test_employer_reconcile", employer.settings.fetch("vitable_eligibility_policy_last_event").fetch("event_id")
+    assert_equal "matched", reconciliation.fetch("status")
+    assert_equal "Employer", reconciliation.fetch("local_record_type")
+    assert_equal employer.id, reconciliation.fetch("local_record_id")
+    assert_equal "reference_id", reconciliation.fetch("matched_by")
+  ensure
+    ENV.delete("VITABLE_CONNECT_API_KEY")
+  end
+
   test "accepts a signed Vitable webhook when webhook secret is configured" do
     @connection.update!(webhook_secret_reference: "VITABLE_WEBHOOK_SECRET")
     ENV["VITABLE_WEBHOOK_SECRET"] = "whsec_test_value"
