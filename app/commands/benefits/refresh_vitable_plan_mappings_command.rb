@@ -18,7 +18,7 @@ module Benefits
         return failure(record: sync_run, errors: sync_run.error_message)
       end
 
-      response = @gateway_class.new(@repository.connection).list_plans
+      response = @gateway_class.new(@repository.connection).list_all_plans
       sync_run = @repository.mark_mapping_succeeded(sync_run, response)
       success(record: sync_run, value: response)
     rescue VitableConnect::Errors::APIError => e

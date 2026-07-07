@@ -38,10 +38,10 @@ module Vitable
 
       {
         "requested_by" => @dto.requested_by,
-        "employers" => page_data(gateway.list_employers),
-        "groups" => page_data(gateway.list_groups),
-        "plans" => page_data(gateway.list_plans),
-        "webhook_events" => page_data(gateway.list_webhook_events),
+        "employers" => page_data(gateway.list_all_employers),
+        "groups" => page_data(gateway.list_all_groups),
+        "plans" => page_data(gateway.list_all_plans),
+        "webhook_events" => page_data(gateway.list_all_webhook_events),
         "employee_enrollments" => employee_enrollment_snapshot(gateway, connection)
       }
     end
@@ -53,7 +53,7 @@ module Vitable
           "remote_employee_id" => employee.vitable_id,
           "employee_name" => employee.full_name,
           "email" => employee.email,
-          "enrollments" => page_data(gateway.list_employee_enrollments(employee.vitable_id))
+          "enrollments" => page_data(gateway.list_all_employee_enrollments(employee.vitable_id))
         }
       rescue VitableConnect::Errors::NotFoundError => e
         {

@@ -71,6 +71,14 @@ module Vitable
       end
     end
 
+    def list_all_employers(limit: 100)
+      query = { limit: }
+
+      instrument("employer.list", :get, "/v1/employers", request_body: query) do
+        page_response(client.employers.list(query))
+      end
+    end
+
     def submit_census_sync(employer_id, employees)
       body = {
         employer_id:,
@@ -90,11 +98,27 @@ module Vitable
       end
     end
 
+    def list_all_employer_employees(employer_id, limit: 100)
+      query = { limit: }
+
+      instrument("employer.list_employees", :get, "/v1/employers/#{employer_id}/employees", request_body: query) do
+        page_response(client.employers.list_employees(employer_id, query))
+      end
+    end
+
     def list_employee_enrollments(employee_id, limit: 100)
       query = { limit: }
 
       instrument("employee.list_enrollments", :get, "/v1/employees/#{employee_id}/enrollments", request_body: query) do
         client.employees.list_enrollments(employee_id, query)
+      end
+    end
+
+    def list_all_employee_enrollments(employee_id, limit: 100)
+      query = { limit: }
+
+      instrument("employee.list_enrollments", :get, "/v1/employees/#{employee_id}/enrollments", request_body: query) do
+        page_response(client.employees.list_enrollments(employee_id, query))
       end
     end
 
@@ -106,11 +130,27 @@ module Vitable
       end
     end
 
+    def list_all_plans(limit: 100)
+      query = { limit: }
+
+      instrument("plan.list", :get, "/v1/plans", request_body: query) do
+        page_response(client.plans.list(query))
+      end
+    end
+
     def list_webhook_events(limit: 20)
       query = { limit: }
 
       instrument("webhook_event.list", :get, "/v1/webhook-events", request_body: query) do
         client.webhook_events.list(query)
+      end
+    end
+
+    def list_all_webhook_events(limit: 100)
+      query = { limit: }
+
+      instrument("webhook_event.list", :get, "/v1/webhook-events", request_body: query) do
+        page_response(client.webhook_events.list(query))
       end
     end
 
@@ -131,6 +171,14 @@ module Vitable
 
       instrument("group.list", :get, "/v1/groups", request_body: query) do
         client.groups.list(query)
+      end
+    end
+
+    def list_all_groups(limit: 100)
+      query = { limit: }
+
+      instrument("group.list", :get, "/v1/groups", request_body: query) do
+        page_response(client.groups.list(query))
       end
     end
 
@@ -256,6 +304,29 @@ module Vitable
       end
 
       redact_token_values(serialized.deep_stringify_keys)
+    end
+
+    def page_response(page)
+      { data: collect_page_data(page) }
+    end
+
+    def collect_page_data(page)
+      return [] if page.blank?
+
+      if page.respond_to?(:auto_paging_each)
+        items = []
+        page.auto_paging_each { |item| items << serialize_response(item) }
+        items
+      else
+        Array(page_data(page)).map { |item| serialize_response(item) }
+      end
+    end
+
+    def page_data(page)
+      return page.data if page.respond_to?(:data)
+
+      serialized = page.respond_to?(:deep_to_h) ? page.deep_to_h : page.to_h
+      serialized.fetch(:data, serialized.fetch("data", []))
     end
 
     def redact_token_values(value)

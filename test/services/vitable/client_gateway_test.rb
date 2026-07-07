@@ -68,6 +68,22 @@ module Vitable
       assert_equal "PA", payload.dig(:address, :state)
     end
 
+    test "collects and serializes every auto-paginated list item" do
+      organization = Organization.create!(name: "Gateway Pagination Test", external_id: "org_gateway_pagination_test")
+      connection = organization.integration_connections.create!(provider: "vitable", environment: "production")
+      item_class = Data.define(:id, :name, :nested)
+      page = Object.new
+      page.define_singleton_method(:auto_paging_each) do |&block|
+        block.call(item_class.new(id: "plan_first", name: "Primary Care", nested: { access_token: "vit_at_nested" }))
+        block.call({ id: "plan_second", name: "Dental" })
+      end
+
+      response = ClientGateway.new(connection).send(:page_response, page)
+
+      assert_equal [ "plan_first", "plan_second" ], response.fetch(:data).map { |item| item.fetch("id") }
+      assert_equal "[FILTERED]", response.dig(:data, 0, "nested", "access_token")
+    end
+
     test "dispatches generic resource fetches to typed SDK retrieve methods" do
       organization = Organization.create!(name: "Gateway Fetch Test", external_id: "org_gateway_fetch_test")
       connection = organization.integration_connections.create!(provider: "vitable", environment: "production")

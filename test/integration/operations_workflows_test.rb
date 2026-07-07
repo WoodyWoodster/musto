@@ -2059,7 +2059,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     response_class = Data.define(:data)
     gateway_class = Class.new do
       define_method(:initialize) { |_connection| }
-      define_method(:list_plans) do
+      define_method(:list_all_plans) do
         response_class.new(
           data: [
             { id: "plan_remote_primary", name: "Primary Care" },
@@ -2728,11 +2728,11 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     response_class = Data.define(:data)
     gateway_class = Class.new do
       define_method(:initialize) { |_connection| }
-      define_method(:list_employers) { response_class.new(data: [ { id: "empr_ops_123", name: "Atlas Global Services" } ]) }
-      define_method(:list_groups) { response_class.new(data: [ { id: "grp_ops_123", name: "Atlas Care Group" } ]) }
-      define_method(:list_plans) { response_class.new(data: [ { id: "plan_dpc", name: "Direct Primary Care" }, { id: "plan_mec", name: "MEC" } ]) }
-      define_method(:list_webhook_events) { response_class.new(data: [ { id: "wevt_remote_123", event_name: "employee.eligibility_granted" } ]) }
-      define_method(:list_employee_enrollments) do |employee_id|
+      define_method(:list_all_employers) { response_class.new(data: [ { id: "empr_ops_123", name: "Atlas Global Services" } ]) }
+      define_method(:list_all_groups) { response_class.new(data: [ { id: "grp_ops_123", name: "Atlas Care Group" } ]) }
+      define_method(:list_all_plans) { response_class.new(data: [ { id: "plan_dpc", name: "Direct Primary Care" }, { id: "plan_mec", name: "MEC" } ]) }
+      define_method(:list_all_webhook_events) { response_class.new(data: [ { id: "wevt_remote_123", event_name: "employee.eligibility_granted" } ]) }
+      define_method(:list_all_employee_enrollments) do |employee_id|
         response_class.new(data: [ { id: "enrl_remote_123", employee_id:, status: "pending" } ])
       end
     end
@@ -2963,7 +2963,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     response_class = Data.define(:data)
     gateway_class = Class.new do
       define_method(:initialize) { |_connection| }
-      define_method(:list_employer_employees) do |_employer_id|
+      define_method(:list_all_employer_employees) do |_employer_id|
         response_class.new(
           data: [
             {

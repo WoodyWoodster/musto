@@ -19,7 +19,7 @@ module Vitable
         return failure(record: sync_run, errors: sync_run.error_message)
       end
 
-      response = @gateway_class.new(@repository.connection).list_employer_employees(@employer.vitable_id)
+      response = @gateway_class.new(@repository.connection).list_all_employer_employees(@employer.vitable_id)
       sync_run = @repository.mark_remote_roster_succeeded(sync_run, response)
       success(record: sync_run, value: response)
     rescue VitableConnect::Errors::APIError => e
