@@ -45,6 +45,11 @@ module Vitable
       IntegrationConnection.includes(:organization).find(id)
     end
 
+    def demo_smoke_connection(environment:, api_key_reference:)
+      IntegrationConnection.vitable.includes(:organization).find_by(environment:) ||
+        bootstrap_demo_smoke_connection(environment:, api_key_reference:)
+    end
+
     def connection_webhook_events(connection, limit: 12)
       connection.webhook_events.order(created_at: :desc).limit(limit)
     end
@@ -327,7 +332,86 @@ module Vitable
       sync_run
     end
 
+    def create_demo_smoke_run(connection:, requested_by:)
+      connection.sync_runs.create!(
+        resource_type: "connection",
+        operation: "demo_smoke_check",
+        status: "running",
+        started_at: Time.current,
+        stats: {
+          "requested_by" => requested_by,
+          "resource_id" => "connection_#{connection.id}",
+          "environment" => connection.environment,
+          "base_url" => connection.effective_api_base_url,
+          "endpoints" => %w[
+            /v1/auth/access-tokens
+            /v1/employers
+            /v1/employers/:id
+            /v1/employers/:id/employees
+            /v1/employees/:id/enrollments
+            /v1/groups
+            /v1/groups/:id
+            /v1/plans
+            /v1/webhook-events
+          ]
+        }
+      )
+    end
+
+    def mark_demo_smoke_needs_credentials(sync_run)
+      message = "#{sync_run.integration_connection.api_key_reference} is not configured"
+      sync_run.update!(
+        status: "needs_credentials",
+        completed_at: Time.current,
+        error_message: message,
+        stats: sync_run.stats.to_h.merge("blocked_reason" => message)
+      )
+      sync_run
+    end
+
+    def succeed_demo_smoke_run(connection, sync_run, result)
+      result_hash = result.to_h
+      checked_at = Time.current
+      connection.update!(
+        status: "active",
+        last_synced_at: checked_at,
+        metadata: connection.metadata.to_h.merge("demo_smoke_check" => result_hash)
+      )
+      sync_run.update!(
+        status: "succeeded",
+        completed_at: checked_at,
+        error_message: nil,
+        stats: sync_run.stats.to_h.merge(result_hash)
+      )
+      sync_run
+    end
+
+    def fail_demo_smoke_run(sync_run, error)
+      sync_run&.update!(
+        status: "failed",
+        completed_at: Time.current,
+        error_message: error.message,
+        stats: sync_run.stats.to_h.merge("error_class" => error.class.name)
+      )
+      sync_run
+    end
+
     private
+
+    def bootstrap_demo_smoke_connection(environment:, api_key_reference:)
+      organization = Organization.first_or_create!(
+        external_id: "org_musto_demo_smoke",
+        name: "Musto Demo Smoke"
+      )
+
+      organization.integration_connections.create!(
+        provider: "vitable",
+        environment:,
+        api_key_reference:,
+        status: "pending",
+        metadata: environment == "demo" ? { "api_base_url" => IntegrationConnection::DEMO_BASE_URL } : {}
+      )
+    end
 
     def update_connection_verification(connection, status:, verification:, last_synced_at: connection.last_synced_at)
       connection.update!(

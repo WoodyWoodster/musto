@@ -42,6 +42,14 @@ The embedded enrollment session workspace prepares employee-bound access-token r
 
 The care groups workspace covers Vitable Embedded Care group creation plus asynchronous group member sync. Member manifests require remote Vitable plan IDs; missing plan mappings are recorded as holdbacks so demo submissions do not fabricate partner identifiers.
 
+Run a read-only demo smoke check with:
+
+```sh
+bin/rails vitable:demo_smoke
+```
+
+The task uses `VITABLE_CONNECT_API_KEY`, `VITABLE_CONNECT_ENVIRONMENT=demo`, and `VITABLE_CONNECT_BASE_URL=https://api.demo.vitablehealth.com`. It issues an access token, reads employers, groups, plans, webhook events, and sample child resources when available, then stores a redacted `demo_smoke_check` snapshot on the Vitable connection and a `demo_smoke_check` `SyncRun`.
+
 ## CQRS Layout
 
 - Commands: `app/commands`

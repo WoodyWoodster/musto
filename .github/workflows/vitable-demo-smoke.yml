@@ -1,0 +1,32 @@
+name: Vitable Demo Smoke
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    env:
+      RAILS_ENV: test
+      VITABLE_CONNECT_API_KEY: ${{ secrets.VITABLE_CONNECT_API_KEY }}
+      VITABLE_CONNECT_ENVIRONMENT: demo
+      VITABLE_CONNECT_BASE_URL: https://api.demo.vitablehealth.com
+      VITABLE_SMOKE_REQUESTED_BY: github_actions
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+
+      - name: Prepare database
+        run: bin/rails db:prepare
+
+      - name: Run Vitable demo smoke check
+        run: bin/rails vitable:demo_smoke
