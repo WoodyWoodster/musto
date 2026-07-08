@@ -3847,6 +3847,37 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     ENV[@connection.api_key_reference] = previous_key
   end
 
+  test "Vitable census sync fails when response omits remote employer id" do
+    @employer.update!(vitable_id: "empr_ops_123")
+    Vitable::GenerateCensusManifestCommand.new(dto: Vitable::GenerateCensusManifestDto.new(requested_by: "ops_test")).call
+    response_class = Data.define(:data)
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:submit_census_sync) do |_employer_id, employees|
+        response_class.new(data: { accepted_at: Time.current, employee_count: employees.count })
+      end
+    end
+    previous_key = ENV[@connection.api_key_reference]
+    ENV[@connection.api_key_reference] = "vit_apk_test_value"
+
+    result = Vitable::SubmitCensusSyncCommand.new(
+      dto: Vitable::SubmitCensusSyncDto.new(requested_by: "integration_admin"),
+      gateway_class:
+    ).call
+
+    assert result.failure?
+    assert_nil @employer.reload.settings.to_h.fetch("vitable_census_sync_last_submission", nil)
+    manifest_line = @employer.settings.fetch("vitable_census_sync_batch").fetch("employees").first
+    assert_not_equal "submitted", manifest_line.fetch("status")
+    assert_nil @employee.reload.metadata.fetch("vitable_census_sync_status", nil)
+    sync = @connection.sync_runs.where(operation: "census_sync").recent_first.first
+    assert_equal "failed", sync.status
+    assert_match "remote employer ID", sync.error_message
+    assert_match "remote employer ID", result.errors.to_sentence
+  ensure
+    ENV[@connection.api_key_reference] = previous_key
+  end
+
   test "Vitable API snapshot refresh deactivates local benefits for inactive remote employees" do
     deduction = @payroll_run.payroll_deductions.find_by!(enrollment: @enrollment)
     response_class = Data.define(:data)

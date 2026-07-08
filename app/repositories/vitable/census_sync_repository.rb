@@ -153,7 +153,9 @@ module Vitable
       accepted_at = data.fetch("accepted_at", nil)
       raise ArgumentError, "Vitable census sync response did not include accepted_at" if accepted_at.blank?
 
-      remote_employer_id = data.fetch("employer_id", @employer.vitable_id)
+      remote_employer_id = data.fetch("employer_id", nil)
+      raise ArgumentError, "Vitable census sync response did not include a remote employer ID" if remote_employer_id.blank?
+
       submitted_at = Time.current.iso8601
       submission = census_submission_payload(
         manifest: latest_manifest,
