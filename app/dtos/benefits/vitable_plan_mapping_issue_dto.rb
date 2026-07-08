@@ -1,5 +1,5 @@
 module Benefits
-  VitablePlanMappingIssueDto = Data.define(:issue_type, :remote_plan_id, :remote_plan_name, :local_plan_id, :local_plan_name, :candidate_plan_names, :category) do
+  VitablePlanMappingIssueDto = Data.define(:issue_type, :remote_plan_id, :remote_plan_name, :local_plan_id, :local_plan_name, :candidate_plan_names, :category, :reason) do
     def self.unmatched_remote(payload)
       attributes = payload.to_h.stringify_keys
 
@@ -9,8 +9,9 @@ module Benefits
         remote_plan_name: attributes.fetch("name", nil),
         local_plan_id: nil,
         local_plan_name: nil,
-        candidate_plan_names: [],
-        category: nil
+        candidate_plan_names: attributes.fetch("matched_local_plan_names", []),
+        category: nil,
+        reason: attributes.fetch("reason", nil)
       )
     end
 
@@ -24,7 +25,8 @@ module Benefits
         local_plan_id: attributes.fetch("local_plan_id", nil),
         local_plan_name: attributes.fetch("local_plan_name", nil),
         candidate_plan_names: [],
-        category: attributes.fetch("category", nil)
+        category: attributes.fetch("category", nil),
+        reason: nil
       )
     end
 
@@ -38,7 +40,8 @@ module Benefits
         local_plan_id: nil,
         local_plan_name: nil,
         candidate_plan_names: attributes.fetch("candidate_plan_names", []),
-        category: nil
+        category: nil,
+        reason: nil
       )
     end
 

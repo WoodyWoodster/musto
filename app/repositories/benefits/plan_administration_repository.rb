@@ -204,13 +204,18 @@ module Benefits
       mapped = []
       ambiguous = []
       unmatched_remote = []
+      mapped_local_ids = []
 
       remote_plans.each do |remote_plan|
         candidates = local_matches_for(remote_plan, local_plans)
+        already_mapped_candidates = candidates.select { |plan| mapped_local_ids.include?(plan.id) }
+        candidates = candidates.reject { |plan| mapped_local_ids.include?(plan.id) }
+
         if candidates.one?
           plan = candidates.first
           apply_remote_plan_mapping(plan, remote_plan, matched_at:, source:)
           mapped << mapping_line(plan, remote_plan)
+          mapped_local_ids << plan.id
         elsif candidates.many?
           ambiguous << {
             "remote_plan_id" => remote_plan.fetch("id", nil),
@@ -218,12 +223,17 @@ module Benefits
             "candidate_plan_ids" => candidates.map(&:id),
             "candidate_plan_names" => candidates.map(&:name)
           }
+        elsif already_mapped_candidates.any?
+          unmatched_remote << remote_plan.slice("id", "name").merge(
+            "reason" => "local_plan_already_mapped",
+            "matched_local_plan_ids" => already_mapped_candidates.map(&:id),
+            "matched_local_plan_names" => already_mapped_candidates.map(&:name)
+          )
         else
           unmatched_remote << remote_plan.slice("id", "name")
         end
       end
 
-      mapped_local_ids = mapped.map { |entry| entry.fetch("local_plan_id") }
       unmatched_local = local_plans.reject { |plan| mapped_local_ids.include?(plan.id) || plan.vitable_id.present? }.map do |plan|
         {
           "local_plan_id" => plan.id,
@@ -242,6 +252,12 @@ module Benefits
     end
 
     def local_matches_for(remote_plan, local_plans)
+      remote_id = remote_plan.fetch("id", nil).presence
+      if remote_id.present?
+        existing = local_plans.select { |plan| remote_id_matches_plan?(remote_id, plan) }
+        return existing if existing.any?
+      end
+
       remote_name = remote_plan.fetch("name", "").to_s
       normalized_remote = normalize_plan_name(remote_name)
       exact = local_plans.select { |plan| normalize_plan_name(plan.name) == normalized_remote }
@@ -255,6 +271,12 @@ module Benefits
 
       category = category_for_remote_plan(remote_name)
       category ? local_plans.select { |plan| plan.category == category } : []
+    end
+
+    def remote_id_matches_plan?(remote_id, plan)
+      plan.vitable_id == remote_id ||
+        plan.metadata.to_h.stringify_keys.fetch("vitable_plan_id", nil) == remote_id ||
+        plan.metadata.to_h.dig("vitable_plan_mapping", "remote_plan_id") == remote_id
     end
 
     def apply_remote_plan_mapping(plan, remote_plan, matched_at:, source:)

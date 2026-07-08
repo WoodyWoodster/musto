@@ -2093,6 +2093,45 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     ENV[@connection.api_key_reference] = previous_key
   end
 
+  test "Vitable plan mapping refresh keeps one remote plan per local plan" do
+    response_class = Data.define(:data)
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:list_all_plans) do
+        response_class.new(
+          data: [
+            { id: "plan_remote_primary", name: "Primary Care" },
+            { id: "plan_remote_primary_duplicate", name: "Primary Care" }
+          ]
+        )
+      end
+    end
+    previous_key = ENV[@connection.api_key_reference]
+    ENV[@connection.api_key_reference] = "vit_apk_test_value"
+
+    result = Benefits::RefreshVitablePlanMappingsCommand.new(
+      dto: Benefits::RefreshVitablePlanMappingsDto.new(requested_by: "benefits_admin"),
+      gateway_class:
+    ).call
+
+    assert result.success?
+    assert_equal "plan_remote_primary", @plan.reload.vitable_id
+    snapshot = @employer.reload.settings.fetch("vitable_plan_catalog_snapshot")
+    duplicate = snapshot.fetch("unmatched_remote_plans").find { |plan| plan.fetch("id") == "plan_remote_primary_duplicate" }
+
+    assert_equal 1, snapshot.fetch("mapped_plan_count")
+    assert_equal "local_plan_already_mapped", duplicate.fetch("reason")
+    assert_equal [ @plan.id ], duplicate.fetch("matched_local_plan_ids")
+    assert_equal [ @plan.name ], duplicate.fetch("matched_local_plan_names")
+
+    detail = Benefits::PlanAdministrationQuery.new.call
+    duplicate_issue = detail.mapping_issues.find { |issue| issue.remote_plan_id == "plan_remote_primary_duplicate" }
+    assert_equal "local_plan_already_mapped", duplicate_issue.reason
+    assert_equal [ @plan.name ], duplicate_issue.candidate_plan_names
+  ensure
+    ENV[@connection.api_key_reference] = previous_key
+  end
+
   test "publishes a ready benefit plan through command action" do
     prepare_publishable_plan(@plan)
     dto = Benefits::PublishPlanDto.from_params(id: @plan.id, published_by: "benefits_admin")

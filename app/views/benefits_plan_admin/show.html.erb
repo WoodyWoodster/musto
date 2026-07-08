@@ -129,6 +129,9 @@
                 <div class="min-w-0">
                   <p class="text-xs font-semibold uppercase text-slate-400"><%= issue.issue_type.humanize %></p>
                   <p class="mt-1 break-words font-semibold text-slate-950"><%= issue.title.presence || "Plan match pending" %></p>
+                  <% if issue.reason.present? %>
+                    <p class="mt-1 text-sm text-slate-500"><%= issue.reason.humanize %></p>
+                  <% end %>
                   <% if issue.candidate_plan_names.any? %>
                     <p class="mt-1 text-sm text-slate-500">Candidates: <%= issue.candidate_plan_names.to_sentence %></p>
                   <% elsif issue.category.present? %>
