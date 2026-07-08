@@ -178,6 +178,11 @@ Rails.application.routes.draw do
     namespace :v1 do
       resources :employers, only: [ :create, :show ]
 
+      namespace :vitable do
+        post "widget-tokens/employer", to: "widget_tokens#create_employer"
+        post "widget-tokens/employees/:employee_id", to: "widget_tokens#create_employee"
+      end
+
       namespace :webhooks do
         post "vitable", to: "vitable#create"
       end

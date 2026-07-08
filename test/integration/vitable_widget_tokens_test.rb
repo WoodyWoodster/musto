@@ -1,0 +1,138 @@
+require "test_helper"
+
+class VitableWidgetTokensTest < ActionDispatch::IntegrationTest
+  setup do
+    ENV.delete("VITABLE_CONNECT_API_KEY")
+    @organization = Organization.create!(name: "Widget Org", external_id: "org_widget")
+    @employer = @organization.employers.create!(
+      name: "Widget Employer",
+      legal_name: "Widget Employer LLC",
+      ein: "12-3456789",
+      status: "active",
+      vitable_id: "empr_widget_123"
+    )
+    @department = @employer.departments.create!(name: "People", code: "PPL")
+    @location = @employer.work_locations.create!(name: "Remote", country: "US", remote: true)
+    @employee = @employer.employees.create!(
+      first_name: "Casey",
+      last_name: "Widget",
+      email: "casey.widget@example.com",
+      department: @department,
+      work_location: @location,
+      title: "Benefits Lead",
+      compensation_cents: 100_000_00,
+      onboarding_status: "complete",
+      vitable_id: "empl_widget_123"
+    )
+    @connection = @organization.integration_connections.create!(
+      provider: "vitable",
+      environment: "demo",
+      api_key_reference: "VITABLE_CONNECT_API_KEY",
+      status: "active"
+    )
+  end
+
+  test "employer widget token endpoint returns a short-lived token without persisting the token value" do
+    ENV["VITABLE_CONNECT_API_KEY"] = "vit_apk_test_value"
+    gateway = gateway_with_tokens
+
+    with_gateway(gateway) do
+      post "/api/v1/vitable/widget-tokens/employer", params: { requested_by: "widget_test" }
+    end
+
+    assert_response :created
+    body = JSON.parse(response.body)
+    assert_equal "vit_at_employer_secret", body.fetch("access_token")
+    assert_equal "employer", body.dig("bound_entity", "type")
+    assert_equal "empr_widget_123", body.dig("bound_entity", "id")
+
+    sync = @connection.sync_runs.where(operation: "widget_token_broker", resource_type: "employer").recent_first.first
+    assert_equal "succeeded", sync.status
+    assert_equal "http_response", sync.stats.fetch("delivery")
+    assert_equal true, sync.stats.dig("issuance", "token_present")
+    assert_not_includes sync.stats.to_json, "vit_at_employer_secret"
+  ensure
+    ENV.delete("VITABLE_CONNECT_API_KEY")
+  end
+
+  test "employee widget token endpoint returns an employee-bound token" do
+    ENV["VITABLE_CONNECT_API_KEY"] = "vit_apk_test_value"
+    gateway = gateway_with_tokens
+
+    with_gateway(gateway) do
+      post "/api/v1/vitable/widget-tokens/employees/#{@employee.id}", params: { requested_by: "widget_test" }
+    end
+
+    assert_response :created
+    body = JSON.parse(response.body)
+    assert_equal "vit_at_employee_secret", body.fetch("access_token")
+    assert_equal "employee", body.dig("bound_entity", "type")
+    assert_equal "empl_widget_123", body.dig("bound_entity", "id")
+
+    sync = @connection.sync_runs.where(operation: "widget_token_broker", resource_type: "employee").recent_first.first
+    assert_equal "succeeded", sync.status
+    assert_equal @employee.id, sync.stats.dig("local_record", "id")
+    assert_not_includes sync.stats.to_json, "vit_at_employee_secret"
+  ensure
+    ENV.delete("VITABLE_CONNECT_API_KEY")
+  end
+
+  test "widget token endpoint reports missing credentials" do
+    post "/api/v1/vitable/widget-tokens/employer", params: { requested_by: "widget_test" }
+
+    assert_response :unauthorized
+    body = JSON.parse(response.body)
+    assert_match "VITABLE_CONNECT_API_KEY", body.fetch("errors").to_sentence
+    sync = @connection.sync_runs.where(operation: "widget_token_broker").recent_first.first
+    assert_equal "needs_credentials", sync.status
+  end
+
+  test "employee widget token endpoint blocks employees without remote IDs" do
+    @employee.update!(vitable_id: nil)
+    ENV["VITABLE_CONNECT_API_KEY"] = "vit_apk_test_value"
+
+    post "/api/v1/vitable/widget-tokens/employees/#{@employee.id}", params: { requested_by: "widget_test" }
+
+    assert_response :unprocessable_entity
+    body = JSON.parse(response.body)
+    assert_match "Vitable employee ID", body.fetch("errors").to_sentence
+    sync = @connection.sync_runs.where(operation: "widget_token_broker", resource_type: "employee").recent_first.first
+    assert_equal "blocked", sync.status
+  ensure
+    ENV.delete("VITABLE_CONNECT_API_KEY")
+  end
+
+  private
+
+  def with_gateway(gateway)
+    original_new = Vitable::ClientGateway.method(:new)
+    Vitable::ClientGateway.define_singleton_method(:new) { |_connection| gateway }
+    yield
+  ensure
+    Vitable::ClientGateway.define_singleton_method(:new) do |*args, **kwargs, &block|
+      original_new.call(*args, **kwargs, &block)
+    end
+  end
+
+  def gateway_with_tokens
+    response_class = Data.define(:access_token, :expires_in, :token_type, :bound_entity)
+    Object.new.tap do |gateway|
+      gateway.define_singleton_method(:issue_employer_access_token) do |employer_id|
+        response_class.new(
+          access_token: "vit_at_employer_secret",
+          expires_in: 3_600,
+          token_type: "Bearer",
+          bound_entity: { type: "employer", id: employer_id }
+        )
+      end
+      gateway.define_singleton_method(:issue_employee_access_token) do |employee_id|
+        response_class.new(
+          access_token: "vit_at_employee_secret",
+          expires_in: 3_600,
+          token_type: "Bearer",
+          bound_entity: { type: "employee", id: employee_id }
+        )
+      end
+    end
+  end
+end
