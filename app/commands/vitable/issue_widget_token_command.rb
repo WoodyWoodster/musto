@@ -23,12 +23,18 @@ module Vitable
       end
 
       response = issue_token(context.fetch(:remote_id))
-      response_dto = WidgetTokenResponseDto.from_response(serialize_response(response), issued_at: Time.current)
+      response_hash = serialize_response(response)
+      raise ArgumentError, "Vitable widget token response did not include an access token" if response_hash.fetch("access_token", nil).blank?
+
+      response_dto = WidgetTokenResponseDto.from_response(response_hash, issued_at: Time.current)
       sync_run = @repository.mark_succeeded(sync_run, response_dto)
       success(record: sync_run, value: response_dto)
     rescue ::VitableConnect::Errors::APIError => e
       @repository.mark_failed(sync_run, e)
       failure(record: sync_run, errors: "#{e.class}: #{e.message}")
+    rescue ArgumentError, KeyError => e
+      @repository.mark_failed(sync_run, e)
+      failure(record: sync_run, errors: e.message)
     rescue ActiveRecord::RecordNotFound
       failure(errors: missing_record_message)
     rescue ActiveRecord::RecordInvalid => e

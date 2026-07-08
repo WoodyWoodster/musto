@@ -195,6 +195,33 @@ class VitableWidgetTokensTest < ActionDispatch::IntegrationTest
     ENV.delete("VITABLE_WIDGET_TOKEN_BROKER_SECRET")
   end
 
+  test "widget token endpoint fails when Vitable omits access token" do
+    ENV["VITABLE_CONNECT_API_KEY"] = "vit_apk_test_value"
+    ENV["VITABLE_WIDGET_TOKEN_BROKER_SECRET"] = "broker_secret"
+    response_class = Data.define(:expires_in, :token_type, :bound_entity)
+    gateway = Object.new
+    gateway.define_singleton_method(:issue_employer_access_token) do |employer_id|
+      response_class.new(expires_in: 3_600, token_type: "Bearer", bound_entity: { type: "employer", id: employer_id })
+    end
+
+    with_gateway(gateway) do
+      post "/api/v1/vitable/widget-tokens/employer",
+           params: { requested_by: "widget_test" },
+           headers: broker_headers
+    end
+
+    assert_response :bad_request
+    body = JSON.parse(response.body)
+    assert_match "access token", body.fetch("errors").to_sentence
+    sync = @connection.sync_runs.where(operation: "widget_token_broker", resource_type: "employer").recent_first.first
+    assert_equal "failed", sync.status
+    assert_match "access token", sync.error_message
+    assert_nil sync.stats.dig("issuance", "token_present")
+  ensure
+    ENV.delete("VITABLE_CONNECT_API_KEY")
+    ENV.delete("VITABLE_WIDGET_TOKEN_BROKER_SECRET")
+  end
+
   test "employee widget token endpoint blocks employees without remote IDs" do
     @employee.update!(vitable_id: nil)
     ENV["VITABLE_CONNECT_API_KEY"] = "vit_apk_test_value"
