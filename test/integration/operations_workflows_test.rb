@@ -4797,6 +4797,30 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_match @connection.api_key_reference, @connection.metadata.dig("last_verification", "message")
   end
 
+  test "connection verification fails when token response omits access token" do
+    response_class = Data.define(:expires_in, :token_type)
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:issue_access_token) { response_class.new(expires_in: 3_600, token_type: "Bearer") }
+    end
+    previous_key = ENV[@connection.api_key_reference]
+    ENV[@connection.api_key_reference] = "vit_apk_test_value"
+
+    result = Vitable::VerifyConnectionCommand.new(
+      dto: Vitable::VerifyConnectionDto.new(connection_id: @connection.id),
+      gateway_class:
+    ).call
+
+    assert result.failure?
+    @connection.reload
+    assert_equal "failed", @connection.status
+    assert_match "access token", @connection.metadata.dig("last_verification", "message")
+    assert_equal "ArgumentError", @connection.metadata.dig("last_verification", "error_class")
+    assert_match "access token", result.errors.to_sentence
+  ensure
+    ENV[@connection.api_key_reference] = previous_key
+  end
+
   test "resolves a benefits reconciliation exception" do
     @pending_deduction.update!(amount_cents: 1_234, status: "ready")
 
