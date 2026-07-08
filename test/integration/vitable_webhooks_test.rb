@@ -1212,7 +1212,7 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
     ENV["VITABLE_WEBHOOK_SECRET"] = "whsec_test_value"
     payload = webhook_payload.merge(event_id: "wevt_test_signed")
     raw_body = payload.to_json
-    timestamp = "2026-01-23T14:31:00+00:00"
+    timestamp = Time.current.iso8601
     signature = Vitable::WebhookSignatureVerifier.sign(raw_body:, secret: ENV.fetch("VITABLE_WEBHOOK_SECRET"), timestamp:)
 
     assert_difference "WebhookEvent.count", 1 do
@@ -1238,7 +1238,7 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
     ENV["VITABLE_WEBHOOK_SECRET"] = "whsec_test_value"
     payload = webhook_payload.merge(event_id: "wevt_test_sha256_signature")
     raw_body = payload.to_json
-    timestamp = "2026-01-23T14:31:00+00:00"
+    timestamp = Time.current.iso8601
     signature = OpenSSL::HMAC.hexdigest("SHA256", ENV.fetch("VITABLE_WEBHOOK_SECRET"), "#{timestamp}.#{raw_body}")
 
     assert_no_difference "WebhookEvent.count" do
@@ -1263,13 +1263,57 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
     assert_no_difference "WebhookEvent.count" do
       post api_v1_webhooks_vitable_path,
         params: payload,
-        headers: signed_headers(timestamp: "2026-01-23T14:31:00+00:00", signature: "not-a-valid-signature"),
+        headers: signed_headers(timestamp: Time.current.iso8601, signature: "not-a-valid-signature"),
         as: :json
     end
 
     assert_response :unauthorized
     response_payload = JSON.parse(response.body)
     assert_equal "signature_invalid", response_payload.fetch("signature")
+  ensure
+    ENV.delete("VITABLE_WEBHOOK_SECRET")
+  end
+
+  test "rejects signed webhooks with stale timestamp headers" do
+    @connection.update!(webhook_secret_reference: "VITABLE_WEBHOOK_SECRET")
+    ENV["VITABLE_WEBHOOK_SECRET"] = "whsec_test_value"
+    payload = webhook_payload.merge(event_id: "wevt_test_stale_signature_timestamp")
+    raw_body = payload.to_json
+    timestamp = 10.minutes.ago.iso8601
+    signature = Vitable::WebhookSignatureVerifier.sign(raw_body:, secret: ENV.fetch("VITABLE_WEBHOOK_SECRET"), timestamp:)
+
+    assert_no_difference "WebhookEvent.count" do
+      post api_v1_webhooks_vitable_path,
+        params: payload,
+        headers: signed_headers(timestamp:, signature:),
+        as: :json
+    end
+
+    assert_response :unauthorized
+    response_payload = JSON.parse(response.body)
+    assert_equal "timestamp_out_of_tolerance", response_payload.fetch("signature")
+  ensure
+    ENV.delete("VITABLE_WEBHOOK_SECRET")
+  end
+
+  test "rejects signed webhooks with malformed timestamp headers" do
+    @connection.update!(webhook_secret_reference: "VITABLE_WEBHOOK_SECRET")
+    ENV["VITABLE_WEBHOOK_SECRET"] = "whsec_test_value"
+    payload = webhook_payload.merge(event_id: "wevt_test_malformed_signature_timestamp")
+    raw_body = payload.to_json
+    timestamp = "not-a-timestamp"
+    signature = Vitable::WebhookSignatureVerifier.sign(raw_body:, secret: ENV.fetch("VITABLE_WEBHOOK_SECRET"), timestamp:)
+
+    assert_no_difference "WebhookEvent.count" do
+      post api_v1_webhooks_vitable_path,
+        params: payload,
+        headers: signed_headers(timestamp:, signature:),
+        as: :json
+    end
+
+    assert_response :unauthorized
+    response_payload = JSON.parse(response.body)
+    assert_equal "timestamp_invalid", response_payload.fetch("signature")
   ensure
     ENV.delete("VITABLE_WEBHOOK_SECRET")
   end

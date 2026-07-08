@@ -4,6 +4,7 @@ module Vitable
   class WebhookSignatureVerifier
     HMAC_DIGEST = "SHA512"
     METADATA_ALGORITHM = "hmac-sha512"
+    MAX_TIMESTAMP_DRIFT = 5.minutes
     ACCEPTED_SIGNATURE_KEYS = %w[sha512 v1].freeze
     SIGNATURE_HEADERS = [
       "X-Vitable-Signature",
@@ -17,9 +18,10 @@ module Vitable
       OpenSSL::HMAC.hexdigest(HMAC_DIGEST, secret, signed_payload)
     end
 
-    def initialize(repository: IntegrationRepository.new, secret_lookup: ENV)
+    def initialize(repository: IntegrationRepository.new, secret_lookup: ENV, clock: -> { Time.current })
       @repository = repository
       @secret_lookup = secret_lookup
+      @clock = clock
     end
 
     def verify(request)
@@ -34,6 +36,8 @@ module Vitable
       return result("missing_signature", "Webhook signature header is missing.", connection:) if signature_value.blank?
 
       timestamp = timestamp_header(request)
+      return result("timestamp_invalid", "Webhook timestamp header could not be parsed.", connection:, header_name: signature_header, timestamp:) if invalid_timestamp?(timestamp)
+      return result("timestamp_out_of_tolerance", "Webhook timestamp is outside the 5 minute replay window.", connection:, header_name: signature_header, timestamp:) unless timestamp_in_tolerance?(timestamp)
       return verified(connection:, header_name: signature_header, timestamp:) if valid_signature?(request.raw_body, secret, signature_value, timestamp)
 
       result("signature_invalid", "Webhook signature did not match the configured secret.", connection:, header_name: signature_header, timestamp:)
@@ -70,6 +74,25 @@ module Vitable
       signature_candidates(signature_value).any? do |candidate|
         expected.any? { |value| secure_compare(candidate, value) }
       end
+    end
+
+    def invalid_timestamp?(timestamp)
+      timestamp.present? && parsed_timestamp(timestamp).blank?
+    end
+
+    def timestamp_in_tolerance?(timestamp)
+      return true if timestamp.blank?
+
+      (@clock.call - parsed_timestamp(timestamp)).abs <= MAX_TIMESTAMP_DRIFT
+    end
+
+    def parsed_timestamp(timestamp)
+      value = timestamp.to_s.strip
+      return Time.zone.at(value.to_i) if value.match?(/\A\d+\z/)
+
+      Time.zone.parse(value)
+    rescue ArgumentError, TypeError
+      nil
     end
 
     def signature_candidates(value)
