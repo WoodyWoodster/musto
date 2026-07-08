@@ -175,7 +175,7 @@ module Vitable
       assert_equal :semi_monthly, gateway.send(:pay_frequency_value, "semimonthly")
     end
 
-    test "submits eligibility policy through authenticated custom request" do
+    test "submits eligibility policy through authenticated request fallback when SDK resource has no create method" do
       organization = Organization.create!(name: "Gateway Capability Test", external_id: "org_gateway_capability_test")
       connection = organization.integration_connections.create!(provider: "vitable", environment: "production")
       gateway = ClientGateway.new(connection)
@@ -203,6 +203,37 @@ module Vitable
       assert_equal "employer.eligibility_policy.create", log.operation
       assert_equal "/v1/employers/empr_123/benefit-eligibility-policies", log.path
       assert_equal "All", log.request_body.fetch("classification")
+    end
+
+    test "submits eligibility policy through first class SDK resource when available" do
+      organization = Organization.create!(name: "Gateway SDK Policy Test", external_id: "org_gateway_sdk_policy_test")
+      connection = organization.integration_connections.create!(provider: "vitable", environment: "production")
+      gateway = ClientGateway.new(connection)
+      calls = []
+      policies = Object.new
+      policies.define_singleton_method(:create) do |employer_id, body|
+        calls << [ employer_id, body ]
+        { data: { id: "elig_policy_sdk_123", employer_id: } }
+      end
+      fake_client = Object.new
+      fake_client.define_singleton_method(:benefit_eligibility_policies) { policies }
+      fake_client.define_singleton_method(:request) { |_request| raise "fallback request should not be used" }
+      gateway.define_singleton_method(:client) { fake_client }
+
+      response = gateway.create_eligibility_policy("empr_123", {
+        "classification" => "Full-time",
+        "waiting_period" => "1st of the following month"
+      })
+
+      assert_equal "elig_policy_sdk_123", response.dig(:data, :id)
+      assert_equal [
+        "empr_123",
+        { classification: "Full-time", waiting_period: "1st of the following month" }
+      ], calls.first
+      log = connection.api_request_logs.last
+      assert_equal "employer.eligibility_policy.create", log.operation
+      assert_equal "/v1/employers/empr_123/benefit-eligibility-policies", log.path
+      assert_equal "Full-time", log.request_body.fetch("classification")
     end
 
     test "marks the connection active after any successful Vitable request" do

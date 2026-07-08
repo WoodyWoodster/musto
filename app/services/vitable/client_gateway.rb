@@ -305,12 +305,17 @@ module Vitable
       path = "/v1/employers/#{employer_id}/benefit-eligibility-policies"
 
       instrument("employer.eligibility_policy.create", :post, path, request_body: body) do
-        client.request(
-          method: :post,
-          path:,
-          body:,
-          model: VitableConnect::Internal::Type::Unknown
-        )
+        policies = client.respond_to?(:benefit_eligibility_policies) ? client.benefit_eligibility_policies : nil
+        if policies.respond_to?(:create)
+          policies.create(employer_id, body)
+        else
+          client.request(
+            method: :post,
+            path:,
+            body:,
+            model: VitableConnect::Internal::Type::Unknown
+          )
+        end
       end
     end
 
