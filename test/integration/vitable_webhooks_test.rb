@@ -501,6 +501,65 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
     ENV.delete("VITABLE_CONNECT_API_KEY")
   end
 
+  test "reconciles payload-only webhooks without an API key" do
+    employer = @organization.employers.create!(name: "Credentialless Dependent Employer", status: "active")
+    employee = employer.employees.create!(
+      first_name: "Casey",
+      last_name: "Credentialless",
+      email: "casey.credentialless@example.com",
+      vitable_id: "empl_credentialless_casey"
+    )
+    gateway_class = Class.new do
+      def self.retrievable_resource_type?(_resource_type)
+        false
+      end
+
+      def self.webhook_resource_type?(resource_type)
+        resource_type == "dependent"
+      end
+
+      def self.payload_only_webhook_resource_type?(resource_type)
+        resource_type == "dependent"
+      end
+
+      define_method(:initialize) { |_connection| }
+      define_method(:fetch_resource) { |_resource_type, _resource_id| raise "gateway should not fetch payload-only resources" }
+    end
+
+    assert_no_difference -> { @connection.sync_runs.count } do
+      result = Vitable::ProcessWebhookCommand.new(
+        payload: webhook_payload.merge(
+          event_id: "wevt_test_payload_only_without_key",
+          event_name: "dependent.updated",
+          resource_type: "dependent",
+          resource_id: "dep_credentialless_payload",
+          data: {
+            employee_id: "empl_credentialless_casey",
+            first_name: "Harper",
+            last_name: "Credentialless",
+            relationship: "child",
+            date_of_birth: "2018-03-04",
+            status: "active"
+          }
+        ),
+        gateway_class:
+      ).call
+
+      assert result.success?
+      assert_equal "payload_only", result.value
+    end
+
+    event = WebhookEvent.find_by!(event_id: "wevt_test_payload_only_without_key")
+    reconciliation = event.metadata.fetch("resource_reconciliation")
+    dependent = employee.dependents.sole
+
+    assert_equal "processed", event.status
+    assert_equal "matched", reconciliation.fetch("status")
+    assert_equal dependent.id, reconciliation.fetch("local_record_id")
+    assert_equal "dep_credentialless_payload", dependent.vitable_id
+    assert_equal "needs_credentials", @connection.reload.status
+  end
+
   test "matches payroll deduction payload-only webhooks by employee email case insensitively" do
     employer = @organization.employers.create!(name: "Payroll Email Match Employer", status: "active")
     employee = employer.employees.create!(

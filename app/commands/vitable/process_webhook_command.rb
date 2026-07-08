@@ -20,19 +20,15 @@ module Vitable
         return failure(record: event, errors: event.error_message)
       end
 
+      return reconcile_without_fetch(event) if payload_only_webhook_resource_type?(event.resource_type)
+
       unless connection.credentials_present?
         @repository.mark_needs_credentials(event, connection)
         return success(record: event, value: "queued_without_credentials")
       end
 
       unless retrievable_resource_type?(event.resource_type)
-        reconciliation = @repository.payload_only_webhook_reconciliation(
-          event,
-          known_payload_only_resource_type: payload_only_webhook_resource_type?(event.resource_type),
-          known_webhook_resource_type: webhook_resource_type?(event.resource_type)
-        )
-        @repository.mark_processed(event, reconciliation:)
-        return success(record: event, value: reconciliation.status == "matched" ? "payload_only" : "snapshot_only")
+        return reconcile_without_fetch(event)
       end
 
       fetch_result = FetchResourceCommand.new(
@@ -77,6 +73,16 @@ module Vitable
       return false unless @gateway_class.respond_to?(:payload_only_webhook_resource_type?)
 
       @gateway_class.payload_only_webhook_resource_type?(resource_type)
+    end
+
+    def reconcile_without_fetch(event)
+      reconciliation = @repository.payload_only_webhook_reconciliation(
+        event,
+        known_payload_only_resource_type: payload_only_webhook_resource_type?(event.resource_type),
+        known_webhook_resource_type: webhook_resource_type?(event.resource_type)
+      )
+      @repository.mark_processed(event, reconciliation:)
+      success(record: event, value: reconciliation.status == "matched" ? "payload_only" : "snapshot_only")
     end
 
     def reconcile_webhook_resource(event, fetch_result)
