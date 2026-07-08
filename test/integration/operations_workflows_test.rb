@@ -3898,6 +3898,17 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
             email: "casey@example.com",
             status: "active",
             member_id: "mem_ops_detail",
+            employee_class: "Full Time",
+            hire_date: Date.new(2025, 1, 6).iso8601,
+            date_of_birth: Date.new(1990, 4, 9).iso8601,
+            phone: "+15551231234",
+            address: {
+              address_line_1: "100 Market St",
+              address_line_2: "Suite 400",
+              city: "Philadelphia",
+              state: "PA",
+              zipcode: "19107"
+            },
             deductions: [
               {
                 id: "ded_ops_detail_dental",
@@ -3961,9 +3972,25 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal "empl_ops_detail", detail.fetch("remote_employee_id")
     assert_equal "[FILTERED]", detail.dig("response", "data", "access_token")
     assert_equal "empl_ops_detail", @employee.vitable_id
+    assert_equal Date.new(2025, 1, 6), @employee.start_on
     assert_equal "mem_ops_detail", @employee.metadata.fetch("vitable_member_id")
     assert_equal "musto_employee_#{@employee.id}", @employee.metadata.fetch("vitable_remote_reference_id")
+    assert_equal "Full Time", @employee.metadata.fetch("vitable_remote_employee_class")
+    assert_equal "2025-01-06", @employee.metadata.fetch("vitable_remote_hire_date")
+    assert_equal "1990-04-09", @employee.metadata.fetch("vitable_remote_date_of_birth")
+    assert_equal "+15551231234", @employee.metadata.fetch("vitable_remote_phone")
+    assert_equal(
+      {
+        "address_line_1" => "100 Market St",
+        "address_line_2" => "Suite 400",
+        "city" => "Philadelphia",
+        "state" => "PA",
+        "zipcode" => "19107"
+      },
+      @employee.metadata.fetch("vitable_remote_address")
+    )
     assert_equal "empl_ops_detail", @employee.metadata.dig("vitable_last_resource_snapshot", "id")
+    assert_equal "Full Time", @employee.metadata.dig("vitable_last_resource_snapshot", "employee_class")
     assert_equal "dep_ops_harper_detail", @dependent.vitable_id
     assert_equal "vitable_api_snapshot", @dependent.metadata.fetch("source")
     assert_equal "dep_ops_harper_detail", @dependent.metadata.dig("vitable_last_resource_snapshot", "id")

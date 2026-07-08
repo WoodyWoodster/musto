@@ -34,24 +34,24 @@ module Vitable
     end
 
     def reconcile_employee(result:, employer:, remote_employee:, source:, refreshed_at:)
-      validate_remote_employee_identity!(remote_employee)
-      employee = employee_for_remote(employer, remote_employee)
+      dto = RemoteEmployeeDto.from_hash(remote_employee).validate_identity!(response_label: "Vitable API snapshot employee")
+      employee = employee_for_remote(employer, dto)
       return result.increment(processed_count: 1, unmatched_count: 1) unless employee
 
-      changed = update_employee(employee, remote_employee, source:, refreshed_at:)
+      changed = update_employee(employee, dto, source:, refreshed_at:)
       deduction_sync = PayrollDeductionRepository.new.sync_employee_deductions(
         employee:,
-        remote_deductions: remote_employee.fetch("deductions", []),
+        remote_deductions: dto.deductions,
         source:,
         reconciled_at: refreshed_at
       )
       dependent_sync = dependent_snapshot_repository.sync_remote_employee_dependents(
         employee:,
-        remote_employee:,
+        remote_employee: dto.raw_payload,
         source:,
         refreshed_at:
       )
-      lifecycle_reconciliation = deactivate_employee_benefits(employee, remote_employee, source:, refreshed_at:)
+      lifecycle_reconciliation = deactivate_employee_benefits(employee, dto, source:, refreshed_at:)
 
       result.increment(
         processed_count: 1,
@@ -64,22 +64,14 @@ module Vitable
       )
     end
 
-    def update_employee(employee, remote_employee, source:, refreshed_at:)
-      remote_employee_id = remote_employee.fetch("id")
+    def update_employee(employee, dto, source:, refreshed_at:)
       attributes = {
-        metadata: employee.metadata.to_h.stringify_keys.merge(
-          "vitable_remote_status" => remote_employee.fetch("status", nil),
-          "vitable_member_id" => remote_employee.fetch("member_id", nil),
-          "vitable_remote_reference_id" => remote_employee.fetch("reference_id", nil),
-          "vitable_remote_deductions" => remote_employee.fetch("deductions", []),
-          "vitable_last_refreshed_at" => refreshed_at,
-          "vitable_last_snapshot_source" => source,
-          "vitable_last_resource_snapshot" => remote_employee_summary(remote_employee)
-        ).compact
+        metadata: employee.metadata.to_h.stringify_keys.merge(dto.metadata(source:, refreshed_at:))
       }
-      local_employment_status = employee_employment_status_for(remote_employee)
+      local_employment_status = dto.local_employment_status
       attributes[:employment_status] = local_employment_status if local_employment_status.present? && employee.employment_status != local_employment_status
-      attributes[:vitable_id] = remote_employee_id if remote_employee_id.present? && employee.vitable_id != remote_employee_id
+      attributes[:start_on] = dto.hire_date if dto.hire_date.present? && employee.start_on != dto.hire_date
+      attributes[:vitable_id] = dto.remote_employee_id if dto.remote_employee_id.present? && employee.vitable_id != dto.remote_employee_id
       employee.assign_attributes(attributes)
       changed = employee.has_changes_to_save?
       employee.save! if changed
@@ -99,31 +91,23 @@ module Vitable
       employer_from_reference_id(reference_id)
     end
 
-    def employee_for_remote(employer, remote_employee)
-      remote_employee_id = remote_employee.fetch("id", nil).presence
+    def employee_for_remote(employer, dto)
+      remote_employee_id = dto.remote_employee_id
       employee = employer.employees.find_by(vitable_id: remote_employee_id) if remote_employee_id.present?
       return employee if employee
 
-      reference_id = remote_employee.fetch("reference_id", nil).to_s
+      reference_id = dto.reference_id.to_s
       if reference_id.match?(/\Amusto_employee_\d+\z/)
         employee = employer.employees.find_by(id: reference_id.delete_prefix("musto_employee_").to_i)
         return employee if employee
       end
 
-      email = remote_employee.fetch("email", nil).to_s.downcase
+      email = dto.email.to_s.downcase
       employer.employees.detect { |employee_record| employee_record.email.to_s.downcase == email } if email.present?
     end
 
-    def employee_employment_status_for(remote_employee)
-      normalized = remote_employee.fetch("status", nil).to_s.downcase
-      return "terminated" if normalized.in?(%w[inactive deactivated terminated])
-      return "active" if normalized.in?(%w[active reactivated])
-
-      nil
-    end
-
-    def deactivate_employee_benefits(employee, remote_employee, source:, refreshed_at:)
-      return EmployeeLifecycleReconciliationDto.empty unless employee_employment_status_for(remote_employee) == "terminated"
+    def deactivate_employee_benefits(employee, dto, source:, refreshed_at:)
+      return EmployeeLifecycleReconciliationDto.empty unless dto.local_employment_status == "terminated"
 
       EmployeeEligibilityRepository.new.deactivate_benefits!(
         employee:,
@@ -145,16 +129,6 @@ module Vitable
 
     def employer_scope
       @connection.organization.employers
-    end
-
-    def remote_employee_summary(remote_employee)
-      remote_employee.slice("id", "reference_id", "email", "status", "member_id")
-    end
-
-    def validate_remote_employee_identity!(remote_employee)
-      reference = remote_employee.fetch("reference_id", nil).presence || remote_employee.fetch("email", nil).presence || "unknown remote employee"
-      raise ArgumentError, "Vitable API snapshot employee #{reference} did not include a remote employee ID" if remote_employee.fetch("id", nil).blank?
-      raise ArgumentError, "Vitable API snapshot employee #{reference} did not include a remote member ID" if remote_employee.fetch("member_id", nil).blank?
     end
   end
 end
