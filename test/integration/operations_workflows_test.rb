@@ -2903,11 +2903,22 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
   end
 
   test "Vitable API snapshot refresh maps remote roster employees before enrollment reads" do
-    @employer.update!(vitable_id: "empr_ops_123")
     response_class = Data.define(:data)
     gateway_class = Class.new do
       define_method(:initialize) { |_connection| }
-      define_method(:list_all_employers) { response_class.new(data: [ { id: "empr_ops_123", name: "Ops Employer" } ]) }
+      define_method(:list_all_employers) do
+        response_class.new(
+          data: [
+            {
+              id: "empr_ops_123",
+              name: "Ops Employer",
+              legal_name: "Ops Employer LLC",
+              reference_id: "musto_employer_#{Employer.find_by!(name: "Ops Employer").id}",
+              active: true
+            }
+          ]
+        )
+      end
       define_method(:list_all_groups) { response_class.new(data: []) }
       define_method(:list_all_plans) { response_class.new(data: []) }
       define_method(:list_all_webhook_events) { response_class.new(data: []) }
@@ -2940,17 +2951,23 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     previous_key = ENV[@connection.api_key_reference]
     ENV[@connection.api_key_reference] = "vit_apk_test_value"
 
+    assert_nil @employer.vitable_id
+
     result = Vitable::RefreshApiSnapshotCommand.new(
       dto: Vitable::RefreshApiSnapshotDto.new(connection_id: @connection.id, requested_by: "integration_admin"),
       gateway_class:
     ).call
 
     assert result.success?
+    @employer.reload
     @employee.reload
     @pending_deduction.reload
     snapshot = @connection.reload.metadata.fetch("api_snapshot")
     sync = @connection.sync_runs.where(operation: "api_snapshot_refresh").recent_first.first
 
+    assert_equal "empr_ops_123", @employer.vitable_id
+    assert_equal "active", @employer.settings.fetch("vitable_remote_status")
+    assert_equal "musto_employer_#{@employer.id}", @employer.settings.fetch("vitable_remote_reference_id")
     assert_equal "empl_remote_casey", @employee.vitable_id
     assert_equal "active", @employee.metadata.fetch("vitable_remote_status")
     assert_equal "mem_remote_casey", @employee.metadata.fetch("vitable_member_id")
@@ -2959,15 +2976,22 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal "ready", @pending_deduction.status
     assert_equal "vitable_api_snapshot", @pending_deduction.metadata.fetch("source")
     assert_equal 1, snapshot.dig("counts", "remote_employee_count")
+    assert_equal 1, snapshot.dig("counts", "mapped_employer_count")
+    assert_equal 0, snapshot.dig("counts", "unmatched_remote_employer_count")
+    assert_equal 0, snapshot.dig("counts", "conflicting_remote_employer_count")
     assert_equal 1, snapshot.dig("counts", "mapped_employee_count")
     assert_equal 0, snapshot.dig("counts", "unmatched_remote_employee_count")
     assert_equal 1, snapshot.dig("counts", "remote_employee_deduction_changed_count")
+    assert_equal 1, snapshot.dig("employer_reconciliation", "matched_count")
     assert_equal 1, snapshot.fetch("remote_employee_rosters").first.fetch("employees").count
+    assert_equal "empr_ops_123", snapshot.fetch("remote_employee_rosters").first.fetch("remote_employer_id")
     assert_equal "empl_remote_casey", snapshot.fetch("employee_enrollments").first.fetch("remote_employee_id")
+    assert_equal 1, sync.stats.fetch("mapped_employer_count")
     assert_equal 1, sync.stats.fetch("remote_employee_count")
     assert_equal 1, sync.stats.fetch("mapped_employee_count")
 
     detail = Vitable::ConnectionDetailQuery.new.call(@connection.id)
+    assert_equal 1, detail.api_snapshot.mapped_employer_count
     assert_equal 1, detail.api_snapshot.remote_employee_count
     assert_equal 1, detail.api_snapshot.mapped_employee_count
     assert_equal 1, detail.api_snapshot.remote_employee_deduction_changed_count

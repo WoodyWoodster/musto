@@ -2,6 +2,9 @@ module Vitable
   ApiSnapshotDto = Data.define(
     :refreshed_at,
     :remote_employer_count,
+    :mapped_employer_count,
+    :unmatched_remote_employer_count,
+    :conflicting_remote_employer_count,
     :remote_group_count,
     :remote_plan_count,
     :remote_webhook_event_count,
@@ -27,6 +30,9 @@ module Vitable
       new(
         refreshed_at: payload["refreshed_at"].present? ? Time.iso8601(payload.fetch("refreshed_at")) : nil,
         remote_employer_count: counts.fetch("remote_employer_count", 0),
+        mapped_employer_count: counts.fetch("mapped_employer_count", 0),
+        unmatched_remote_employer_count: counts.fetch("unmatched_remote_employer_count", 0),
+        conflicting_remote_employer_count: counts.fetch("conflicting_remote_employer_count", 0),
         remote_group_count: counts.fetch("remote_group_count", 0),
         remote_plan_count: counts.fetch("remote_plan_count", 0),
         remote_webhook_event_count: counts.fetch("remote_webhook_event_count", 0),

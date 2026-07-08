@@ -511,6 +511,7 @@ module Vitable
 
     def snapshot_counts(snapshot)
       webhook_ingestion = snapshot.fetch("webhook_event_ingestion", {}).to_h
+      employer_reconciliation = snapshot.fetch("employer_reconciliation", {}).to_h
       employee_reconciliation = snapshot.fetch("employee_reconciliation", {}).to_h
       enrollment_reconciliation = snapshot.fetch("enrollment_reconciliation", {}).to_h
       employee_deduction_sync = employee_reconciliation.fetch("deduction_sync", {}).to_h
@@ -518,6 +519,9 @@ module Vitable
 
       {
         "remote_employer_count" => snapshot.fetch("employers", []).count,
+        "mapped_employer_count" => employer_reconciliation.fetch("matched_count", 0),
+        "unmatched_remote_employer_count" => employer_reconciliation.fetch("unmatched_count", 0),
+        "conflicting_remote_employer_count" => employer_reconciliation.fetch("conflict_count", 0),
         "remote_group_count" => snapshot.fetch("groups", []).count,
         "remote_plan_count" => snapshot.fetch("plans", []).count,
         "remote_webhook_event_count" => snapshot.fetch("webhook_events", []).count,
