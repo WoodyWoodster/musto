@@ -387,7 +387,7 @@ module Vitable
         if employee
           remote_employee_id = remote_employee.fetch("id", employee.vitable_id)
           refreshed_at = Time.current.iso8601
-          employee.update!(
+          update_attributes = {
             vitable_id: remote_employee_id,
             metadata: employee.metadata.to_h.stringify_keys.merge(
               "vitable_census_sync_status" => "synced",
@@ -397,7 +397,10 @@ module Vitable
               "vitable_remote_deductions" => remote_employee.fetch("deductions", []),
               "vitable_last_refreshed_at" => refreshed_at
             ).compact
-          )
+          }
+          local_employment_status = employee_employment_status_for(remote_employee)
+          update_attributes[:employment_status] = local_employment_status if local_employment_status.present? && employee.employment_status != local_employment_status
+          employee.update!(update_attributes)
           deduction_sync = deduction_sync.merge(
             PayrollDeductionRepository.new.sync_employee_deductions(
               employee:,
@@ -432,6 +435,14 @@ module Vitable
       end
 
       @employer.employees.find_by(email: remote_employee.fetch("email", nil))
+    end
+
+    def employee_employment_status_for(remote_employee)
+      normalized = remote_employee.fetch("status", nil).to_s.downcase
+      return "terminated" if normalized.in?(%w[inactive deactivated terminated])
+      return "active" if normalized.in?(%w[active reactivated])
+
+      nil
     end
 
     def census_submission_payload(manifest:, accepted_at:, remote_employer_id:, submitted_at:)

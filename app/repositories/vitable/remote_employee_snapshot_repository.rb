@@ -67,6 +67,8 @@ module Vitable
           "vitable_last_resource_snapshot" => remote_employee_summary(remote_employee)
         ).compact
       }
+      local_employment_status = employee_employment_status_for(remote_employee)
+      attributes[:employment_status] = local_employment_status if local_employment_status.present? && employee.employment_status != local_employment_status
       attributes[:vitable_id] = remote_employee_id if remote_employee_id.present? && employee.vitable_id != remote_employee_id
       employee.assign_attributes(attributes)
       changed = employee.has_changes_to_save?
@@ -100,6 +102,14 @@ module Vitable
 
       email = remote_employee.fetch("email", nil).to_s.downcase
       employer.employees.detect { |employee_record| employee_record.email.to_s.downcase == email } if email.present?
+    end
+
+    def employee_employment_status_for(remote_employee)
+      normalized = remote_employee.fetch("status", nil).to_s.downcase
+      return "terminated" if normalized.in?(%w[inactive deactivated terminated])
+      return "active" if normalized.in?(%w[active reactivated])
+
+      nil
     end
 
     def employer_from_reference_id(reference_id)

@@ -2997,6 +2997,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
   end
 
   test "Vitable API snapshot refresh maps remote roster employees before enrollment reads" do
+    @employee.update!(employment_status: "terminated")
     response_class = Data.define(:data)
     gateway_class = Class.new do
       define_method(:initialize) { |_connection| }
@@ -3078,6 +3079,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal "external_reference_id", @employer.settings.fetch("vitable_care_group_snapshot_matched_by")
     assert_equal "grp_remote_ops", @employer.settings.dig("vitable_care_group_snapshot", "id")
     assert_equal "empl_remote_casey", @employee.vitable_id
+    assert_equal "active", @employee.employment_status
     assert_equal "active", @employee.metadata.fetch("vitable_remote_status")
     assert_equal "mem_remote_casey", @employee.metadata.fetch("vitable_member_id")
     assert_equal "musto_employee_#{@employee.id}", @employee.metadata.fetch("vitable_remote_reference_id")
@@ -3549,6 +3551,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       dto: Vitable::SubmitCensusSyncDto.new(requested_by: "integration_admin"),
       gateway_class:
     ).call
+    @employee.update!(employment_status: "terminated")
     result = Vitable::RefreshRemoteRosterCommand.new(
       dto: Vitable::RefreshRemoteRosterDto.new(requested_by: "integration_admin"),
       gateway_class:
@@ -3557,6 +3560,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert submit_result.success?
     assert result.success?
     assert_equal "empl_remote_casey", @employee.reload.vitable_id
+    assert_equal "active", @employee.employment_status
     assert_equal "synced", @employee.metadata.fetch("vitable_census_sync_status")
     assert_equal "active", @employee.metadata.fetch("vitable_remote_status")
     assert_equal "mem_remote_casey", @employee.metadata.fetch("vitable_member_id")

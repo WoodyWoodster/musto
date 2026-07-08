@@ -49,6 +49,11 @@ module Vitable
         update_attributes[:vitable_id] = remote_id
         applied_changes << "vitable_id"
       end
+      local_employment_status = employee_employment_status_for(remote_resource)
+      if local_employment_status.present? && employee.employment_status != local_employment_status
+        update_attributes[:employment_status] = local_employment_status
+        applied_changes << "employment_status"
+      end
 
       metadata_updates = {
         "vitable_remote_status" => remote_resource.fetch("status", nil),
@@ -527,6 +532,15 @@ module Vitable
       else
         {}
       end
+    end
+
+    def employee_employment_status_for(remote_resource)
+      normalized = remote_resource.fetch("status", nil).to_s.downcase
+      return "terminated" if normalized.in?(%w[inactive deactivated terminated])
+      return "active" if normalized.in?(%w[active reactivated])
+      return "terminated" if @event.event_name == "employee.deactivated"
+
+      nil
     end
 
     def employer_event_settings(remote_resource, timestamp)
