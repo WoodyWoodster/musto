@@ -2753,6 +2753,17 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
               delivered_at: Time.current,
               failed_at: nil,
               failure_reason: ""
+            },
+            {
+              id: "wdlv_ops_124",
+              webhook_event_id: event_id,
+              subscription_id: "wsub_ops_123",
+              status: "Failed",
+              created_at: Time.current,
+              started_at: Time.current,
+              delivered_at: nil,
+              failed_at: Time.current,
+              failure_reason: "max_attempts"
             }
           ]
         )
@@ -2768,11 +2779,18 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
 
     assert result.success?
     snapshot = @webhook_event.reload.metadata.fetch("delivery_snapshot")
-    assert_equal 1, snapshot.fetch("delivery_count")
+    assert_equal 2, snapshot.fetch("delivery_count")
+    assert_equal 1, snapshot.dig("status_counts", "delivered")
+    assert_equal 1, snapshot.dig("status_counts", "failed")
     assert_equal "wdlv_ops_123", snapshot.fetch("deliveries").first.fetch("id")
+    sync = @connection.sync_runs.where(operation: "webhook_delivery_refresh").recent_first.first
+    assert_equal 1, sync.stats.dig("delivery_status_counts", "delivered")
+    assert_equal 1, sync.stats.dig("delivery_status_counts", "failed")
     detail = Vitable::WebhookEventDetailQuery.new.call(@webhook_event.id)
     assert_instance_of Vitable::WebhookDeliveryDto, detail.deliveries.first
     assert_equal "delivered", detail.deliveries.first.status_key
+    assert_equal 1, detail.delivery_status_counts.fetch("delivered")
+    assert_equal 1, detail.delivery_status_counts.fetch("failed")
   ensure
     ENV[@connection.api_key_reference] = previous_key
   end

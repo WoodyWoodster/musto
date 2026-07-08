@@ -81,6 +81,17 @@
         </div>
         <%= status_pill(@webhook_event.delivery_refreshed_at.present? ? "ready" : "pending") %>
       </div>
+      <% if @webhook_event.delivery_status_counts.any? %>
+        <div class="mt-4 flex flex-wrap gap-2">
+          <% %w[delivered failed in_progress pending].each do |status| %>
+            <% count = @webhook_event.delivery_status_counts.fetch(status, 0) %>
+            <span class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600">
+              <span><%= status.humanize %></span>
+              <span class="font-mono text-slate-950"><%= compact_number(count) %></span>
+            </span>
+          <% end %>
+        </div>
+      <% end %>
     </div>
     <% if @webhook_event.deliveries.any? %>
       <div class="overflow-x-auto">

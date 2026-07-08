@@ -440,12 +440,14 @@ module Vitable
     def succeed_webhook_delivery_run(event, sync_run, response)
       response_hash = serialize_response(response)
       deliveries = webhook_delivery_payloads_from_response(response_hash, expected_webhook_event_id: event.event_id)
+      status_counts = webhook_delivery_status_counts(deliveries)
       refreshed_at = Time.current.iso8601
       event.update!(
         metadata: event.metadata.to_h.merge(
           "delivery_snapshot" => {
             "refreshed_at" => refreshed_at,
             "delivery_count" => deliveries.count,
+            "status_counts" => status_counts,
             "deliveries" => deliveries
           }
         )
@@ -457,6 +459,7 @@ module Vitable
         stats: sync_run.stats.to_h.merge(
           "remote_response" => response_hash,
           "delivery_count" => deliveries.count,
+          "delivery_status_counts" => status_counts,
           "refreshed_at" => refreshed_at
         )
       )
@@ -664,6 +667,13 @@ module Vitable
           .validate!(expected_webhook_event_id:)
           .to_snapshot_hash
       end
+    end
+
+    def webhook_delivery_status_counts(deliveries)
+      deliveries.each_with_object(Hash.new(0)) do |delivery, counts|
+        key = WebhookDeliveryDto.from_hash(delivery).status_key.presence || "unknown"
+        counts[key] += 1
+      end.to_h
     end
 
     def webhook_replay_stats(sync_run, event, result: nil, errors: [])
