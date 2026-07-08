@@ -27,6 +27,7 @@ The SDK is initialized through `Vitable::ClientGateway`, using `IntegrationConne
 VITABLE_CONNECT_API_KEY=...
 VITABLE_CONNECT_ENVIRONMENT=demo
 VITABLE_CONNECT_BASE_URL=https://api.demo.vitablehealth.com
+VITABLE_WIDGET_TOKEN_BROKER_SECRET=...
 VITABLE_WEBHOOK_SECRET=...
 ```
 
@@ -38,7 +39,7 @@ The Vitable census sync workspace builds a local review manifest for `POST /v1/e
 
 The benefit plan administration workspace reconciles local plans against Vitable's read-only `GET /v1/plans` catalog. It records mapped, unmatched, and ambiguous plans so downstream member sync uses real Vitable plan IDs instead of generated placeholders.
 
-The embedded enrollment session workspace prepares employee-bound access-token requests for Vitable's embedded flows. It uses `bound_entity: { type: :employee, id: "empl_..." }`, records every issue attempt as a `SyncRun`, and filters token values before any API telemetry is persisted.
+The embedded enrollment session workspace prepares employee-bound access-token requests for Vitable's embedded flows. It uses `bound_entity: { type: :employee, id: "empl_..." }`, records every issue attempt as a `SyncRun`, and filters token values before any API telemetry is persisted. Just-in-time widget token broker endpoints require `VITABLE_WIDGET_TOKEN_BROKER_SECRET` plus the `X-Musto-Widget-Token` request header before they issue employer-bound or employee-bound access tokens.
 
 The care groups workspace covers Vitable Embedded Care group creation plus asynchronous group member sync. Member manifests require remote Vitable plan IDs; missing plan mappings are recorded as holdbacks so demo submissions do not fabricate partner identifiers. Completed member-sync retrieve results are reconciled back into local employee and enrollment metadata by `reference_id`, including per-member failure reasons.
 

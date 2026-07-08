@@ -3,6 +3,7 @@ require "test_helper"
 class VitableWidgetTokensTest < ActionDispatch::IntegrationTest
   setup do
     ENV.delete("VITABLE_CONNECT_API_KEY")
+    ENV.delete("VITABLE_WIDGET_TOKEN_BROKER_SECRET")
     @organization = Organization.create!(name: "Widget Org", external_id: "org_widget")
     @employer = @organization.employers.create!(
       name: "Widget Employer",
@@ -34,10 +35,13 @@ class VitableWidgetTokensTest < ActionDispatch::IntegrationTest
 
   test "employer widget token endpoint returns a short-lived token without persisting the token value" do
     ENV["VITABLE_CONNECT_API_KEY"] = "vit_apk_test_value"
+    ENV["VITABLE_WIDGET_TOKEN_BROKER_SECRET"] = "broker_secret"
     gateway = gateway_with_tokens
 
     with_gateway(gateway) do
-      post "/api/v1/vitable/widget-tokens/employer", params: { requested_by: "widget_test" }
+      post "/api/v1/vitable/widget-tokens/employer",
+           params: { requested_by: "widget_test" },
+           headers: broker_headers
     end
 
     assert_response :created
@@ -53,14 +57,18 @@ class VitableWidgetTokensTest < ActionDispatch::IntegrationTest
     assert_not_includes sync.stats.to_json, "vit_at_employer_secret"
   ensure
     ENV.delete("VITABLE_CONNECT_API_KEY")
+    ENV.delete("VITABLE_WIDGET_TOKEN_BROKER_SECRET")
   end
 
   test "employee widget token endpoint returns an employee-bound token" do
     ENV["VITABLE_CONNECT_API_KEY"] = "vit_apk_test_value"
+    ENV["VITABLE_WIDGET_TOKEN_BROKER_SECRET"] = "broker_secret"
     gateway = gateway_with_tokens
 
     with_gateway(gateway) do
-      post "/api/v1/vitable/widget-tokens/employees/#{@employee.id}", params: { requested_by: "widget_test" }
+      post "/api/v1/vitable/widget-tokens/employees/#{@employee.id}",
+           params: { requested_by: "widget_test" },
+           headers: broker_headers
     end
 
     assert_response :created
@@ -75,23 +83,33 @@ class VitableWidgetTokensTest < ActionDispatch::IntegrationTest
     assert_not_includes sync.stats.to_json, "vit_at_employee_secret"
   ensure
     ENV.delete("VITABLE_CONNECT_API_KEY")
+    ENV.delete("VITABLE_WIDGET_TOKEN_BROKER_SECRET")
   end
 
   test "widget token endpoint reports missing credentials" do
-    post "/api/v1/vitable/widget-tokens/employer", params: { requested_by: "widget_test" }
+    ENV["VITABLE_WIDGET_TOKEN_BROKER_SECRET"] = "broker_secret"
+
+    post "/api/v1/vitable/widget-tokens/employer",
+         params: { requested_by: "widget_test" },
+         headers: broker_headers
 
     assert_response :unauthorized
     body = JSON.parse(response.body)
     assert_match "VITABLE_CONNECT_API_KEY", body.fetch("errors").to_sentence
     sync = @connection.sync_runs.where(operation: "widget_token_broker").recent_first.first
     assert_equal "needs_credentials", sync.status
+  ensure
+    ENV.delete("VITABLE_WIDGET_TOKEN_BROKER_SECRET")
   end
 
   test "employee widget token endpoint blocks employees without remote IDs" do
     @employee.update!(vitable_id: nil)
     ENV["VITABLE_CONNECT_API_KEY"] = "vit_apk_test_value"
+    ENV["VITABLE_WIDGET_TOKEN_BROKER_SECRET"] = "broker_secret"
 
-    post "/api/v1/vitable/widget-tokens/employees/#{@employee.id}", params: { requested_by: "widget_test" }
+    post "/api/v1/vitable/widget-tokens/employees/#{@employee.id}",
+         params: { requested_by: "widget_test" },
+         headers: broker_headers
 
     assert_response :unprocessable_entity
     body = JSON.parse(response.body)
@@ -100,9 +118,46 @@ class VitableWidgetTokensTest < ActionDispatch::IntegrationTest
     assert_equal "blocked", sync.status
   ensure
     ENV.delete("VITABLE_CONNECT_API_KEY")
+    ENV.delete("VITABLE_WIDGET_TOKEN_BROKER_SECRET")
+  end
+
+  test "widget token endpoint does not issue tokens when broker secret is not configured" do
+    ENV["VITABLE_CONNECT_API_KEY"] = "vit_apk_test_value"
+
+    post "/api/v1/vitable/widget-tokens/employer",
+         params: { requested_by: "widget_test" },
+         headers: broker_headers
+
+    assert_response :service_unavailable
+    body = JSON.parse(response.body)
+    assert_match "VITABLE_WIDGET_TOKEN_BROKER_SECRET", body.fetch("errors").to_sentence
+    assert_nil @connection.sync_runs.find_by(operation: "widget_token_broker")
+  ensure
+    ENV.delete("VITABLE_CONNECT_API_KEY")
+  end
+
+  test "widget token endpoint does not issue tokens with an invalid broker secret" do
+    ENV["VITABLE_CONNECT_API_KEY"] = "vit_apk_test_value"
+    ENV["VITABLE_WIDGET_TOKEN_BROKER_SECRET"] = "broker_secret"
+
+    post "/api/v1/vitable/widget-tokens/employer",
+         params: { requested_by: "widget_test" },
+         headers: broker_headers("incorrect")
+
+    assert_response :unauthorized
+    body = JSON.parse(response.body)
+    assert_match "Widget token broker authorization", body.fetch("errors").to_sentence
+    assert_nil @connection.sync_runs.find_by(operation: "widget_token_broker")
+  ensure
+    ENV.delete("VITABLE_CONNECT_API_KEY")
+    ENV.delete("VITABLE_WIDGET_TOKEN_BROKER_SECRET")
   end
 
   private
+
+  def broker_headers(secret = "broker_secret")
+    { "X-Musto-Widget-Token" => secret }
+  end
 
   def with_gateway(gateway)
     original_new = Vitable::ClientGateway.method(:new)
