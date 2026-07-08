@@ -54,6 +54,8 @@ bin/rails vitable:demo_smoke
 
 The task uses `VITABLE_CONNECT_API_KEY`, `VITABLE_CONNECT_ENVIRONMENT=demo`, and `VITABLE_CONNECT_BASE_URL=https://api.demo.vitablehealth.com`. It issues an access token, reads employers, groups, plans, webhook events, and sample child resources when available, then stores a redacted `demo_smoke_check` snapshot on the Vitable connection and a `demo_smoke_check` `SyncRun`.
 
+GitHub also includes a manual `Vitable Demo Smoke` workflow. It reads `VITABLE_CONNECT_API_KEY` from repository secrets, targets `https://api.demo.vitablehealth.com`, serializes runs with workflow concurrency, and accepts an optional `connection_id` input that maps to `VITABLE_SMOKE_CONNECTION_ID`.
+
 ## CQRS Layout
 
 - Commands: `app/commands`

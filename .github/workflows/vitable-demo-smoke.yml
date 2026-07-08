@@ -2,6 +2,15 @@ name: Vitable Demo Smoke
 
 on:
   workflow_dispatch:
+    inputs:
+      connection_id:
+        description: "Optional IntegrationConnection ID to check instead of bootstrapping a demo connection"
+        required: false
+        type: string
+
+concurrency:
+  group: vitable-demo-smoke
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -9,11 +18,13 @@ permissions:
 jobs:
   smoke:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     env:
       RAILS_ENV: test
       VITABLE_CONNECT_API_KEY: ${{ secrets.VITABLE_CONNECT_API_KEY }}
       VITABLE_CONNECT_ENVIRONMENT: demo
       VITABLE_CONNECT_BASE_URL: https://api.demo.vitablehealth.com
+      VITABLE_SMOKE_CONNECTION_ID: ${{ inputs.connection_id }}
       VITABLE_SMOKE_REQUESTED_BY: github_actions
 
     steps:
