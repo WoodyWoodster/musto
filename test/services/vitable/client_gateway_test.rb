@@ -250,6 +250,34 @@ module Vitable
       assert_equal "[FILTERED]", response.dig(:data, 0, "nested", "access_token")
     end
 
+    test "rejects list responses with non-array data" do
+      organization = Organization.create!(name: "Gateway Pagination Shape Test", external_id: "org_gateway_pagination_shape_test")
+      connection = organization.integration_connections.create!(provider: "vitable", environment: "production")
+      page_class = Data.define(:data)
+      page = page_class.new(data: { id: "plan_single_object" })
+
+      error = assert_raises(ArgumentError) do
+        ClientGateway.new(connection).send(:page_response, page)
+      end
+
+      assert_match "paginated response data must be an array", error.message
+    end
+
+    test "rejects auto-paginated items that are not resource objects" do
+      organization = Organization.create!(name: "Gateway Pagination Item Test", external_id: "org_gateway_pagination_item_test")
+      connection = organization.integration_connections.create!(provider: "vitable", environment: "production")
+      page = Object.new
+      page.define_singleton_method(:auto_paging_each) do |&block|
+        block.call("plan_scalar")
+      end
+
+      error = assert_raises(ArgumentError) do
+        ClientGateway.new(connection).send(:page_response, page)
+      end
+
+      assert_match "paginated response item 1 was not a resource object", error.message
+    end
+
     test "passes webhook event filters to the SDK list call" do
       organization = Organization.create!(name: "Gateway Webhook Filter Test", external_id: "org_gateway_webhook_filter_test")
       connection = organization.integration_connections.create!(provider: "vitable", environment: "production")

@@ -407,10 +407,17 @@ module Vitable
 
       if page.respond_to?(:auto_paging_each)
         items = []
-        page.auto_paging_each { |item| items << serialize_response(item) }
+        index = 0
+        page.auto_paging_each do |item|
+          items << serialize_collection_item(item, index:)
+          index += 1
+        end
         items
       else
-        Array(page_data(page)).map { |item| serialize_response(item) }
+        data = page_data(page)
+        raise ArgumentError, "Vitable paginated response data must be an array" unless data.is_a?(Array)
+
+        data.each_with_index.map { |item, index| serialize_collection_item(item, index:) }
       end
     end
 
@@ -419,6 +426,14 @@ module Vitable
 
       serialized = page.respond_to?(:deep_to_h) ? page.deep_to_h : page.to_h
       serialized.fetch(:data, serialized.fetch("data", []))
+    end
+
+    def serialize_collection_item(item, index:)
+      unless item.respond_to?(:to_h) || item.respond_to?(:deep_to_h)
+        raise ArgumentError, "Vitable paginated response item #{index + 1} was not a resource object"
+      end
+
+      serialize_response(item)
     end
 
     def census_employee_payload(employee)
