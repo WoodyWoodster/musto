@@ -86,11 +86,13 @@ module Vitable
         refreshed_at:
       )
       webhook_event_query = webhook_event_query(connection, high_water_mark: snapshot_refreshed_at)
-      webhook_events = list_snapshot_page(
-        trace,
-        step: "webhook_events",
-        response_label: "Vitable webhook event list response"
-      ) { gateway.list_all_webhook_events(**webhook_event_query) }
+      webhook_events = webhook_event_snapshots(
+        list_snapshot_page(
+          trace,
+          step: "webhook_events",
+          response_label: "Vitable webhook event list response"
+        ) { gateway.list_all_webhook_events(**webhook_event_query) }
+      )
       webhook_event_details = remote_webhook_event_details(gateway, webhook_events, trace:)
       webhook_events = webhook_event_reconciliation_snapshots(webhook_events, webhook_event_details)
       webhook_event_deliveries = remote_webhook_event_deliveries(gateway, webhook_events, trace:)
@@ -193,6 +195,12 @@ module Vitable
       }.compact
     end
 
+    def webhook_event_snapshots(webhook_events)
+      Array(webhook_events).map do |webhook_event|
+        RemoteWebhookEventDto.from_remote_event(webhook_event)&.to_snapshot_hash || webhook_event.to_h.stringify_keys
+      end
+    end
+
     def remote_webhook_event_details(gateway, webhook_events, trace:)
       return [] unless gateway.respond_to?(:retrieve_webhook_event)
 
@@ -245,8 +253,10 @@ module Vitable
     end
 
     def remote_webhook_event_id(webhook_event)
-      webhook_event.to_h.stringify_keys.fetch("event_id", nil).presence ||
-        webhook_event.to_h.stringify_keys.fetch("id", nil).presence
+      event_id = RemoteWebhookEventDto.remote_event_id(webhook_event)
+      return if event_id == "unknown"
+
+      event_id
     end
 
     def validate_retrieved_webhook_event!(remote_webhook_event, expected_remote_id:)

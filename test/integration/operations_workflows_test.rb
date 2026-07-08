@@ -3708,7 +3708,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       define_method(:list_all_plans) { response_class.new(data: []) }
       define_method(:list_all_employee_enrollments) { |_employee_id| response_class.new(data: []) }
       define_method(:list_all_webhook_events) do |**_filters|
-        response_class.new(data: [ { id: "wevt_remote_detail_sparse" } ])
+        response_class.new(data: [ { data: { id: "wevt_remote_detail_sparse" } } ])
       end
       define_method(:retrieve_webhook_event) do |event_id|
         response_class.new(

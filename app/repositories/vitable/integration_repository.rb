@@ -1192,8 +1192,10 @@ module Vitable
     end
 
     def remote_webhook_event_resource_type(remote_event)
-      attributes = remote_event.to_h.stringify_keys
-      attributes.fetch("resource_type", nil).presence
+      dto = RemoteWebhookEventDto.from_remote_event(remote_event)
+      return dto.resource_type if dto
+
+      remote_event.to_h.stringify_keys.fetch("resource_type", nil).presence
     end
 
     def webhook_recovery_counts(recovery)

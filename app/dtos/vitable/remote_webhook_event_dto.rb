@@ -9,7 +9,7 @@ module Vitable
     :raw_payload
   ) do
     def self.from_remote_event(remote_event)
-      attributes = remote_event.to_h.stringify_keys
+      attributes = event_attributes(remote_event.to_h.stringify_keys)
       event_id = attributes["event_id"].presence || attributes["id"].presence
       occurred_at = parse_time(attributes["created_at"].presence || attributes["occurred_at"].presence)
       organization_id = attributes["organization_id"].presence || attributes["organization_external_id"].presence
@@ -38,6 +38,10 @@ module Vitable
       )
     end
 
+    def to_snapshot_hash
+      payload
+    end
+
     def to_event_attributes
       {
         organization_external_id: organization_id,
@@ -51,7 +55,38 @@ module Vitable
 
     def self.remote_event_id(remote_event)
       attributes = remote_event.to_h.stringify_keys
-      attributes["event_id"].presence || attributes["id"].presence || "unknown"
+      attributes["event_id"].presence ||
+        attributes["id"].presence ||
+        nested_event_id(attributes).presence ||
+        "unknown"
+    end
+
+    def self.event_attributes(attributes)
+      return attributes if attributes["event_id"].present? || attributes["id"].present?
+
+      data = attributes["data"]
+      return attributes unless data.respond_to?(:to_h)
+
+      data_attributes = data.to_h.stringify_keys
+      return attributes unless event_envelope?(data_attributes)
+
+      attributes.merge(data_attributes)
+    end
+
+    def self.event_envelope?(attributes)
+      (attributes["event_id"].present? || attributes["id"].present?) &&
+        attributes["event_name"].present? &&
+        attributes["resource_type"].present? &&
+        attributes["resource_id"].present? &&
+        (attributes["created_at"].present? || attributes["occurred_at"].present?)
+    end
+
+    def self.nested_event_id(attributes)
+      data = attributes["data"]
+      return unless data.respond_to?(:to_h)
+
+      data_attributes = data.to_h.stringify_keys
+      data_attributes["event_id"].presence || data_attributes["id"].presence
     end
 
     def self.parse_time(value)
@@ -63,6 +98,6 @@ module Vitable
       nil
     end
 
-    private_class_method :parse_time
+    private_class_method :event_attributes, :event_envelope?, :nested_event_id, :parse_time
   end
 end
