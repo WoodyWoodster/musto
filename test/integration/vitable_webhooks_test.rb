@@ -191,6 +191,46 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
     ENV.delete("VITABLE_CONNECT_API_KEY")
   end
 
+  test "fails fetched employee webhook reconciliation when response omits member id" do
+    employer = @organization.employers.create!(name: "Webhook Employer", status: "active")
+    employee = employer.employees.create!(first_name: "Casey", last_name: "Nguyen", email: "casey@example.com")
+    ENV["VITABLE_CONNECT_API_KEY"] = "vit_apk_test_value"
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:fetch_resource) do |_resource_type, resource_id|
+        {
+          data: {
+            id: resource_id,
+            reference_id: "musto_employee_#{Employee.find_by!(email: "casey@example.com").id}",
+            email: "casey@example.com",
+            status: "active"
+          }
+        }
+      end
+    end
+
+    result = Vitable::ProcessWebhookCommand.new(
+      payload: webhook_payload.merge(
+        event_id: "wevt_test_employee_missing_member_id",
+        event_name: "employee.eligibility_granted",
+        resource_type: "employee",
+        resource_id: "empl_remote_casey"
+      ),
+      gateway_class:
+    ).call
+
+    assert result.failure?
+    event = WebhookEvent.find_by!(event_id: "wevt_test_employee_missing_member_id")
+
+    assert_equal "failed", event.status
+    assert_match "remote member ID", event.error_message
+    assert_match "remote member ID", result.errors.to_sentence
+    assert_nil employee.reload.vitable_id
+    assert_nil employee.metadata.fetch("vitable_member_id", nil)
+  ensure
+    ENV.delete("VITABLE_CONNECT_API_KEY")
+  end
+
   test "stores unsupported Vitable webhook resource types as payload-only snapshots" do
     ENV["VITABLE_CONNECT_API_KEY"] = "vit_apk_test_value"
     gateway_class = Class.new do
@@ -658,6 +698,59 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
     assert_equal "Enrollment", reconciliation.fetch("local_record_type")
     assert_equal enrollment.id, reconciliation.fetch("local_record_id")
     assert_equal "employee_id+plan_id", reconciliation.fetch("matched_by")
+  ensure
+    ENV.delete("VITABLE_CONNECT_API_KEY")
+  end
+
+  test "fails fetched enrollment webhook reconciliation when response omits employee id" do
+    employer = @organization.employers.create!(name: "Enrollment Employer", status: "active")
+    employee = employer.employees.create!(
+      first_name: "Casey",
+      last_name: "Nguyen",
+      email: "casey.enrollment@example.com",
+      vitable_id: "empl_remote_casey"
+    )
+    plan = employer.benefit_plans.create!(
+      name: "Vitable Care",
+      category: "direct_primary_care",
+      carrier: "Vitable",
+      vitable_id: "bprd_remote_care"
+    )
+    enrollment = employee.enrollments.create!(benefit_plan: plan, status: "pending")
+    ENV["VITABLE_CONNECT_API_KEY"] = "vit_apk_test_value"
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:fetch_resource) do |_resource_type, resource_id|
+        {
+          data: {
+            id: resource_id,
+            benefit: {
+              id: "bprd_remote_care",
+              name: "Vitable Care",
+              category: "Medical",
+              product_code: "VPC"
+            },
+            status: "enrolled",
+            coverage_start: Date.current.beginning_of_month,
+            employee_deduction_in_cents: 7900
+          }
+        }
+      end
+    end
+
+    result = Vitable::ProcessWebhookCommand.new(
+      payload: webhook_payload.merge(event_id: "wevt_test_enrollment_missing_employee_id"),
+      gateway_class:
+    ).call
+
+    assert result.failure?
+    event = WebhookEvent.find_by!(event_id: "wevt_test_enrollment_missing_employee_id")
+
+    assert_equal "failed", event.status
+    assert_match "remote employee ID", event.error_message
+    assert_match "remote employee ID", result.errors.to_sentence
+    assert_nil enrollment.reload.vitable_id
+    assert_equal "pending", enrollment.status
   ensure
     ENV.delete("VITABLE_CONNECT_API_KEY")
   end

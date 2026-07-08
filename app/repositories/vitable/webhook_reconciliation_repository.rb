@@ -444,6 +444,14 @@ module Vitable
         remote_resource.fetch("name", nil).presence ||
         @event.resource_id
       raise ArgumentError, "Vitable #{@event.resource_type} resource #{reference} did not include a remote resource ID" if remote_resource.fetch("id", nil).blank?
+
+      case @event.resource_type
+      when "employee"
+        raise ArgumentError, "Vitable employee resource #{reference} did not include a remote member ID" if remote_resource.fetch("member_id", nil).blank?
+      when "enrollment"
+        raise ArgumentError, "Vitable enrollment resource #{reference} did not include a remote employee ID" if remote_resource.fetch("employee_id", nil).blank?
+        raise ArgumentError, "Vitable enrollment resource #{reference} did not include a remote benefit ID" if remote_resource.dig("benefit", "id").blank?
+      end
     end
 
     def remote_employee_id(remote_resource)
