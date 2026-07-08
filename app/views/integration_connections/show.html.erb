@@ -30,6 +30,10 @@
             <p class="text-sm text-slate-600">Organization external ID</p>
             <p class="mt-1 break-all font-mono text-sm font-semibold"><%= @connection.organization_external_id %></p>
           </div>
+          <div>
+            <p class="text-sm text-slate-600">API target</p>
+            <p class="mt-1 break-all font-mono text-sm font-semibold"><%= @connection.api_base_url.presence || @connection.sdk_environment || @connection.environment %></p>
+          </div>
           <div class="h-px bg-slate-200"></div>
           <div class="grid grid-cols-2 gap-4">
             <div>

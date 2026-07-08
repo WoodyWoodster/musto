@@ -5,6 +5,8 @@ module Vitable
     :organization_external_id,
     :provider,
     :environment,
+    :api_base_url,
+    :sdk_environment,
     :status,
     :api_key_reference,
     :webhook_secret_reference,
@@ -158,6 +160,8 @@ module Vitable
         organization_external_id: record.organization.external_id,
         provider: record.provider,
         environment: record.environment,
+        api_base_url: record.effective_api_base_url,
+        sdk_environment: record.sdk_environment,
         status: record.status,
         api_key_reference: record.api_key_reference,
         webhook_secret_reference: record.webhook_secret_reference,
@@ -213,6 +217,11 @@ module Vitable
           label: "Webhook secret reference",
           status: webhook_secret_status(record),
           detail: webhook_secret_detail(record)
+        ),
+        ConnectionHealthCheckDto.new(
+          label: "API target",
+          status: "ready",
+          detail: api_target_detail(record)
         ),
         ConnectionHealthCheckDto.new(
           label: "Organization routing",
@@ -298,6 +307,14 @@ module Vitable
       record.webhook_secret_reference.presence || "Add a webhook secret env var reference before accepting signed production webhooks"
     end
 
+    def self.api_target_detail(record)
+      if record.effective_api_base_url.present?
+        "Requests target #{record.effective_api_base_url}"
+      else
+        "Requests use SDK environment #{record.sdk_environment || record.environment}"
+      end
+    end
+
     def self.timeline(webhook_events, sync_runs, request_logs)
       [
         *webhook_events.map do |event|
@@ -332,6 +349,6 @@ module Vitable
 
     private_class_method :metrics, :health_checks, :endpoint_coverage, :endpoint_activity, :matching_request_logs,
       :matching_sync_runs, :matching_webhook_events, :endpoint_activity_entry, :endpoint_status, :snapshot_count,
-      :webhook_secret_status, :webhook_secret_detail, :timeline
+      :webhook_secret_status, :webhook_secret_detail, :api_target_detail, :timeline
   end
 end

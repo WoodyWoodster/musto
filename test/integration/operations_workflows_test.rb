@@ -2924,6 +2924,11 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_instance_of Vitable::ApiSnapshotDto, detail.api_snapshot
     assert_instance_of Vitable::WebhookSimulatorDto, detail.simulator
     assert_instance_of Vitable::WebhookSimulationEventOptionDto, detail.simulator.event_options.first
+    assert_equal "https://api.demo.vitablehealth.com", detail.api_base_url
+    assert_nil detail.sdk_environment
+    api_target_check = detail.health_checks.find { |check| check.label == "API target" }
+    assert_equal "ready", api_target_check.status
+    assert_equal "Requests target https://api.demo.vitablehealth.com", api_target_check.detail
     assert_equal 13, detail.simulator.event_options.count
     assert_equal %w[enrollment employee payroll_deduction dependent employer plan_year], detail.simulator.resource_options
     event_names = detail.simulator.event_options.map(&:event_name)
@@ -3025,6 +3030,8 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_select "h1", "#{@organization.name} Vitable connection"
+    assert_select "p", "API target"
+    assert_select "p", "https://api.demo.vitablehealth.com"
     assert_select "h2", "Remote API snapshot"
     assert_select "h2", "Test event composer"
     assert_select "h2", "Readiness checks"
