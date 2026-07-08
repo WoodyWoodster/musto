@@ -39,6 +39,48 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
     assert_equal "wevt_test_sdk_id_shape", event.payload.fetch("event_id")
   end
 
+  test "accepts a Vitable webhook that uses occurred_at for the event timestamp" do
+    occurred_at = Time.current.change(usec: 0)
+    payload = webhook_payload.except(:created_at).merge(
+      event_id: "wevt_test_occurred_at_shape",
+      occurred_at: occurred_at.iso8601
+    )
+
+    assert_difference "WebhookEvent.count", 1 do
+      post api_v1_webhooks_vitable_path, params: payload, as: :json
+    end
+
+    assert_response :accepted
+    event = WebhookEvent.find_by!(event_id: "wevt_test_occurred_at_shape")
+    assert_equal occurred_at.to_i, event.occurred_at.to_i
+    assert_equal occurred_at.iso8601, event.payload.fetch("created_at")
+  end
+
+  test "rejects a Vitable webhook with an invalid event timestamp" do
+    payload = webhook_payload.merge(
+      event_id: "wevt_test_invalid_timestamp",
+      created_at: "not-a-timestamp"
+    )
+
+    assert_no_difference "WebhookEvent.count" do
+      post api_v1_webhooks_vitable_path, params: payload, as: :json
+    end
+
+    assert_response :unprocessable_entity
+    assert_includes JSON.parse(response.body).fetch("errors"), "Invalid Vitable webhook payload: created_at could not be parsed as ISO 8601"
+  end
+
+  test "rejects a Vitable webhook without an event identifier" do
+    payload = webhook_payload.except(:event_id)
+
+    assert_no_difference "WebhookEvent.count" do
+      post api_v1_webhooks_vitable_path, params: payload, as: :json
+    end
+
+    assert_response :unprocessable_entity
+    assert_includes JSON.parse(response.body).fetch("errors"), "Invalid Vitable webhook payload: key not found: :event_id"
+  end
+
   test "does not duplicate webhook events with the same event id" do
     post api_v1_webhooks_vitable_path, params: webhook_payload, as: :json
     assert_response :accepted
