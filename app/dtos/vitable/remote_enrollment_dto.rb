@@ -52,8 +52,8 @@ module Vitable
         "benefit_name" => benefit_name.presence || enrollment.benefit_plan.name,
         "employee_deduction_in_cents" => employee_deduction_amount(enrollment),
         "frequency" => raw_payload.fetch("frequency", nil).presence,
-        "period_start_date" => raw_payload.fetch("period_start_date", nil).presence || coverage_start_on&.iso8601,
-        "period_end_date" => raw_payload.fetch("period_end_date", nil).presence || coverage_end_on&.iso8601,
+        "period_start_date" => raw_payload.fetch("period_start_date", nil).presence,
+        "period_end_date" => raw_payload.fetch("period_end_date", nil).presence,
         "tax_classification" => raw_payload.fetch("tax_classification", nil).presence,
         "status" => deduction_status
       }.compact

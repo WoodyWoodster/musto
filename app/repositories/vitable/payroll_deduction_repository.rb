@@ -5,10 +5,9 @@ module Vitable
       deductions = Array(remote_deductions)
       return result if deductions.empty?
 
-      payroll_run = current_or_create_payroll_run(employee.employer)
-
       deductions.each do |payload|
         dto = RemotePayrollDeductionDto.from_hash(payload)
+        payroll_run = payroll_run_for(employee.employer, dto)
         enrollment = enrollment_for_remote_deduction(employee, dto)
         deduction = payroll_deduction_for(payroll_run, employee, dto, enrollment:)
         attributes = deduction_attributes(
@@ -134,6 +133,19 @@ module Vitable
           gross_pay_cents: 0,
           status: "estimated"
         )
+    end
+
+    def payroll_run_for(employer, dto)
+      return current_or_create_payroll_run(employer) if dto.period_start_on.blank? || dto.period_end_on.blank?
+
+      employer.payroll_runs.find_or_create_by!(
+        period_start_on: dto.period_start_on,
+        period_end_on: dto.period_end_on
+      ) do |run|
+        run.pay_date = dto.period_end_on
+        run.gross_pay_cents = 0
+        run.status = "estimated"
+      end
     end
   end
 end

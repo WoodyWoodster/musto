@@ -1335,6 +1335,88 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
     ENV.delete("VITABLE_CONNECT_API_KEY")
   end
 
+  test "records employee deduction webhooks in the Vitable statement period" do
+    employer = @organization.employers.create!(name: "Statement Period Employer", status: "active")
+    employee = employer.employees.create!(
+      first_name: "Jamie",
+      last_name: "Rivera",
+      email: "jamie.statement-period@example.com",
+      vitable_id: "empl_remote_jamie"
+    )
+    plan = employer.benefit_plans.create!(
+      name: "Essential Care",
+      category: "direct_primary_care",
+      carrier: "Vitable",
+      vitable_id: "bprd_essential_care"
+    )
+    employee.enrollments.create!(
+      benefit_plan: plan,
+      status: "accepted",
+      vitable_id: "enrl_remote_essential"
+    )
+    current_run = employer.payroll_runs.create!(
+      period_start_on: Date.current.beginning_of_month,
+      period_end_on: Date.current.end_of_month,
+      pay_date: Date.current.end_of_month,
+      gross_pay_cents: 0,
+      status: "estimated"
+    )
+    statement_start = Date.current.prev_month.beginning_of_month
+    statement_end = statement_start.end_of_month
+    ENV["VITABLE_CONNECT_API_KEY"] = "vit_apk_test_value"
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:fetch_resource) do |_resource_type, resource_id|
+        {
+          data: {
+            id: resource_id,
+            reference_id: "musto_employee_#{Employee.find_by!(email: "jamie.statement-period@example.com").id}",
+            email: "jamie.statement-period@example.com",
+            status: "active",
+            member_id: "mem_statement_jamie",
+            deductions: [
+              {
+                enrollment_id: "enrl_remote_essential",
+                plan_id: "bprd_essential_care",
+                benefit_name: "Essential Care",
+                deduction_amount_in_cents: 6500,
+                frequency: "monthly",
+                period_start_date: statement_start.iso8601,
+                period_end_date: statement_end.iso8601,
+                tax_classification: "Pre-tax"
+              }
+            ]
+          }
+        }
+      end
+    end
+
+    result = Vitable::ProcessWebhookCommand.new(
+      payload: webhook_payload.merge(
+        event_id: "wevt_test_employee_deduction_statement_period",
+        event_name: "employee.deduction_created",
+        resource_type: "employee",
+        resource_id: "empl_remote_jamie"
+      ),
+      gateway_class:
+    ).call
+
+    assert result.success?, result.errors.join(", ")
+    statement_run = employer.payroll_runs.find_by!(period_start_on: statement_start, period_end_on: statement_end)
+    assert_equal statement_end, statement_run.pay_date
+    assert_empty current_run.payroll_deductions.reload
+    deduction = statement_run.payroll_deductions.sole
+    assert_equal employee.id, deduction.employee_id
+    assert_equal "VITABLE_ESSENTIAL_CARE", deduction.code
+    assert_equal 6500, deduction.amount_cents
+    assert_equal "ready", deduction.status
+    assert_equal "monthly", deduction.metadata.fetch("frequency")
+    assert_equal statement_start.iso8601, deduction.metadata.fetch("period_start_on")
+    assert_equal statement_end.iso8601, deduction.metadata.fetch("period_end_on")
+  ensure
+    ENV.delete("VITABLE_CONNECT_API_KEY")
+  end
+
   test "reconciles fetched enrollment resources into local enrollment state" do
     employer = @organization.employers.create!(name: "Enrollment Employer", status: "active")
     employee = employer.employees.create!(
