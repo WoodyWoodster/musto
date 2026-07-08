@@ -2093,6 +2093,37 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     ENV[@connection.api_key_reference] = previous_key
   end
 
+  test "Vitable plan mapping refresh fails when remote plan omits id" do
+    response_class = Data.define(:data)
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:list_all_plans) do
+        response_class.new(
+          data: [
+            { name: "Primary Care" }
+          ]
+        )
+      end
+    end
+    previous_key = ENV[@connection.api_key_reference]
+    ENV[@connection.api_key_reference] = "vit_apk_test_value"
+
+    result = Benefits::RefreshVitablePlanMappingsCommand.new(
+      dto: Benefits::RefreshVitablePlanMappingsDto.new(requested_by: "benefits_admin"),
+      gateway_class:
+    ).call
+
+    assert result.failure?
+    assert_nil @plan.reload.vitable_id
+    assert_nil @employer.reload.settings.to_h.fetch("vitable_plan_catalog_snapshot", nil)
+    sync = @connection.sync_runs.where(operation: "plan_mapping_refresh").recent_first.first
+    assert_equal "failed", sync.status
+    assert_match "remote plan ID", sync.error_message
+    assert_match "remote plan ID", result.errors.to_sentence
+  ensure
+    ENV[@connection.api_key_reference] = previous_key
+  end
+
   test "Vitable plan mapping refresh keeps one remote plan per local plan" do
     response_class = Data.define(:data)
     gateway_class = Class.new do

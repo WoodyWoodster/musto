@@ -145,6 +145,7 @@ module Benefits
 
     def reconcile_remote_plan_snapshot(remote_plans:, refreshed_at: Time.current.iso8601, source: "plans.list")
       remote_plans = Array(remote_plans).map { |payload| payload.to_h.stringify_keys }
+      remote_plans.each { |remote_plan| validate_remote_plan_identity!(remote_plan) }
       mapping = reconcile_remote_plans(remote_plans, matched_at: refreshed_at, source:)
       snapshot = mapping.merge(
         "refreshed_at" => refreshed_at,
@@ -277,6 +278,12 @@ module Benefits
       plan.vitable_id == remote_id ||
         plan.metadata.to_h.stringify_keys.fetch("vitable_plan_id", nil) == remote_id ||
         plan.metadata.to_h.dig("vitable_plan_mapping", "remote_plan_id") == remote_id
+    end
+
+    def validate_remote_plan_identity!(remote_plan)
+      reference = remote_plan.fetch("name", nil).presence || "unknown plan"
+      raise ArgumentError, "Vitable plan catalog item #{reference} did not include a remote plan ID" if remote_plan.fetch("id", nil).blank?
+      raise ArgumentError, "Vitable plan catalog item #{remote_plan.fetch("id", nil)} did not include a remote plan name" if remote_plan.fetch("name", nil).blank?
     end
 
     def apply_remote_plan_mapping(plan, remote_plan, matched_at:, source:)

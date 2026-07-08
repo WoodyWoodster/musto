@@ -26,6 +26,9 @@ module Benefits
     rescue VitableConnect::Errors::APIError => e
       @repository.mark_mapping_failed(sync_run, e)
       failure(record: sync_run, errors: "#{e.class}: #{e.message}")
+    rescue ArgumentError => e
+      @repository.mark_mapping_failed(sync_run, e)
+      failure(record: sync_run, errors: e.message)
     rescue ActiveRecord::RecordInvalid => e
       failure(record: e.record, errors: e.record.errors.full_messages)
     end
