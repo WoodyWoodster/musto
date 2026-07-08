@@ -3645,6 +3645,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
           data: {
             id: "empr_created_123",
             name: payload.fetch("name"),
+            reference_id: payload.fetch("reference_id"),
             access_token: "vit_at_employer_snapshot_secret"
           }
         )
@@ -3722,6 +3723,41 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     ENV[@connection.api_key_reference] = previous_key
   end
 
+  test "employer provisioning fails before dependent calls when create response reference differs from packet" do
+    prepare_provisioning_profile
+    response_class = Data.define(:data)
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:create_employer) do |payload|
+        response_class.new(
+          data: {
+            id: "empr_created_wrong_reference",
+            name: payload.fetch("name"),
+            reference_id: "musto_employer_wrong"
+          }
+        )
+      end
+      define_method(:update_employer_settings) { |_employer_id, _pay_frequency| raise "settings should not be called with mismatched employer reference" }
+      define_method(:create_eligibility_policy) { |_employer_id, _payload| raise "policy should not be called with mismatched employer reference" }
+    end
+    previous_key = ENV[@connection.api_key_reference]
+    ENV[@connection.api_key_reference] = "vit_apk_test_value"
+
+    result = Vitable::SubmitEmployerProvisioningCommand.new(
+      dto: Vitable::SubmitEmployerProvisioningDto.new(requested_by: "integration_admin"),
+      gateway_class:
+    ).call
+
+    assert result.failure?
+    assert_nil @employer.reload.vitable_id
+    sync = @connection.sync_runs.where(operation: "employer_create").recent_first.first
+    assert_equal "failed", sync.status
+    assert_match "expected musto_employer_#{@employer.id}", sync.error_message
+    assert_match "expected musto_employer_#{@employer.id}", result.errors.to_sentence
+  ensure
+    ENV[@connection.api_key_reference] = previous_key
+  end
+
   test "successful employer settings command stores pay frequency metadata" do
     prepare_provisioning_profile(remote_id: "empr_ops_123")
     response_class = Data.define(:data)
@@ -3750,6 +3786,35 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal "bi_weekly", sync.stats.dig("payload", "settings", "pay_frequency")
     assert_equal "remote_submitted", sync.stats.dig("remote_response", "eligibility_policy_submission", "status")
     assert_equal "remote_api", @employer.settings.dig("vitable_eligibility_policy", "source")
+  ensure
+    ENV[@connection.api_key_reference] = previous_key
+  end
+
+  test "employer settings command fails when response pay frequency differs from requested value" do
+    prepare_provisioning_profile(remote_id: "empr_ops_123")
+    response_class = Data.define(:data)
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:update_employer_settings) do |employer_id, _pay_frequency|
+        response_class.new(data: { employer_id:, pay_frequency: "monthly" })
+      end
+      define_method(:create_eligibility_policy) { |_employer_id, _payload| raise "policy should not be called with mismatched settings response" }
+    end
+    previous_key = ENV[@connection.api_key_reference]
+    ENV[@connection.api_key_reference] = "vit_apk_test_value"
+
+    result = Vitable::SubmitEmployerProvisioningCommand.new(
+      dto: Vitable::SubmitEmployerProvisioningDto.new(requested_by: "integration_admin"),
+      gateway_class:
+    ).call
+
+    assert result.failure?
+    assert_equal "empr_ops_123", @employer.reload.vitable_id
+    assert_nil @employer.settings.to_h.fetch("vitable_pay_frequency", nil)
+    sync = @connection.sync_runs.where(operation: "employer_settings_update").recent_first.first
+    assert_equal "failed", sync.status
+    assert_match "expected bi_weekly", sync.error_message
+    assert_match "expected bi_weekly", result.errors.to_sentence
   ensure
     ENV[@connection.api_key_reference] = previous_key
   end

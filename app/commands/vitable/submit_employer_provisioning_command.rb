@@ -44,14 +44,20 @@ module Vitable
 
       if packet.fetch("mode") == "create"
         employer_response = gateway.create_employer(packet.fetch("create_payload"))
-        remote_employer_id = remote_employer_id_from(employer_response) || remote_employer_id
-        raise ArgumentError, "Vitable employer create response did not include a remote employer ID" if remote_employer_id.blank?
+        employer_dto = RemoteEmployerResponseDto
+          .from_hash(serialize_response(employer_response))
+          .validate_create!(expected_reference_id: packet.dig("create_payload", "reference_id"))
+        remote_employer_id = employer_dto.remote_employer_id
 
         @employer.update!(vitable_id: remote_employer_id) if @employer.vitable_id.blank?
       end
       raise ArgumentError, "Vitable employer ID is required before employer settings can be updated" if remote_employer_id.blank?
 
-      settings_response = gateway.update_employer_settings(remote_employer_id, packet.fetch("settings_payload").fetch("pay_frequency"))
+      pay_frequency = packet.fetch("settings_payload").fetch("pay_frequency")
+      settings_response = gateway.update_employer_settings(remote_employer_id, pay_frequency)
+      RemoteEmployerSettingsResponseDto
+        .from_hash(serialize_response(settings_response))
+        .validate!(expected_pay_frequency: pay_frequency)
       policy_submission = submit_eligibility_policy(gateway, remote_employer_id, packet)
 
       {
@@ -73,13 +79,6 @@ module Vitable
       raise unless e.status == 422
 
       EmployerEligibilityPolicySubmissionDto.existing(remote_employer_id:, payload:, error: e, submitted_at:)
-    end
-
-    def remote_employer_id_from(response)
-      response_hash = serialize_response(response)
-      response_hash.dig("data", "id") ||
-        response_hash.dig("data", "employer", "id") ||
-        response_hash.fetch("id", nil)
     end
 
     def serialize_response(response)
