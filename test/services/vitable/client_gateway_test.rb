@@ -71,6 +71,31 @@ module Vitable
       assert_equal "All", log.request_body.fetch("classification")
     end
 
+    test "issues employer-bound access tokens for admin widgets" do
+      organization = Organization.create!(name: "Gateway Employer Token Test", external_id: "org_gateway_employer_token_test")
+      connection = organization.integration_connections.create!(provider: "vitable", environment: "production")
+      gateway = ClientGateway.new(connection)
+      calls = []
+      auth = Object.new
+      auth.define_singleton_method(:issue_access_token) do |params|
+        calls << params
+        { access_token: "vit_at_secret_value", expires_in: 3_600, bound_entity: params.fetch(:bound_entity) }
+      end
+      fake_client = Object.new
+      fake_client.define_singleton_method(:auth) { auth }
+      gateway.define_singleton_method(:client) { fake_client }
+
+      response = gateway.issue_employer_access_token("empr_123")
+
+      assert_equal :client_credentials, calls.first.fetch(:grant_type)
+      assert_equal({ type: :employer, id: "empr_123" }, calls.first.fetch(:bound_entity))
+      assert_equal "vit_at_secret_value", response.fetch(:access_token)
+      log = connection.api_request_logs.last
+      assert_equal "auth.issue_employer_access_token", log.operation
+      assert_equal "employer", log.request_body.dig("bound_entity", "type")
+      assert_equal "[FILTERED]", log.response_body.fetch("access_token")
+    end
+
     test "normalizes group member sync payloads for the SDK" do
       organization = Organization.create!(name: "Gateway Group Payload Test", external_id: "org_gateway_group_payload_test")
       connection = organization.integration_connections.create!(provider: "vitable", environment: "production")

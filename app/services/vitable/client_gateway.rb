@@ -28,6 +28,20 @@ module Vitable
       end
     end
 
+    def issue_employer_access_token(employer_id)
+      body = {
+        grant_type: "client_credentials",
+        bound_entity: { type: "employer", id: employer_id }
+      }
+
+      instrument("auth.issue_employer_access_token", :post, "/v1/auth/access-tokens", request_body: body) do
+        client.auth.issue_access_token(
+          grant_type: :client_credentials,
+          bound_entity: { type: :employer, id: employer_id }
+        )
+      end
+    end
+
     def fetch_resource(resource_type, resource_id)
       case resource_type.to_s
       when "employee"

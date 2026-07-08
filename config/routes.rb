@@ -140,6 +140,9 @@ Rails.application.routes.draw do
   get "integrations/vitable/embedded-sessions", to: "vitable_embedded_sessions#show", as: :vitable_embedded_sessions
   post "integrations/vitable/embedded-sessions/packet", to: "vitable_embedded_sessions#generate_packet", as: :generate_vitable_embedded_sessions
   post "integrations/vitable/embedded-sessions/employees/:employee_id/issue", to: "vitable_embedded_sessions#issue", as: :issue_vitable_embedded_session
+  get "integrations/vitable/admin-sessions", to: "vitable_admin_sessions#show", as: :vitable_admin_sessions
+  post "integrations/vitable/admin-sessions/packet", to: "vitable_admin_sessions#generate_packet", as: :generate_vitable_admin_sessions
+  post "integrations/vitable/admin-sessions/issue", to: "vitable_admin_sessions#issue", as: :issue_vitable_admin_session
   get "integrations/vitable/care-groups", to: "vitable_care_groups#show", as: :vitable_care_groups
   post "integrations/vitable/care-groups/group-packet", to: "vitable_care_groups#generate_group_packet", as: :generate_vitable_care_group_packet
   post "integrations/vitable/care-groups/submit-group", to: "vitable_care_groups#submit_group", as: :submit_vitable_care_group

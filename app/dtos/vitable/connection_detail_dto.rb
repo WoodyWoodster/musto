@@ -27,8 +27,8 @@ module Vitable
         resource_type: "auth tokens",
         method: "POST",
         fetch_path: "/v1/auth/access-tokens",
-        operations: %w[auth.issue_access_token auth.issue_employee_access_token],
-        sync_operations: %w[embedded_enrollment_token demo_smoke_check]
+        operations: %w[auth.issue_access_token auth.issue_employee_access_token auth.issue_employer_access_token],
+        sync_operations: %w[embedded_enrollment_token embedded_admin_token demo_smoke_check]
       },
       {
         resource_type: "employers",

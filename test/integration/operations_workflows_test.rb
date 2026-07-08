@@ -3388,6 +3388,108 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     ENV[@connection.api_key_reference] = previous_key
   end
 
+  test "vitable employer admin sessions workspace exposes token readiness DTOs" do
+    prepare_provisioning_profile(remote_id: "empr_ops_123")
+    Vitable::GenerateAdminSessionsCommand.new(dto: Vitable::GenerateAdminSessionsDto.new(requested_by: "ops_test")).call
+    detail = Vitable::AdminSessionsQuery.new.call
+
+    assert_instance_of Vitable::AdminSessionsCenterDto, detail
+    assert_instance_of Vitable::AdminSessionMetricDto, detail.metrics.first
+    assert_instance_of Vitable::AdminSessionPreflightCheckDto, detail.preflight_checks.first
+    assert_instance_of Vitable::AdminSessionPacketDto, detail.latest_packet
+    assert_instance_of Vitable::AdminSessionWidgetDto, detail.widgets.first
+    assert_instance_of Vitable::AdminSessionIssuanceDto, detail.latest_issuance
+    assert_equal "ready", detail.latest_packet.status
+    assert_equal "Employer benefits", detail.widgets.first.name
+
+    get vitable_admin_sessions_path
+
+    assert_response :success
+    assert_select "h1", "Employer admin sessions"
+    assert_select "h2", "Launch preflight"
+    assert_select "h2", "Embedded admin widgets"
+    assert_select "h2", "Token attempts"
+  end
+
+  test "generates a Vitable employer admin session packet" do
+    prepare_provisioning_profile(remote_id: "empr_ops_123")
+
+    post generate_vitable_admin_sessions_path, params: { requested_by: "integration_admin" }
+
+    assert_redirected_to vitable_admin_sessions_path
+    packet = @employer.reload.settings.fetch("vitable_admin_sessions_packet")
+    assert_match(/\Avitable_admin_sessions_#{@employer.id}_/, packet.fetch("packet_id"))
+    assert_equal "integration_admin", packet.fetch("requested_by")
+    assert_equal "ready", packet.fetch("status")
+    assert_equal "empr_ops_123", packet.fetch("remote_employer_id")
+    assert_equal "employer", packet.fetch("token_request").fetch("bound_entity_type")
+    assert_equal "/v1/auth/access-tokens", packet.fetch("token_request").fetch("endpoint")
+    assert_equal [ "Employer benefits", "Employer billing" ], packet.fetch("widgets").map { |widget| widget.fetch("name") }
+    assert_empty packet.fetch("holdbacks")
+  end
+
+  test "issues employer admin session as missing credentials sync run without API key" do
+    prepare_provisioning_profile(remote_id: "empr_ops_123")
+    Vitable::GenerateAdminSessionsCommand.new(dto: Vitable::GenerateAdminSessionsDto.new(requested_by: "ops_test")).call
+
+    assert_difference -> { @connection.sync_runs.where(operation: "embedded_admin_token").count }, 1 do
+      post issue_vitable_admin_session_path, params: { requested_by: "integration_admin" }
+    end
+
+    assert_redirected_to vitable_admin_sessions_path
+    sync = @connection.sync_runs.where(operation: "embedded_admin_token").recent_first.first
+    assert_equal "needs_credentials", sync.status
+    assert_match @connection.api_key_reference, sync.error_message
+    assert_equal "employer", sync.stats.dig("bound_entity", "type")
+    assert_equal "empr_ops_123", sync.stats.dig("bound_entity", "id")
+  end
+
+  test "successful employer admin session command redacts token response" do
+    prepare_provisioning_profile(remote_id: "empr_ops_123")
+    response_class = Data.define(:access_token, :expires_in, :token_type, :bound_entity)
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:issue_employer_access_token) do |employer_id|
+        response_class.new(
+          access_token: "vit_at_secret_value",
+          expires_in: 3_600,
+          token_type: "Bearer",
+          bound_entity: { id: employer_id, type: "employer" }
+        )
+      end
+    end
+    previous_key = ENV[@connection.api_key_reference]
+    ENV[@connection.api_key_reference] = "vit_apk_test_value"
+
+    result = Vitable::IssueAdminSessionCommand.new(
+      dto: Vitable::IssueAdminSessionDto.new(requested_by: "integration_admin"),
+      gateway_class:
+    ).call
+
+    assert result.success?
+    sync = @connection.sync_runs.where(operation: "embedded_admin_token").recent_first.first
+    assert_equal "succeeded", sync.status
+    assert_equal "[FILTERED]", sync.stats.dig("token_response", "access_token")
+    assert_equal true, sync.stats.dig("issuance", "token_present")
+    assert_not_includes sync.stats.to_json, "vit_at_secret_value"
+
+    @employer.reload
+    assert_equal "issued", @employer.settings.dig("vitable_admin_session", "status")
+    assert_equal sync.id, @employer.settings.dig("vitable_admin_session", "sync_run_id")
+    assert_equal "empr_ops_123", @employer.settings.dig("vitable_admin_session", "bound_entity", "id")
+    assert_not_includes @employer.settings.to_json, "vit_at_secret_value"
+
+    packet = @employer.settings.fetch("vitable_admin_sessions_packet")
+    assert_equal "session_issued", packet.fetch("status")
+    assert_equal "issued", packet.dig("latest_session", "status")
+    assert_equal [ "session_issued", "session_issued" ], packet.fetch("widgets").map { |widget| widget.fetch("status") }
+
+    detail = Vitable::AdminSessionsQuery.new.call
+    assert detail.latest_issuance.active?
+  ensure
+    ENV[@connection.api_key_reference] = previous_key
+  end
+
   test "care groups workspace exposes group and member DTOs" do
     prepare_care_group_profile(remote_group_id: "grp_ops_123")
     holdback_employee = create_care_member_holdback_employee
