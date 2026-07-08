@@ -159,16 +159,16 @@ module Vitable
       end
     end
 
-    def list_webhook_events(limit: 20)
-      query = { limit: }
+    def list_webhook_events(limit: 20, created_after: nil, created_before: nil, event_name: nil, resource_id: nil, resource_type: nil)
+      query = webhook_events_query(limit:, created_after:, created_before:, event_name:, resource_id:, resource_type:)
 
       instrument("webhook_event.list", :get, "/v1/webhook-events", request_body: query) do
         client.webhook_events.list(query)
       end
     end
 
-    def list_all_webhook_events(limit: 100)
-      query = { limit: }
+    def list_all_webhook_events(limit: 100, created_after: nil, created_before: nil, event_name: nil, resource_id: nil, resource_type: nil)
+      query = webhook_events_query(limit:, created_after:, created_before:, event_name:, resource_id:, resource_type:)
 
       instrument("webhook_event.list", :get, "/v1/webhook-events", request_body: query) do
         page_response(client.webhook_events.list(query))
@@ -381,6 +381,23 @@ module Vitable
 
     def eligibility_policy_payload(payload)
       payload.to_h.deep_symbolize_keys.slice(:classification, :waiting_period).compact
+    end
+
+    def webhook_events_query(limit:, created_after:, created_before:, event_name:, resource_id:, resource_type:)
+      {
+        limit:,
+        created_after:,
+        created_before:,
+        event_name: webhook_event_enum_value(event_name),
+        resource_id: resource_id.presence,
+        resource_type: webhook_event_enum_value(resource_type)
+      }.compact
+    end
+
+    def webhook_event_enum_value(value)
+      return if value.blank?
+
+      value.is_a?(String) ? value.to_sym : value
     end
 
     def group_member_payload(member)

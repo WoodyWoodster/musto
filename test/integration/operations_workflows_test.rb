@@ -2950,6 +2950,48 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     ENV[@connection.api_key_reference] = previous_key
   end
 
+  test "Vitable API snapshot refresh scopes webhook events to the previous snapshot window" do
+    previous_refreshed_at = 3.hours.ago.change(usec: 0)
+    @connection.update!(
+      metadata: @connection.metadata.to_h.merge(
+        "api_snapshot" => {
+          "refreshed_at" => previous_refreshed_at.iso8601
+        }
+      )
+    )
+    response_class = Data.define(:data)
+    webhook_filters = []
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:list_all_employers) { response_class.new(data: []) }
+      define_method(:list_all_groups) { response_class.new(data: []) }
+      define_method(:list_all_plans) { response_class.new(data: []) }
+      define_method(:list_all_webhook_events) do |**filters|
+        webhook_filters << filters
+        response_class.new(data: [])
+      end
+      define_method(:list_all_employer_employees) { |_employer_id| response_class.new(data: []) }
+      define_method(:list_all_employee_enrollments) { |_employee_id| response_class.new(data: []) }
+    end
+    previous_key = ENV[@connection.api_key_reference]
+    ENV[@connection.api_key_reference] = "vit_apk_test_value"
+
+    result = Vitable::RefreshApiSnapshotCommand.new(
+      dto: Vitable::RefreshApiSnapshotDto.new(connection_id: @connection.id, requested_by: "integration_admin"),
+      gateway_class:
+    ).call
+
+    assert result.success?
+    assert_equal 1, webhook_filters.count
+    assert_equal previous_refreshed_at.to_i, webhook_filters.first.fetch(:created_after).to_i
+
+    snapshot = @connection.reload.metadata.fetch("api_snapshot")
+    assert_equal previous_refreshed_at.iso8601, snapshot.dig("webhook_event_query", "created_after")
+    assert_equal 0, snapshot.dig("counts", "remote_webhook_event_count")
+  ensure
+    ENV[@connection.api_key_reference] = previous_key
+  end
+
   test "Vitable API snapshot refresh reconciles employee enrollments and payroll deductions" do
     @employee.update!(vitable_id: "empl_ops_casey")
     answered_at = Time.current.change(usec: 0)

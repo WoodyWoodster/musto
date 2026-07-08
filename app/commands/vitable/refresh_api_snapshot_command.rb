@@ -40,6 +40,7 @@ module Vitable
     def build_snapshot(connection)
       gateway = @gateway_class.new(connection)
       refreshed_at = Time.current.iso8601
+      webhook_event_query = webhook_event_query(connection)
       employers = page_data(gateway.list_all_employers)
       groups = page_data(gateway.list_all_groups)
       plans = page_data(gateway.list_all_plans)
@@ -75,7 +76,8 @@ module Vitable
         "group_reconciliation" => group_reconciliation.to_metadata,
         "plans" => plans,
         "plan_reconciliation" => plan_reconciliation,
-        "webhook_events" => page_data(gateway.list_all_webhook_events),
+        "webhook_event_query" => webhook_event_query_metadata(webhook_event_query),
+        "webhook_events" => page_data(gateway.list_all_webhook_events(**webhook_event_query)),
         "remote_employee_rosters" => remote_employee_rosters,
         "employee_reconciliation" => employee_reconciliation.to_metadata,
         "employee_enrollments" => employee_enrollments,
@@ -232,6 +234,28 @@ module Vitable
         .includes(:employees)
         .flat_map(&:employees)
         .select { |employee| employee.vitable_id.present? }
+    end
+
+    def webhook_event_query(connection)
+      previous_refreshed_at = previous_api_snapshot_refreshed_at(connection)
+      return {} unless previous_refreshed_at
+
+      { created_after: previous_refreshed_at }
+    end
+
+    def previous_api_snapshot_refreshed_at(connection)
+      refreshed_at = connection.metadata.to_h.dig("api_snapshot", "refreshed_at")
+      return if refreshed_at.blank?
+
+      Time.iso8601(refreshed_at.to_s)
+    rescue ArgumentError
+      nil
+    end
+
+    def webhook_event_query_metadata(query)
+      query.transform_values do |value|
+        value.respond_to?(:iso8601) ? value.iso8601 : value.to_s
+      end.deep_stringify_keys
     end
 
     def page_data(response)

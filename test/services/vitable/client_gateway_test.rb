@@ -208,6 +208,49 @@ module Vitable
       assert_equal "[FILTERED]", response.dig(:data, 0, "nested", "access_token")
     end
 
+    test "passes webhook event filters to the SDK list call" do
+      organization = Organization.create!(name: "Gateway Webhook Filter Test", external_id: "org_gateway_webhook_filter_test")
+      connection = organization.integration_connections.create!(provider: "vitable", environment: "production")
+      gateway = ClientGateway.new(connection)
+      created_after = Time.zone.parse("2026-02-01T12:00:00Z")
+      created_before = Time.zone.parse("2026-02-02T12:00:00Z")
+      calls = []
+      webhook_events = Object.new
+      response_class = Data.define(:data)
+      webhook_events.define_singleton_method(:list) do |query|
+        calls << query
+        response_class.new(data: [])
+      end
+      fake_client = Object.new
+      fake_client.define_singleton_method(:webhook_events) { webhook_events }
+      gateway.define_singleton_method(:client) { fake_client }
+
+      gateway.list_all_webhook_events(
+        limit: 25,
+        created_after:,
+        created_before:,
+        event_name: "employee.deduction_created",
+        resource_id: "empl_123",
+        resource_type: "employee"
+      )
+
+      assert_equal(
+        {
+          limit: 25,
+          created_after:,
+          created_before:,
+          event_name: :"employee.deduction_created",
+          resource_id: "empl_123",
+          resource_type: :employee
+        },
+        calls.first
+      )
+      log = connection.api_request_logs.last
+      assert_equal "webhook_event.list", log.operation
+      assert_equal "/v1/webhook-events", log.path
+      assert_equal "employee.deduction_created", log.request_body.fetch("event_name")
+    end
+
     test "dispatches generic resource fetches to typed SDK retrieve methods" do
       organization = Organization.create!(name: "Gateway Fetch Test", external_id: "org_gateway_fetch_test")
       connection = organization.integration_connections.create!(provider: "vitable", environment: "production")
