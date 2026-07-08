@@ -258,6 +258,17 @@ module Vitable
       sync_run
     end
 
+    def annotate_sync_run_reconciliation(sync_run, reconciliation)
+      return sync_run unless sync_run && reconciliation
+
+      sync_run.update!(
+        stats: sync_run.stats.to_h.merge(
+          "resource_reconciliation" => reconciliation.to_metadata
+        )
+      )
+      sync_run
+    end
+
     def fail_sync_run(sync_run, error)
       sync_run&.update!(status: "failed", completed_at: Time.current, error_message: error.message)
       sync_run

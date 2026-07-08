@@ -465,6 +465,7 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
     employer.reload
     event = WebhookEvent.find_by!(event_id: "wevt_test_group_reconcile")
     reconciliation = event.metadata.fetch("resource_reconciliation")
+    fetch_run = @connection.sync_runs.where(operation: "fetch", resource_type: "group").recent_first.first
 
     assert_equal "grp_remote_care", employer.settings.fetch("vitable_care_group_id")
     assert_equal "musto_care_group_#{employer.id}", employer.settings.fetch("vitable_care_group_remote_reference_id")
@@ -476,6 +477,8 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
     assert_equal employer.id, reconciliation.fetch("local_record_id")
     assert_equal "external_reference_id", reconciliation.fetch("matched_by")
     assert_includes reconciliation.fetch("applied_changes"), "settings.vitable_care_group_id"
+    assert_equal "matched", fetch_run.stats.dig("resource_reconciliation", "status")
+    assert_equal employer.id, fetch_run.stats.dig("resource_reconciliation", "local_record_id")
   ensure
     ENV.delete("VITABLE_CONNECT_API_KEY")
   end
