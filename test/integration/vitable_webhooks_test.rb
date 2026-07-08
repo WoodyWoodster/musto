@@ -433,6 +433,53 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
     ENV.delete("VITABLE_CONNECT_API_KEY")
   end
 
+  test "reconciles fetched group resources into care group settings" do
+    employer = @organization.employers.create!(name: "Care Group Employer", status: "active")
+    ENV["VITABLE_CONNECT_API_KEY"] = "vit_apk_test_value"
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:fetch_resource) do |_resource_type, resource_id|
+        {
+          data: {
+            id: resource_id,
+            name: "Care Group Employer",
+            external_reference_id: "musto_care_group_#{Employer.find_by!(name: "Care Group Employer").id}",
+            organization_id: "org_demo_vitable",
+            updated_at: Time.current.iso8601
+          }
+        }
+      end
+    end
+
+    result = Vitable::ProcessWebhookCommand.new(
+      payload: webhook_payload.merge(
+        event_id: "wevt_test_group_reconcile",
+        event_name: "group.updated",
+        resource_type: "group",
+        resource_id: "grp_remote_care"
+      ),
+      gateway_class:
+    ).call
+
+    assert result.success?
+    employer.reload
+    event = WebhookEvent.find_by!(event_id: "wevt_test_group_reconcile")
+    reconciliation = event.metadata.fetch("resource_reconciliation")
+
+    assert_equal "grp_remote_care", employer.settings.fetch("vitable_care_group_id")
+    assert_equal "musto_care_group_#{employer.id}", employer.settings.fetch("vitable_care_group_remote_reference_id")
+    assert_equal "group.updated", employer.settings.fetch("vitable_care_group_last_webhook_event_name")
+    assert_equal "vitable_webhook_resource", employer.settings.fetch("vitable_care_group_snapshot_source")
+    assert_equal "grp_remote_care", employer.settings.dig("vitable_care_group_snapshot", "id")
+    assert_equal "matched", reconciliation.fetch("status")
+    assert_equal "Employer", reconciliation.fetch("local_record_type")
+    assert_equal employer.id, reconciliation.fetch("local_record_id")
+    assert_equal "external_reference_id", reconciliation.fetch("matched_by")
+    assert_includes reconciliation.fetch("applied_changes"), "settings.vitable_care_group_id"
+  ensure
+    ENV.delete("VITABLE_CONNECT_API_KEY")
+  end
+
   test "replay command audits successful credential-present reprocessing" do
     employer = @organization.employers.create!(name: "Replay Employer", status: "active")
     employee = employer.employees.create!(
