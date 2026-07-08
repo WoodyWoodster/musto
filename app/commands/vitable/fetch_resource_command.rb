@@ -8,6 +8,7 @@ module Vitable
     end
 
     def call
+      response = nil
       connection = @repository.find_connection(@dto.connection_id)
       sync_run = @repository.create_sync_run(
         connection:,
@@ -29,7 +30,11 @@ module Vitable
       @repository.fail_sync_run(sync_run, e)
       failure(record: sync_run, errors: "#{e.class}: #{e.message}")
     rescue ArgumentError => e
-      @repository.fail_sync_run(sync_run, e)
+      if response
+        @repository.fail_sync_run_after_response(sync_run, response, e)
+      else
+        @repository.fail_sync_run(sync_run, e)
+      end
       failure(record: sync_run, errors: e.message)
     end
 

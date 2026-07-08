@@ -485,6 +485,9 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
 
     assert_equal "failed", sync_run.status
     assert_match "expected empl_direct_drew", sync_run.error_message
+    assert_equal "ArgumentError", sync_run.stats.fetch("error_class")
+    assert_equal "empl_wrong_drew", sync_run.stats.dig("remote_response", "data", "id")
+    assert_equal "mem_direct_drew", sync_run.stats.dig("remote_response", "data", "member_id")
     assert_match "expected empl_direct_drew", result.errors.to_sentence
     assert_nil employee.reload.vitable_id
     assert_nil employee.metadata.fetch("vitable_member_id", nil)
@@ -509,6 +512,8 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
 
     assert_equal "failed", sync_run.status
     assert_match "resource attributes", sync_run.error_message
+    assert_equal "ArgumentError", sync_run.stats.fetch("error_class")
+    assert_equal({}, sync_run.stats.dig("remote_response", "data"))
     assert_match "resource attributes", result.errors.to_sentence
   ensure
     ENV.delete("VITABLE_CONNECT_API_KEY")
@@ -543,6 +548,8 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
 
     assert_equal "failed", sync_run.status
     assert_match "data array", sync_run.error_message
+    assert_equal "ArgumentError", sync_run.stats.fetch("error_class")
+    assert_equal "empl_direct_array", sync_run.stats.dig("remote_response", "data", 0, "id")
     assert_match "single resource object", result.errors.to_sentence
   ensure
     ENV.delete("VITABLE_CONNECT_API_KEY")
