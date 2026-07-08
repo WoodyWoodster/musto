@@ -151,6 +151,8 @@ module Vitable
       response_hash = serialize_response(response)
       data = response_hash.fetch("data", response_hash)
       accepted_at = data.fetch("accepted_at", nil)
+      raise ArgumentError, "Vitable census sync response did not include accepted_at" if accepted_at.blank?
+
       remote_employer_id = data.fetch("employer_id", @employer.vitable_id)
       submitted_at = Time.current.iso8601
       submission = census_submission_payload(
