@@ -2701,6 +2701,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       "auth tokens",
       "employers",
       "employer settings",
+      "eligibility policies",
       "census sync",
       "remote roster",
       "employees",
