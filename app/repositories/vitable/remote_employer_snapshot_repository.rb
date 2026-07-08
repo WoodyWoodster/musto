@@ -1,5 +1,7 @@
 module Vitable
   class RemoteEmployerSnapshotRepository < ApplicationRepository
+    CONFLICT_KEY = "vitable_remote_employer_conflict"
+
     def initialize(connection:)
       @connection = connection
     end
@@ -20,7 +22,11 @@ module Vitable
     def reconcile_employer(result:, remote_employer:, source:, refreshed_at:)
       employer, matched_by = employer_for_remote(remote_employer)
       return result.increment(processed_count: 1, unmatched_count: 1) unless employer
-      return result.increment(processed_count: 1, conflict_count: 1) if remote_id_conflict?(employer, remote_id(remote_employer))
+
+      if remote_id_conflict?(employer, remote_id(remote_employer))
+        record_conflict(employer, remote_employer, matched_by:, source:, refreshed_at:)
+        return result.increment(processed_count: 1, conflict_count: 1)
+      end
 
       changed = update_employer(employer, remote_employer, matched_by:, source:, refreshed_at:)
       result.increment(
@@ -32,16 +38,19 @@ module Vitable
     end
 
     def update_employer(employer, remote_employer, matched_by:, source:, refreshed_at:)
+      settings = employer.settings.to_h.stringify_keys.merge(
+        "vitable_remote_status" => remote_status(remote_employer),
+        "vitable_remote_reference_id" => remote_reference_id(remote_employer),
+        "vitable_remote_organization_id" => remote_employer.fetch("organization_id", nil),
+        "vitable_last_refreshed_at" => refreshed_at,
+        "vitable_last_snapshot_source" => source,
+        "vitable_last_snapshot_matched_by" => matched_by,
+        "vitable_remote_employer" => remote_employer_summary(remote_employer)
+      ).compact
+      settings.delete(CONFLICT_KEY)
+
       attributes = {
-        settings: employer.settings.to_h.stringify_keys.merge(
-          "vitable_remote_status" => remote_status(remote_employer),
-          "vitable_remote_reference_id" => remote_reference_id(remote_employer),
-          "vitable_remote_organization_id" => remote_employer.fetch("organization_id", nil),
-          "vitable_last_refreshed_at" => refreshed_at,
-          "vitable_last_snapshot_source" => source,
-          "vitable_last_snapshot_matched_by" => matched_by,
-          "vitable_remote_employer" => remote_employer_summary(remote_employer)
-        ).compact
+        settings:
       }
       attributes[:vitable_id] = remote_id(remote_employer) if employer.vitable_id.blank? && remote_id(remote_employer).present?
 
@@ -49,6 +58,20 @@ module Vitable
       changed = employer.has_changes_to_save?
       employer.save! if changed
       changed
+    end
+
+    def record_conflict(employer, remote_employer, matched_by:, source:, refreshed_at:)
+      conflict = RemoteEmployerConflictDto.from_remote(
+        employer:,
+        remote_employer:,
+        matched_by:,
+        source:,
+        refreshed_at:
+      )
+
+      employer.update!(
+        settings: employer.settings.to_h.stringify_keys.merge(CONFLICT_KEY => conflict.to_metadata)
+      )
     end
 
     def employer_for_remote(remote_employer)

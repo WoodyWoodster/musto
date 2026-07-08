@@ -3142,6 +3142,72 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     ENV[@connection.api_key_reference] = previous_key
   end
 
+  test "Vitable API snapshot refresh records remote employer id conflicts" do
+    @employer.update!(vitable_id: "empr_current_ops")
+    response_class = Data.define(:data)
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:list_all_employers) do
+        response_class.new(
+          data: [
+            {
+              id: "empr_conflicting_ops",
+              name: "Ops Employer",
+              legal_name: "Ops Employer LLC",
+              reference_id: "musto_employer_#{Employer.find_by!(name: "Ops Employer").id}",
+              active: true
+            }
+          ]
+        )
+      end
+      define_method(:list_all_groups) { response_class.new(data: []) }
+      define_method(:list_all_plans) { response_class.new(data: []) }
+      define_method(:list_all_webhook_events) { response_class.new(data: []) }
+      define_method(:list_all_employer_employees) { |_employer_id| response_class.new(data: []) }
+      define_method(:list_all_employee_enrollments) { |_employee_id| response_class.new(data: []) }
+    end
+    previous_key = ENV[@connection.api_key_reference]
+    ENV[@connection.api_key_reference] = "vit_apk_test_value"
+
+    result = Vitable::RefreshApiSnapshotCommand.new(
+      dto: Vitable::RefreshApiSnapshotDto.new(connection_id: @connection.id, requested_by: "integration_admin"),
+      gateway_class:
+    ).call
+
+    assert result.success?
+    @employer.reload
+    snapshot = @connection.reload.metadata.fetch("api_snapshot")
+    conflict = @employer.settings.fetch("vitable_remote_employer_conflict")
+
+    assert_equal "empr_current_ops", @employer.vitable_id
+    assert_equal 1, snapshot.dig("counts", "conflicting_remote_employer_count")
+    assert_equal 0, snapshot.dig("counts", "mapped_employer_count")
+    assert_equal "empr_current_ops", conflict.fetch("local_employer_vitable_id")
+    assert_equal "empr_conflicting_ops", conflict.fetch("remote_employer_id")
+    assert_equal "musto_employer_#{@employer.id}", conflict.fetch("remote_reference_id")
+    assert_equal "reference_id", conflict.fetch("matched_by")
+    assert_equal "vitable_api_snapshot", conflict.fetch("source")
+
+    reconciliation = Vitable::RemoteEmployerSnapshotRepository.new(connection: @connection).reconcile_snapshot(
+      remote_employers: [
+        {
+          id: "empr_current_ops",
+          name: "Ops Employer",
+          legal_name: "Ops Employer LLC",
+          reference_id: "musto_employer_#{@employer.id}",
+          active: true
+        }
+      ],
+      source: "vitable_api_snapshot",
+      refreshed_at: Time.current.iso8601
+    )
+
+    assert_equal 1, reconciliation.matched_count
+    assert_nil @employer.reload.settings.to_h.fetch("vitable_remote_employer_conflict", nil)
+  ensure
+    ENV[@connection.api_key_reference] = previous_key
+  end
+
   test "vitable employer provisioning workspace exposes packet DTOs" do
     prepare_provisioning_profile
     Vitable::GenerateEmployerProvisioningCommand.new(dto: Vitable::GenerateEmployerProvisioningDto.new(requested_by: "ops_test")).call
