@@ -5636,6 +5636,37 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_match @connection.api_key_reference, @connection.metadata.dig("last_verification", "message")
   end
 
+  test "connection verification accepts complete wrapped access token responses" do
+    response_class = Data.define(:data)
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:issue_access_token) do
+        response_class.new(
+          data: {
+            access_token: "vit_at_verify_secret",
+            expires_in: 3_600,
+            token_type: "Bearer"
+          }
+        )
+      end
+    end
+    previous_key = ENV[@connection.api_key_reference]
+    ENV[@connection.api_key_reference] = "vit_apk_test_value"
+
+    result = Vitable::VerifyConnectionCommand.new(
+      dto: Vitable::VerifyConnectionDto.new(connection_id: @connection.id),
+      gateway_class:
+    ).call
+
+    assert result.success?
+    @connection.reload
+    assert_equal "active", @connection.status
+    assert_equal "active", @connection.metadata.dig("last_verification", "status")
+    assert_not_includes @connection.metadata.to_json, "vit_at_verify_secret"
+  ensure
+    ENV[@connection.api_key_reference] = previous_key
+  end
+
   test "connection verification fails when token response omits access token" do
     response_class = Data.define(:expires_in, :token_type)
     gateway_class = Class.new do
@@ -5656,6 +5687,54 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_match "access token", @connection.metadata.dig("last_verification", "message")
     assert_equal "ArgumentError", @connection.metadata.dig("last_verification", "error_class")
     assert_match "access token", result.errors.to_sentence
+  ensure
+    ENV[@connection.api_key_reference] = previous_key
+  end
+
+  test "connection verification fails when token response omits expiry" do
+    response_class = Data.define(:access_token, :token_type)
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:issue_access_token) { response_class.new(access_token: "vit_at_verify_secret", token_type: "Bearer") }
+    end
+    previous_key = ENV[@connection.api_key_reference]
+    ENV[@connection.api_key_reference] = "vit_apk_test_value"
+
+    result = Vitable::VerifyConnectionCommand.new(
+      dto: Vitable::VerifyConnectionDto.new(connection_id: @connection.id),
+      gateway_class:
+    ).call
+
+    assert result.failure?
+    @connection.reload
+    assert_equal "failed", @connection.status
+    assert_match "expires_in", @connection.metadata.dig("last_verification", "message")
+    assert_match "expires_in", result.errors.to_sentence
+  ensure
+    ENV[@connection.api_key_reference] = previous_key
+  end
+
+  test "connection verification fails when token response type is not bearer" do
+    response_class = Data.define(:access_token, :expires_in, :token_type)
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:issue_access_token) do
+        response_class.new(access_token: "vit_at_verify_secret", expires_in: 3_600, token_type: "Basic")
+      end
+    end
+    previous_key = ENV[@connection.api_key_reference]
+    ENV[@connection.api_key_reference] = "vit_apk_test_value"
+
+    result = Vitable::VerifyConnectionCommand.new(
+      dto: Vitable::VerifyConnectionDto.new(connection_id: @connection.id),
+      gateway_class:
+    ).call
+
+    assert result.failure?
+    @connection.reload
+    assert_equal "failed", @connection.status
+    assert_match "expected Bearer", @connection.metadata.dig("last_verification", "message")
+    assert_match "expected Bearer", result.errors.to_sentence
   ensure
     ENV[@connection.api_key_reference] = previous_key
   end

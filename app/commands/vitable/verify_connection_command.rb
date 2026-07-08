@@ -15,7 +15,7 @@ module Vitable
       end
 
       response = @gateway_class.new(connection).issue_access_token
-      raise ArgumentError, "Vitable credential verification response did not include an access token" unless token_present?(response)
+      RemoteAccessTokenResponseDto.from_response(serialize_response(response)).validate!
 
       @repository.mark_connection_active(connection)
       success(record: connection, value: response)
@@ -28,11 +28,6 @@ module Vitable
     end
 
     private
-
-    def token_present?(response)
-      response_hash = serialize_response(response)
-      response_hash.fetch("access_token", nil).present? || response_hash.dig("data", "access_token").present?
-    end
 
     def serialize_response(response)
       return {} if response.blank?
