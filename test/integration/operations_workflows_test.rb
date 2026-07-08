@@ -7350,32 +7350,36 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       define_method(:submit_group_member_sync) do |group_id, members|
         response_class.new(
           data: {
-            group_id:,
-            request_id: "grpmsr_ops_123",
-            accepted_at: Time.current,
-            member_count: members.count,
-            access_token: "vit_at_member_sync_snapshot_secret"
+            group_member_sync_request: {
+              group: { id: group_id },
+              id: "grpmsr_ops_123",
+              created_at: Time.current,
+              member_count: members.count,
+              access_token: "vit_at_member_sync_snapshot_secret"
+            }
           }
         )
       end
       define_method(:retrieve_group_member_sync) do |group_id, request_id|
         response_class.new(
           data: {
-            group_id:,
-            request_id:,
-            accepted_at: 1.minute.ago,
-            completed_at: Time.current,
-            refresh_token: "vit_rt_member_sync_snapshot_secret",
-            results: {
-              added_group_member_ids: [ "grpmem_casey" ],
-              removed_group_member_ids: [],
-              failures: [
-                {
-                  operation: "add",
-                  reference_id: "musto_employee_#{Employee.find_by!(email: "jordan.review@example.com").id}",
-                  reason: "Plan is not available for this member."
-                }
-              ]
+            member_sync: {
+              group_id:,
+              request_id:,
+              accepted_at: 1.minute.ago,
+              finished_at: Time.current,
+              refresh_token: "vit_rt_member_sync_snapshot_secret",
+              result: {
+                added_group_member_ids: [ "grpmem_casey" ],
+                removed_group_member_ids: [],
+                failures: [
+                  {
+                    operation: "add",
+                    reference_id: "musto_employee_#{Employee.find_by!(email: "jordan.review@example.com").id}",
+                    reason: "Plan is not available for this member."
+                  }
+                ]
+              }
             }
           }
         )
@@ -7415,12 +7419,12 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal "failed", failed_enrollment.reload.metadata.fetch("vitable_care_member_sync_status")
     submit_sync = @connection.sync_runs.where(operation: "care_member_sync_submit").recent_first.first
     assert_equal "succeeded", submit_sync.status
-    assert_equal "[FILTERED]", submit_sync.stats.dig("remote_response", "data", "access_token")
+    assert_equal "[FILTERED]", submit_sync.stats.dig("remote_response", "data", "group_member_sync_request", "access_token")
     refresh_sync = @connection.sync_runs.where(operation: "care_member_sync_refresh").recent_first.first
     assert_equal "succeeded", refresh_sync.status
     assert_equal 1, refresh_sync.stats.fetch("succeeded_member_count")
     assert_equal 1, refresh_sync.stats.fetch("failed_member_count")
-    assert_equal "[FILTERED]", refresh_sync.stats.dig("remote_response", "data", "refresh_token")
+    assert_equal "[FILTERED]", refresh_sync.stats.dig("remote_response", "data", "member_sync", "refresh_token")
     assert_not_includes submit_sync.stats.to_json, "vit_at_member_sync_snapshot_secret"
     assert_not_includes refresh_sync.stats.to_json, "vit_rt_member_sync_snapshot_secret"
     assert_not_includes @employer.settings.to_json, "vit_rt_member_sync_snapshot_secret"

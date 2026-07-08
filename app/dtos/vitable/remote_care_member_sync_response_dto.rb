@@ -8,17 +8,28 @@ module Vitable
     :raw_payload
   ) do
     def self.from_hash(payload)
-      attributes = payload.to_h.stringify_keys
-      data = attributes.fetch("data", attributes)
-      data = data.respond_to?(:to_h) ? data.to_h.stringify_keys : {}
+      attributes = payload.respond_to?(:to_h) ? payload.to_h.stringify_keys : {}
+      data = resource_payload(attributes)
+      group = nested_payload(data, "group")
+      request_id = first_present(data["request_id"], data["id"], data["sync_request_id"])
+      group_id = first_present(data["group_id"], group["id"], group["group_id"])
+      accepted_at = first_present(data["accepted_at"], data["submitted_at"], data["created_at"])
+      completed_at = first_present(data["completed_at"], data["finished_at"])
+      results = first_present(data["results"], data["result"])
 
       new(
-        request_id: data.fetch("request_id", nil),
-        group_id: data.fetch("group_id", nil),
-        accepted_at: data.fetch("accepted_at", nil),
-        completed_at: data.fetch("completed_at", nil),
-        results: data.fetch("results", nil),
-        raw_payload: data
+        request_id:,
+        group_id:,
+        accepted_at:,
+        completed_at:,
+        results:,
+        raw_payload: data.merge(
+          "request_id" => request_id,
+          "group_id" => group_id,
+          "accepted_at" => accepted_at,
+          "completed_at" => completed_at,
+          "results" => results
+        ).compact
       )
     end
 
@@ -50,6 +61,34 @@ module Vitable
         "refreshed_at" => refreshed_at.iso8601
       }.compact
     end
+
+    def self.resource_payload(attributes)
+      %w[
+        data
+        care_member_sync
+        member_sync
+        member_sync_request
+        group_member_sync
+        group_member_sync_request
+        sync
+        resource
+        object
+      ].reduce(attributes) do |payload, key|
+        value = payload[key]
+        !value.nil? && value.respond_to?(:to_h) ? value.to_h.stringify_keys : payload
+      end
+    end
+
+    def self.nested_payload(attributes, key)
+      value = attributes[key]
+      value.respond_to?(:to_h) ? value.to_h.stringify_keys : {}
+    end
+
+    def self.first_present(*values)
+      values.compact_blank.first
+    end
+
+    private_class_method :resource_payload, :nested_payload, :first_present
 
     private
 
