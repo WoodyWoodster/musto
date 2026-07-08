@@ -488,6 +488,7 @@ module Vitable
             /v1/benefit-eligibility-policies/:id
             /v1/webhook-events
             /v1/webhook-events/:id
+            /v1/webhook-events/:id/deliveries
             /v1/employees/:id
             /v1/employees/:id/enrollments
             /v1/enrollments/:id
@@ -500,7 +501,9 @@ module Vitable
       completed_at = Time.current
       refreshed_at = api_snapshot_refreshed_at(snapshot, fallback: completed_at)
       webhook_ingestion = ingest_remote_webhook_events(connection, snapshot.fetch("webhook_events", []), refreshed_at:)
+      delivery_sync = apply_remote_webhook_delivery_snapshots(connection, snapshot.fetch("webhook_event_deliveries", []), refreshed_at:)
       snapshot = snapshot.merge("webhook_event_ingestion" => webhook_ingestion)
+      snapshot = snapshot.merge("webhook_event_delivery_sync" => delivery_sync)
       counts = snapshot_counts(snapshot)
       connection.update!(
         status: "active",
@@ -520,7 +523,8 @@ module Vitable
         stats: sync_run.stats.to_h.merge(counts).merge(
           "refreshed_at" => refreshed_at.iso8601,
           "completed_at" => completed_at.iso8601,
-          "webhook_event_ingestion" => webhook_ingestion
+          "webhook_event_ingestion" => webhook_ingestion,
+          "webhook_event_delivery_sync" => delivery_sync
         )
       )
       sync_run
@@ -1085,6 +1089,8 @@ module Vitable
         "plan_year_webhook_event_count" => webhook_resource_counts.fetch("plan_year", 0),
         "retrieved_remote_webhook_event_count" => snapshot.fetch("webhook_event_details", []).count { |entry| entry.to_h.fetch("webhook_event", nil).present? },
         "errored_remote_webhook_event_detail_count" => snapshot.fetch("webhook_event_details", []).count { |entry| entry.to_h.fetch("error_class", nil).present? },
+        "remote_webhook_delivery_count" => snapshot.fetch("webhook_event_deliveries", []).sum { |entry| entry.to_h.fetch("deliveries", []).count },
+        "errored_remote_webhook_delivery_count" => snapshot.fetch("webhook_event_deliveries", []).count { |entry| entry.to_h.fetch("error_class", nil).present? },
         "recovered_webhook_event_count" => snapshot.fetch("webhook_event_recovery", {}).to_h.fetch("processed_count", 0),
         "failed_webhook_recovery_count" => snapshot.fetch("webhook_event_recovery", {}).to_h.fetch("failed_count", 0),
         "skipped_webhook_recovery_count" => snapshot.fetch("webhook_event_recovery", {}).to_h.fetch("skipped_count", 0),
@@ -1106,6 +1112,52 @@ module Vitable
         "enrollment_deduction_changed_count" => deduction_sync.fetch("created_count", 0) + deduction_sync.fetch("updated_count", 0),
         "imported_webhook_event_count" => webhook_ingestion.fetch("created_count", 0),
         "existing_webhook_event_count" => webhook_ingestion.fetch("existing_count", 0)
+      }
+    end
+
+    def apply_remote_webhook_delivery_snapshots(connection, delivery_entries, refreshed_at:)
+      updated_event_ids = []
+      skipped_event_ids = []
+      error_event_ids = []
+
+      delivery_entries.each do |entry|
+        entry = entry.to_h.stringify_keys
+        event_id = entry.fetch("remote_webhook_event_id", nil).presence
+        if event_id.blank? || entry.fetch("error_class", nil).present?
+          error_event_ids << event_id if event_id.present?
+          next
+        end
+
+        event = connection.webhook_events.find_by(event_id:)
+        unless event
+          skipped_event_ids << event_id
+          next
+        end
+
+        deliveries = entry.fetch("deliveries", [])
+        event.update!(
+          metadata: event.metadata.to_h.merge(
+            "delivery_snapshot" => {
+              "source" => "vitable_api_snapshot",
+              "refreshed_at" => refreshed_at.iso8601,
+              "delivery_count" => deliveries.count,
+              "status_counts" => entry.fetch("status_counts", {}),
+              "deliveries" => deliveries
+            }
+          )
+        )
+        updated_event_ids << event_id
+      end
+
+      {
+        "source" => "vitable_api_snapshot",
+        "updated_count" => updated_event_ids.count,
+        "skipped_count" => skipped_event_ids.count,
+        "error_count" => error_event_ids.count,
+        "updated_event_ids" => updated_event_ids,
+        "skipped_event_ids" => skipped_event_ids,
+        "error_event_ids" => error_event_ids,
+        "refreshed_at" => refreshed_at.iso8601
       }
     end
 

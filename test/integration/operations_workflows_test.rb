@@ -2961,12 +2961,16 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       "groups",
       "group member sync",
       "webhook events",
+      "webhook event deliveries",
       "payload-only webhooks"
     ], detail.endpoint_coverage.map(&:resource_type)
     employee_coverage = detail.endpoint_coverage.find { |coverage| coverage.resource_type == "employees" }
     assert_operator employee_coverage.activity_count, :>=, 2
     groups_coverage = detail.endpoint_coverage.find { |coverage| coverage.resource_type == "groups" }
     assert_equal "pending", groups_coverage.status
+    delivery_coverage = detail.endpoint_coverage.find { |coverage| coverage.resource_type == "webhook event deliveries" }
+    assert_equal "pending", delivery_coverage.status
+    assert_equal "/v1/webhook-events/:id/deliveries", delivery_coverage.fetch_path
     payload_webhook_coverage = detail.endpoint_coverage.find { |coverage| coverage.resource_type == "payload-only webhooks" }
     assert_equal "pending", payload_webhook_coverage.status
     assert_equal "/api/v1/webhooks/vitable", payload_webhook_coverage.fetch_path
@@ -3676,6 +3680,106 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     dto = Vitable::ConnectionDetailQuery.new.call(@connection.id).api_snapshot
     assert_equal 1, dto.retrieved_remote_webhook_event_count
     assert_equal 0, dto.errored_remote_webhook_event_detail_count
+  ensure
+    ENV[@connection.api_key_reference] = previous_key
+  end
+
+  test "Vitable API snapshot refresh mirrors webhook event delivery attempts" do
+    @employee.update!(vitable_id: "empl_remote_casey")
+    delivery_at = Time.current.change(usec: 0)
+    response_class = Data.define(:data)
+    gateway_class = Class.new do
+      define_singleton_method(:retrievable_resource_type?) { |resource_type| Vitable::ClientGateway.retrievable_resource_type?(resource_type) }
+      define_singleton_method(:webhook_resource_type?) { |resource_type| Vitable::ClientGateway.webhook_resource_type?(resource_type) }
+      define_singleton_method(:payload_only_webhook_resource_type?) { |resource_type| Vitable::ClientGateway.payload_only_webhook_resource_type?(resource_type) }
+
+      define_method(:initialize) { |_connection| }
+      define_method(:list_all_employers) { response_class.new(data: []) }
+      define_method(:list_all_groups) { response_class.new(data: []) }
+      define_method(:list_all_plans) { response_class.new(data: []) }
+      define_method(:list_all_employee_enrollments) { |_employee_id| response_class.new(data: []) }
+      define_method(:list_all_webhook_events) do |**_filters|
+        response_class.new(
+          data: [
+            {
+              id: "wevt_remote_delivery",
+              organization_id: Organization.find_by!(name: "Ops Platform").external_id,
+              event_name: "dependent.updated",
+              resource_type: "dependent",
+              resource_id: "dep_remote_delivery",
+              created_at: 2.minutes.ago.iso8601,
+              data: {
+                id: "dep_remote_delivery",
+                employee_id: "empl_remote_casey",
+                first_name: "Harper",
+                last_name: "Ng",
+                relationship: "spouse",
+                date_of_birth: Date.current.prev_year(30).iso8601,
+                status: "active"
+              }
+            }
+          ]
+        )
+      end
+      define_method(:list_webhook_event_deliveries) do |event_id|
+        response_class.new(
+          data: [
+            {
+              id: "wdlv_remote_delivery",
+              webhook_event_id: event_id,
+              subscription_id: "wsub_remote_primary",
+              status: "Delivered",
+              created_at: delivery_at,
+              started_at: delivery_at,
+              delivered_at: delivery_at,
+              failed_at: nil,
+              failure_reason: "",
+              access_token: "vit_at_delivery_detail_secret"
+            }
+          ]
+        )
+      end
+    end
+    previous_key = ENV[@connection.api_key_reference]
+    ENV[@connection.api_key_reference] = "vit_apk_test_value"
+
+    assert_difference -> { WebhookEvent.count }, 1 do
+      result = Vitable::RefreshApiSnapshotCommand.new(
+        dto: Vitable::RefreshApiSnapshotDto.new(connection_id: @connection.id, requested_by: "integration_admin"),
+        gateway_class:
+      ).call
+
+      assert result.success?, result.errors.to_sentence
+    end
+
+    snapshot = @connection.reload.metadata.fetch("api_snapshot")
+    event = WebhookEvent.find_by!(event_id: "wevt_remote_delivery")
+    delivery_entry = snapshot.fetch("webhook_event_deliveries").sole
+    delivery_snapshot = event.metadata.fetch("delivery_snapshot")
+
+    assert_equal 1, snapshot.dig("counts", "remote_webhook_event_count")
+    assert_equal 1, snapshot.dig("counts", "remote_webhook_delivery_count")
+    assert_equal 0, snapshot.dig("counts", "errored_remote_webhook_delivery_count")
+    assert_equal 1, snapshot.dig("webhook_event_delivery_sync", "updated_count")
+    assert_equal "wevt_remote_delivery", delivery_entry.fetch("remote_webhook_event_id")
+    assert_equal 1, delivery_entry.fetch("delivery_count")
+    assert_equal 1, delivery_entry.dig("status_counts", "delivered")
+    assert_equal "[FILTERED]", delivery_entry.dig("response", "data", 0, "access_token")
+    assert_equal "vitable_api_snapshot", delivery_snapshot.fetch("source")
+    assert_equal 1, delivery_snapshot.fetch("delivery_count")
+    assert_equal 1, delivery_snapshot.dig("status_counts", "delivered")
+    assert_equal "wdlv_remote_delivery", delivery_snapshot.fetch("deliveries").first.fetch("id")
+    assert_equal "processed", event.status
+    assert_equal "dep_remote_delivery", @dependent.reload.vitable_id
+    assert_not_includes snapshot.to_json, "vit_at_delivery_detail_secret"
+
+    event_detail = Vitable::WebhookEventDetailQuery.new.call(event.id)
+    assert_instance_of Vitable::WebhookDeliveryDto, event_detail.deliveries.first
+    assert_equal "delivered", event_detail.deliveries.first.status_key
+
+    connection_detail = Vitable::ConnectionDetailQuery.new.call(@connection.id).api_snapshot
+    assert_equal 1, connection_detail.remote_webhook_delivery_count
+    assert_equal 0, connection_detail.errored_remote_webhook_delivery_count
   ensure
     ENV[@connection.api_key_reference] = previous_key
   end

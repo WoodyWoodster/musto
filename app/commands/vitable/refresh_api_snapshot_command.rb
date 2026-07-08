@@ -90,6 +90,7 @@ module Vitable
       ) { gateway.list_all_webhook_events(**webhook_event_query) }
       webhook_event_details = remote_webhook_event_details(gateway, webhook_events, trace:)
       webhook_events = webhook_event_reconciliation_snapshots(webhook_events, webhook_event_details)
+      webhook_event_deliveries = remote_webhook_event_deliveries(gateway, webhook_events, trace:)
 
       {
         "requested_by" => @dto.requested_by,
@@ -107,6 +108,7 @@ module Vitable
         "webhook_event_query" => webhook_event_query_metadata(webhook_event_query),
         "webhook_events" => webhook_events,
         "webhook_event_details" => webhook_event_details,
+        "webhook_event_deliveries" => webhook_event_deliveries,
         "remote_employee_rosters" => remote_employee_rosters,
         "employee_details" => employee_details,
         "employee_reconciliation" => employee_reconciliation.to_metadata,
@@ -249,6 +251,54 @@ module Vitable
       return if remote_id == expected_remote_id
 
       raise ArgumentError, "Vitable webhook event retrieve response returned remote webhook event ID #{remote_id}, expected #{expected_remote_id}"
+    end
+
+    def remote_webhook_event_deliveries(gateway, webhook_events, trace:)
+      return [] unless gateway.respond_to?(:list_webhook_event_deliveries)
+
+      remote_webhook_event_ids(webhook_events).map do |event_id|
+        response = gateway.list_webhook_event_deliveries(event_id)
+        response_hash = serialize_response(response)
+        trace.replace(
+          {
+            "last_step" => "webhook_event_deliveries",
+            "last_resource_id" => event_id,
+            "last_response" => response_hash,
+            "last_fetched_at" => Time.current.iso8601
+          }
+        )
+
+        deliveries = RemoteCollectionResponseDto
+          .from_response(response_hash, response_label: "Vitable webhook delivery list response")
+          .records
+          .map do |delivery|
+            WebhookDeliveryDto
+              .from_hash(delivery)
+              .validate!(expected_webhook_event_id: event_id)
+              .to_snapshot_hash
+          end
+
+        {
+          "remote_webhook_event_id" => event_id,
+          "delivery_count" => deliveries.count,
+          "status_counts" => webhook_delivery_status_counts(deliveries),
+          "deliveries" => deliveries,
+          "response" => response_hash
+        }
+      rescue VitableConnect::Errors::NotFoundError => e
+        {
+          "remote_webhook_event_id" => event_id,
+          "error_class" => e.class.name,
+          "error_message" => PayloadRedactor.error_message(e)
+        }
+      end
+    end
+
+    def webhook_delivery_status_counts(deliveries)
+      deliveries.each_with_object(Hash.new(0)) do |delivery, counts|
+        key = WebhookDeliveryDto.from_hash(delivery).status_key.presence || "unknown"
+        counts[key] += 1
+      end.to_h
     end
 
     def plan_reconciliation_snapshots(connection, remote_plans, refreshed_at:)

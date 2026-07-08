@@ -138,10 +138,18 @@ module Vitable
         resource_type: "webhook events",
         method: "GET",
         fetch_path: "/v1/webhook-events",
-        operations: %w[webhook_event.list webhook_event.retrieve webhook_event.list_deliveries],
+        operations: %w[webhook_event.list webhook_event.retrieve],
         sync_operations: %w[webhook_replay webhook_delivery_refresh api_snapshot_refresh demo_smoke_check],
         fetch_resource_types: %w[webhook_event],
         snapshot_count_key: "remote_webhook_event_count"
+      },
+      {
+        resource_type: "webhook event deliveries",
+        method: "GET",
+        fetch_path: "/v1/webhook-events/:id/deliveries",
+        operations: %w[webhook_event.list_deliveries],
+        sync_operations: %w[webhook_delivery_refresh api_snapshot_refresh],
+        snapshot_count_key: "remote_webhook_delivery_count"
       },
       {
         resource_type: "payload-only webhooks",
