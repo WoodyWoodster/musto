@@ -208,7 +208,7 @@ module Vitable
 
     def mark_group_succeeded(sync_run, response, packet:)
       response_hash = serialize_response(response)
-      group_id = extract_group_id(response_hash).presence || remote_group_id
+      group_id = extract_group_id(response_hash).presence
       raise ArgumentError, "Vitable care group response did not include a remote group ID" if group_id.blank?
 
       synced_at = Time.current.iso8601

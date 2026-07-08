@@ -4635,6 +4635,33 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     ENV[@connection.api_key_reference] = previous_key
   end
 
+  test "care group update fails when response omits remote group id" do
+    prepare_care_group_profile(remote_group_id: "grp_ops_123")
+    Vitable::GenerateCareGroupPacketCommand.new(dto: Vitable::GenerateCareGroupPacketDto.new(requested_by: "ops_test")).call
+    response_class = Data.define(:data)
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:update_group) { |_group_id, payload| response_class.new(data: { name: payload.fetch("name") }) }
+    end
+    previous_key = ENV[@connection.api_key_reference]
+    ENV[@connection.api_key_reference] = "vit_apk_test_value"
+
+    result = Vitable::SubmitCareGroupCommand.new(
+      dto: Vitable::SubmitCareGroupDto.new(requested_by: "integration_admin"),
+      gateway_class:
+    ).call
+
+    assert result.failure?
+    assert_equal "grp_ops_123", @employer.reload.settings.fetch("vitable_care_group_id")
+    sync = @connection.sync_runs.where(operation: "care_group_upsert").recent_first.first
+    assert_equal "failed", sync.status
+    assert_match "remote group ID", sync.error_message
+    assert_match "remote group ID", result.errors.to_sentence
+    assert_nil @employer.settings.to_h.fetch("vitable_care_group_last_sync", nil)
+  ensure
+    ENV[@connection.api_key_reference] = previous_key
+  end
+
   test "generates a Vitable care member manifest through command action" do
     prepare_care_group_profile(remote_group_id: "grp_ops_123")
     create_care_member_holdback_employee
