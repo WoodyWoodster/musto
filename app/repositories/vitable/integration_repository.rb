@@ -729,20 +729,7 @@ module Vitable
         { value: response.to_s }
       end
 
-      redact_token_values(serialized.deep_stringify_keys)
-    end
-
-    def redact_token_values(value)
-      case value
-      when Hash
-        value.to_h do |key, entry|
-          [ key, key == "access_token" ? "[FILTERED]" : redact_token_values(entry) ]
-        end
-      when Array
-        value.map { |entry| redact_token_values(entry) }
-      else
-        value
-      end
+      PayloadRedactor.redact(serialized.deep_stringify_keys)
     end
   end
 end

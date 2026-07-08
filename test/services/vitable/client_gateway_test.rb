@@ -2,22 +2,65 @@ require "test_helper"
 
 module Vitable
   class ClientGatewayTest < ActiveSupport::TestCase
-    test "redacts access tokens from serialized responses" do
+    test "redacts sensitive values from serialized responses" do
       organization = Organization.create!(name: "Gateway Test", external_id: "org_gateway_test")
       connection = organization.integration_connections.create!(provider: "vitable", environment: "production")
-      response = Data.define(:access_token, :expires_in, :token_type, :nested).new(
+      response = Data.define(:access_token, :expires_in, :token_type, :nested, :signature).new(
         access_token: "vit_at_secret_value",
         expires_in: 3_600,
         token_type: "Bearer",
-        nested: { access_token: "vit_at_nested_secret" }
+        nested: {
+          access_token: "vit_at_nested_secret",
+          launch_token: "launch_secret_value",
+          api_key: "vit_apk_secret_value",
+          token_type: "Bearer"
+        },
+        signature: "vitable_signature_secret"
       )
 
       serialized = ClientGateway.new(connection).send(:serialize_response, response)
 
       assert_equal "[FILTERED]", serialized.fetch("access_token")
       assert_equal "[FILTERED]", serialized.dig("nested", "access_token")
+      assert_equal "[FILTERED]", serialized.dig("nested", "launch_token")
+      assert_equal "[FILTERED]", serialized.dig("nested", "api_key")
+      assert_equal "[FILTERED]", serialized.fetch("signature")
+      assert_equal "Bearer", serialized.dig("nested", "token_type")
       assert_equal 3_600, serialized.fetch("expires_in")
       assert_not_includes serialized.to_json, "vit_at_secret"
+      assert_not_includes serialized.to_json, "launch_secret_value"
+      assert_not_includes serialized.to_json, "vit_apk_secret_value"
+      assert_not_includes serialized.to_json, "vitable_signature_secret"
+    end
+
+    test "redacts sensitive values from logged request bodies" do
+      organization = Organization.create!(name: "Gateway Request Redaction Test", external_id: "org_gateway_request_redaction_test")
+      connection = organization.integration_connections.create!(provider: "vitable", environment: "production")
+      gateway = ClientGateway.new(connection)
+
+      gateway.send(
+        :log_request,
+        operation: "test.redaction",
+        method: :post,
+        path: "/v1/test",
+        duration_ms: 12,
+        request_body: {
+          access_token: "vit_at_request_secret",
+          nested: {
+            client_secret: "client_secret_value",
+            token_type: "Bearer"
+          }
+        },
+        response: { ok: true }
+      )
+
+      log = connection.api_request_logs.last
+
+      assert_equal "[FILTERED]", log.request_body.fetch("access_token")
+      assert_equal "[FILTERED]", log.request_body.dig("nested", "client_secret")
+      assert_equal "Bearer", log.request_body.dig("nested", "token_type")
+      assert_not_includes log.request_body.to_json, "vit_at_request_secret"
+      assert_not_includes log.request_body.to_json, "client_secret_value"
     end
 
     test "normalizes employer provisioning payloads for the SDK" do

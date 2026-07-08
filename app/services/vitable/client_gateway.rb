@@ -297,7 +297,7 @@ module Vitable
         path:,
         status_code: status_code || 200,
         duration_ms:,
-        request_body:,
+        request_body: PayloadRedactor.redact(request_body.deep_stringify_keys),
         response_body: serialize_response(response),
         error_class: error&.class&.name,
         error_message: error&.message
@@ -319,7 +319,7 @@ module Vitable
         { value: response.to_s }
       end
 
-      redact_token_values(serialized.deep_stringify_keys)
+      PayloadRedactor.redact(serialized.deep_stringify_keys)
     end
 
     def page_response(page)
@@ -343,19 +343,6 @@ module Vitable
 
       serialized = page.respond_to?(:deep_to_h) ? page.deep_to_h : page.to_h
       serialized.fetch(:data, serialized.fetch("data", []))
-    end
-
-    def redact_token_values(value)
-      case value
-      when Hash
-        value.to_h do |key, entry|
-          [ key, key == "access_token" ? "[FILTERED]" : redact_token_values(entry) ]
-        end
-      when Array
-        value.map { |entry| redact_token_values(entry) }
-      else
-        value
-      end
     end
 
     def census_employee_payload(employee)
