@@ -36,6 +36,7 @@ module Vitable
         fetch_path: "/v1/employers",
         operations: %w[employer.list employer.create],
         sync_operations: %w[employer_create api_snapshot_refresh demo_smoke_check],
+        resource_fetch_fragments: %w[/employers/],
         fetch_resource_types: %w[employer],
         snapshot_count_key: "remote_employer_count",
         event_resource_types: %w[employer]

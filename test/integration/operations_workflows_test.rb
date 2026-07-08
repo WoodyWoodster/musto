@@ -2903,6 +2903,19 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     groups_coverage = detail.endpoint_coverage.find { |coverage| coverage.resource_type == "groups" }
     assert_equal "pending", groups_coverage.status
 
+    employer_fetch_log = @connection.api_request_logs.create!(
+      operation: "resource.fetch",
+      method: "GET",
+      path: "/v1/employers/empr_ops_123",
+      status_code: 200,
+      duration_ms: 39
+    )
+    detail_with_employer_fetch = Vitable::ConnectionDetailQuery.new.call(@connection.id)
+    employer_coverage = detail_with_employer_fetch.endpoint_coverage.find { |coverage| coverage.resource_type == "employers" }
+    assert_equal "ready", employer_coverage.status
+    assert_operator employer_coverage.activity_count, :>=, 1
+    assert_equal employer_fetch_log.created_at.to_i, employer_coverage.last_seen_at.to_i
+
     blocked_member_sync = @connection.sync_runs.create!(
       resource_type: "group",
       operation: "care_member_sync_submit",
