@@ -4876,6 +4876,39 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     ENV[@connection.api_key_reference] = previous_key
   end
 
+  test "care group submit fails when create response external reference differs from packet" do
+    prepare_care_group_profile
+    response_class = Data.define(:data)
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:create_group) do |payload|
+        response_class.new(
+          data: {
+            id: "grp_created_wrong_reference",
+            name: payload.fetch("name"),
+            external_reference_id: "musto_care_group_wrong"
+          }
+        )
+      end
+    end
+    previous_key = ENV[@connection.api_key_reference]
+    ENV[@connection.api_key_reference] = "vit_apk_test_value"
+
+    result = Vitable::SubmitCareGroupCommand.new(
+      dto: Vitable::SubmitCareGroupDto.new(requested_by: "integration_admin"),
+      gateway_class:
+    ).call
+
+    assert result.failure?
+    assert_nil @employer.reload.settings.to_h.fetch("vitable_care_group_id", nil)
+    sync = @connection.sync_runs.where(operation: "care_group_upsert").recent_first.first
+    assert_equal "failed", sync.status
+    assert_match "expected musto_care_group_#{@employer.id}", sync.error_message
+    assert_match "expected musto_care_group_#{@employer.id}", result.errors.to_sentence
+  ensure
+    ENV[@connection.api_key_reference] = previous_key
+  end
+
   test "care group update fails when response omits remote group id" do
     prepare_care_group_profile(remote_group_id: "grp_ops_123")
     Vitable::GenerateCareGroupPacketCommand.new(dto: Vitable::GenerateCareGroupPacketDto.new(requested_by: "ops_test")).call
@@ -4898,6 +4931,41 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal "failed", sync.status
     assert_match "remote group ID", sync.error_message
     assert_match "remote group ID", result.errors.to_sentence
+    assert_nil @employer.settings.to_h.fetch("vitable_care_group_last_sync", nil)
+  ensure
+    ENV[@connection.api_key_reference] = previous_key
+  end
+
+  test "care group update fails when response group differs from tracked group" do
+    prepare_care_group_profile(remote_group_id: "grp_ops_123")
+    Vitable::GenerateCareGroupPacketCommand.new(dto: Vitable::GenerateCareGroupPacketDto.new(requested_by: "ops_test")).call
+    response_class = Data.define(:data)
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:update_group) do |_group_id, payload|
+        response_class.new(
+          data: {
+            id: "grp_ops_wrong",
+            name: payload.fetch("name"),
+            external_reference_id: payload.fetch("external_reference_id")
+          }
+        )
+      end
+    end
+    previous_key = ENV[@connection.api_key_reference]
+    ENV[@connection.api_key_reference] = "vit_apk_test_value"
+
+    result = Vitable::SubmitCareGroupCommand.new(
+      dto: Vitable::SubmitCareGroupDto.new(requested_by: "integration_admin"),
+      gateway_class:
+    ).call
+
+    assert result.failure?
+    assert_equal "grp_ops_123", @employer.reload.settings.fetch("vitable_care_group_id")
+    sync = @connection.sync_runs.where(operation: "care_group_upsert").recent_first.first
+    assert_equal "failed", sync.status
+    assert_match "expected grp_ops_123", sync.error_message
+    assert_match "expected grp_ops_123", result.errors.to_sentence
     assert_nil @employer.settings.to_h.fetch("vitable_care_group_last_sync", nil)
   ensure
     ENV[@connection.api_key_reference] = previous_key

@@ -208,19 +208,21 @@ module Vitable
 
     def mark_group_succeeded(sync_run, response, packet:)
       response_hash = serialize_response(response)
-      group_id = extract_group_id(response_hash).presence
-      raise ArgumentError, "Vitable care group response did not include a remote group ID" if group_id.blank?
+      dto = RemoteCareGroupResponseDto.from_hash(response_hash).validate!(
+        expected_group_id: packet.fetch("remote_group_id", nil),
+        expected_external_reference_id: packet.dig("api_payload", "external_reference_id")
+      )
 
       synced_at = Time.current.iso8601
       merge_settings(
-        GROUP_ID_KEY => group_id,
+        GROUP_ID_KEY => dto.group_id,
         GROUP_PACKET_KEY => packet,
         "vitable_care_group_last_sync" => {
           "synced_at" => synced_at,
           "operation" => sync_run.operation,
           "packet_id" => packet.fetch("packet_id"),
           "mode" => packet.fetch("mode"),
-          "remote_group_id" => group_id
+          "remote_group_id" => dto.group_id
         }
       )
 
@@ -230,7 +232,7 @@ module Vitable
         error_message: nil,
         stats: sync_run.stats.to_h.merge(
           "remote_response" => response_hash,
-          "remote_group_id" => group_id,
+          "remote_group_id" => dto.group_id,
           "remote_synced_at" => synced_at
         )
       )
@@ -510,12 +512,6 @@ module Vitable
         end
 
       PayloadRedactor.redact(serialized.deep_stringify_keys)
-    end
-
-    def extract_group_id(response_hash)
-      response_hash.dig("data", "id") ||
-        response_hash.dig("data", "group", "id") ||
-        response_hash.fetch("id", nil)
     end
 
     def member_sync_results(data)
