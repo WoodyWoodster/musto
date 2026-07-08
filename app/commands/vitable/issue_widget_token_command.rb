@@ -7,6 +7,7 @@ module Vitable
     end
 
     def call
+      response = nil
       @employer = employer
       @repository = WidgetTokenRepository.new(employer: @employer)
 
@@ -36,7 +37,7 @@ module Vitable
       @repository.mark_failed(sync_run, e)
       failure(record: sync_run, errors: "#{e.class}: #{e.message}")
     rescue ArgumentError, KeyError => e
-      @repository.mark_failed(sync_run, e)
+      @repository.mark_failed(sync_run, e, response:)
       failure(record: sync_run, errors: e.message)
     rescue ActiveRecord::RecordNotFound
       failure(errors: missing_record_message)

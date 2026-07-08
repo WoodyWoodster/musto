@@ -283,6 +283,9 @@ class VitableWidgetTokensTest < ActionDispatch::IntegrationTest
     sync = @connection.sync_runs.where(operation: "widget_token_broker", resource_type: "employer").recent_first.first
     assert_equal "failed", sync.status
     assert_match "expected empr_widget_123", sync.error_message
+    assert_equal "ArgumentError", sync.stats.fetch("error_class")
+    assert_equal "empr_wrong_widget", sync.stats.dig("token_response", "bound_entity", "id")
+    assert_equal "[FILTERED]", sync.stats.dig("token_response", "access_token")
     assert_not_includes sync.stats.to_json, "vit_at_wrong_bound_secret"
   ensure
     ENV.delete("VITABLE_CONNECT_API_KEY")
