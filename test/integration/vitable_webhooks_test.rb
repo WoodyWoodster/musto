@@ -374,7 +374,8 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
             id: resource_id,
             reference_id: "musto_employee_#{Employee.find_by!(email: "dana.inactive@example.com").id}",
             email: "dana.inactive@example.com",
-            status: "inactive"
+            status: "inactive",
+            member_id: "mem_deactivated_dana"
           }
         }
       end
@@ -438,7 +439,8 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
             id: resource_id,
             reference_id: "musto_employee_#{Employee.find_by!(email: "elliot.eligible@example.com").id}",
             email: "elliot.eligible@example.com",
-            status: "active"
+            status: "active",
+            member_id: "mem_eligibility_elliot"
           }
         }
       end
@@ -519,6 +521,41 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
     ENV.delete("VITABLE_CONNECT_API_KEY")
   end
 
+  test "direct webhook event fetch fails when response id differs from requested event id" do
+    ENV["VITABLE_CONNECT_API_KEY"] = "vit_apk_test_value"
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:fetch_resource) do |_resource_type, _resource_id|
+        {
+          data: {
+            id: "wevt_wrong_import",
+            organization_id: "org_webhook_test",
+            event_name: "group.updated",
+            resource_type: "group",
+            resource_id: "grp_remote_imported",
+            created_at: Time.current.iso8601
+          }
+        }
+      end
+    end
+
+    result = Vitable::FetchResourceCommand.new(
+      dto: Vitable::FetchResourceDto.new(connection_id: @connection.id, resource_type: "webhook_event", resource_id: "wevt_remote_imported"),
+      gateway_class:
+    ).call
+
+    assert result.failure?
+    sync_run = @connection.sync_runs.where(operation: "fetch", resource_type: "webhook_event").recent_first.first
+
+    assert_equal "failed", sync_run.status
+    assert_match "expected wevt_remote_imported", sync_run.error_message
+    assert_match "expected wevt_remote_imported", result.errors.to_sentence
+    assert_nil WebhookEvent.find_by(event_id: "wevt_wrong_import")
+    assert_nil WebhookEvent.find_by(event_id: "wevt_remote_imported")
+  ensure
+    ENV.delete("VITABLE_CONNECT_API_KEY")
+  end
+
   test "direct webhook event fetches skip events for another organization" do
     ENV["VITABLE_CONNECT_API_KEY"] = "vit_apk_test_value"
     gateway_class = Class.new do
@@ -593,6 +630,7 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
             reference_id: "musto_employee_#{Employee.find_by!(email: "casey.deductions@example.com").id}",
             email: "casey.deductions@example.com",
             status: "active",
+            member_id: "mem_deduction_casey",
             deductions: [
               {
                 id: "ded_remote_primary",

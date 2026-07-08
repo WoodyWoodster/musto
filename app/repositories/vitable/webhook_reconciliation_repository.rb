@@ -213,6 +213,7 @@ module Vitable
 
     def reconcile_webhook_event_resource(remote_resource)
       expected_organization_id = webhook_event_connection_organization_id
+      validate_remote_webhook_event_identity!(remote_resource)
       dto = RemoteWebhookEventDto.from_remote_event(
         remote_resource,
         default_organization_id: expected_organization_id
@@ -248,6 +249,23 @@ module Vitable
 
     def webhook_event_connection_organization_id
       @event.integration_connection&.organization&.external_id.presence
+    end
+
+    def validate_remote_webhook_event_identity!(remote_resource)
+      remote_event_id = remote_resource.fetch("event_id", nil).presence || remote_resource.fetch("id", nil).presence
+      raise ArgumentError, "Vitable webhook event response did not include a remote webhook event ID" if remote_event_id.blank?
+      if @event.resource_id.present? && remote_event_id != @event.resource_id
+        raise ArgumentError, "Vitable webhook event response returned remote webhook event ID #{remote_event_id}, expected #{@event.resource_id}"
+      end
+
+      missing_fields = {
+        "organization_id" => remote_resource.fetch("organization_id", nil),
+        "event_name" => remote_resource.fetch("event_name", nil),
+        "resource_type" => remote_resource.fetch("resource_type", nil),
+        "resource_id" => remote_resource.fetch("resource_id", nil),
+        "created_at" => remote_resource.fetch("created_at", nil).presence || remote_resource.fetch("occurred_at", nil).presence
+      }.filter_map { |field, value| field if value.blank? }
+      raise ArgumentError, "Vitable webhook event #{remote_event_id} did not include #{missing_fields.to_sentence}" if missing_fields.any?
     end
 
     def webhook_event_organization_mismatch?(dto, expected_organization_id)
