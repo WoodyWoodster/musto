@@ -276,14 +276,21 @@ module Vitable
       response_hash = serialize_response(response)
       data = response_hash.fetch("data", response_hash)
       previous = latest_member_sync_request.to_h
+      request_id = data.fetch("request_id", nil)
+      group_id = data.fetch("group_id", nil)
+      accepted_at = data.fetch("accepted_at", nil)
+      raise ArgumentError, "Vitable care member sync refresh response did not include a remote request ID" if request_id.blank?
+      raise ArgumentError, "Vitable care member sync refresh response did not include a remote group ID" if group_id.blank?
+      raise ArgumentError, "Vitable care member sync refresh response did not include accepted_at" if accepted_at.blank?
+
       results = member_sync_results(data)
       reconciliation = reconcile_member_sync_results(data, results:)
 
       merge_settings(
         MEMBER_SYNC_REQUEST_KEY => previous.merge(
-          "request_id" => data.fetch("request_id", previous.fetch("request_id", nil)),
-          "group_id" => data.fetch("group_id", previous.fetch("group_id", nil)),
-          "accepted_at" => data.fetch("accepted_at", previous.fetch("accepted_at", nil)),
+          "request_id" => request_id,
+          "group_id" => group_id,
+          "accepted_at" => accepted_at,
           "completed_at" => data.fetch("completed_at", nil),
           "results" => data.fetch("results", nil),
           "status" => data.fetch("completed_at", nil).present? ? "complete" : "processing",
