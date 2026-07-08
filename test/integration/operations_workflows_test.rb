@@ -4775,6 +4775,37 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     ENV[@connection.api_key_reference] = previous_key
   end
 
+  test "care member sync submit fails when response omits remote group id" do
+    prepare_care_group_profile(remote_group_id: "grp_ops_123")
+    Vitable::GenerateCareMemberSyncCommand.new(dto: Vitable::GenerateCareMemberSyncDto.new(requested_by: "ops_test")).call
+    response_class = Data.define(:data)
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:submit_group_member_sync) do |_group_id, members|
+        response_class.new(data: { request_id: "grpmsr_ops_missing_group", accepted_at: Time.current, member_count: members.count })
+      end
+    end
+    previous_key = ENV[@connection.api_key_reference]
+    ENV[@connection.api_key_reference] = "vit_apk_test_value"
+
+    result = Vitable::SubmitCareMemberSyncCommand.new(
+      dto: Vitable::SubmitCareMemberSyncDto.new(requested_by: "integration_admin"),
+      gateway_class:
+    ).call
+
+    assert result.failure?
+    assert_nil @employer.reload.settings.to_h.fetch("vitable_care_member_sync_last_request", nil)
+    member_line = @employer.settings.fetch("vitable_care_member_sync_manifest").fetch("members").first
+    assert_not_equal "synced", member_line.fetch("status")
+    assert_nil @employee.reload.metadata.fetch("vitable_care_member_sync_status", nil)
+    sync = @connection.sync_runs.where(operation: "care_member_sync_submit").recent_first.first
+    assert_equal "failed", sync.status
+    assert_match "remote group ID", sync.error_message
+    assert_match "remote group ID", result.errors.to_sentence
+  ensure
+    ENV[@connection.api_key_reference] = previous_key
+  end
+
   test "care member sync refresh fails when response omits remote group id" do
     prepare_care_group_profile(remote_group_id: "grp_ops_123")
     Vitable::GenerateCareMemberSyncCommand.new(dto: Vitable::GenerateCareMemberSyncDto.new(requested_by: "ops_test")).call
