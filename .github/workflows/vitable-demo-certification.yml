@@ -1,0 +1,61 @@
+name: Vitable Demo Certification
+
+on:
+  workflow_dispatch:
+    inputs:
+      connection_id:
+        description: "Optional IntegrationConnection ID to certify instead of bootstrapping a demo connection"
+        required: false
+        type: string
+      public_webhook_url:
+        description: "Public HTTPS URL that routes to /api/v1/webhooks/vitable for the Rails process being certified"
+        required: true
+        type: string
+      webhook_wait_seconds:
+        description: "Seconds to wait before checking Vitable webhook delivery evidence"
+        required: false
+        default: "30"
+        type: string
+
+concurrency:
+  group: vitable-demo-certification
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      RAILS_ENV: test
+      VITABLE_CONNECT_API_KEY: ${{ secrets.VITABLE_CONNECT_API_KEY }}
+      VITABLE_CONNECT_ENVIRONMENT: demo
+      VITABLE_WEBHOOK_SECRET: ${{ secrets.VITABLE_WEBHOOK_SECRET }}
+      VITABLE_CERTIFICATION_CONNECTION_ID: ${{ inputs.connection_id }}
+      VITABLE_PUBLIC_WEBHOOK_URL: ${{ inputs.public_webhook_url }}
+      VITABLE_CERTIFICATION_WEBHOOK_WAIT_SECONDS: ${{ inputs.webhook_wait_seconds }}
+      VITABLE_CERTIFICATION_REQUESTED_BY: github_actions
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+
+      - name: Prepare database
+        run: bin/rails db:prepare
+
+      - name: Run Vitable demo certification
+        run: bin/rails vitable:demo_certification
+
+      - name: Upload certification artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: vitable-demo-certification
+          path: tmp/vitable/certifications

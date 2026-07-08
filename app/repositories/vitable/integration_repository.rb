@@ -50,6 +50,11 @@ module Vitable
         bootstrap_demo_smoke_connection(environment:, api_key_reference:)
     end
 
+    def demo_certification_connection(environment:, api_key_reference:)
+      IntegrationConnection.vitable.includes(:organization).find_by(environment:) ||
+        bootstrap_demo_certification_connection(environment:, api_key_reference:)
+    end
+
     def connection_webhook_events(connection, limit: 12)
       connection.webhook_events.order(created_at: :desc).limit(limit)
     end
@@ -641,6 +646,67 @@ module Vitable
       sync_run
     end
 
+    def create_demo_certification_run(connection:, requested_by:, matrix:)
+      connection.sync_runs.create!(
+        resource_type: "connection",
+        operation: "demo_certification",
+        status: "running",
+        started_at: Time.current,
+        stats: {
+          "requested_by" => requested_by,
+          "resource_id" => "connection_#{connection.id}",
+          "environment" => connection.environment,
+          "base_url" => connection.sdk_base_url,
+          "case_count" => matrix.count,
+          "endpoints" => matrix.map { |entry| entry.fetch(:endpoint) }.uniq
+        }
+      )
+    end
+
+    def mark_demo_certification_needs_credentials(sync_run)
+      message = "#{sync_run.integration_connection.api_key_reference} is not configured"
+      sync_run.update!(
+        status: "needs_credentials",
+        completed_at: Time.current,
+        error_message: message,
+        stats: sync_run.stats.to_h.merge("blocked_reason" => message)
+      )
+      sync_run
+    end
+
+    def succeed_demo_certification_run(connection, sync_run, result)
+      result_hash = result.to_h
+      completed_at = Time.current
+      connection.update!(
+        status: "active",
+        last_synced_at: completed_at,
+        metadata: connection.metadata.to_h.merge("demo_certification" => result_hash)
+      )
+      sync_run.update!(
+        status: "succeeded",
+        completed_at:,
+        error_message: nil,
+        stats: sync_run.stats.to_h.merge(result_hash)
+      )
+      sync_run
+    end
+
+    def fail_demo_certification_run(sync_run, error, result: nil)
+      stats = sync_run.stats.to_h.merge(
+        "error_class" => error.class.name,
+        "error_message" => PayloadRedactor.error_message(error)
+      )
+      stats = stats.merge("demo_certification" => result.to_h) if result
+
+      sync_run.update!(
+        status: "failed",
+        completed_at: Time.current,
+        error_message: PayloadRedactor.error_message(error),
+        stats:
+      )
+      sync_run
+    end
+
     private
 
     def api_snapshot_refreshed_at(snapshot, fallback:)
@@ -694,6 +760,22 @@ module Vitable
         provider: "vitable",
         environment:,
         api_key_reference:,
+        status: "pending",
+        metadata: {}
+      )
+    end
+
+    def bootstrap_demo_certification_connection(environment:, api_key_reference:)
+      organization = Organization.first_or_create!(
+        external_id: "org_musto_demo_certification",
+        name: "Musto Demo Certification"
+      )
+
+      organization.integration_connections.create!(
+        provider: "vitable",
+        environment:,
+        api_key_reference:,
+        webhook_secret_reference: Configuration::DEFAULT_WEBHOOK_SECRET_REFERENCE,
         status: "pending",
         metadata: {}
       )

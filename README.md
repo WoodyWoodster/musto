@@ -57,6 +57,17 @@ The task uses `VITABLE_CONNECT_API_KEY` and `VITABLE_CONNECT_ENVIRONMENT=demo`. 
 
 GitHub also includes a manual `Vitable Demo Smoke` workflow. It reads `VITABLE_CONNECT_API_KEY` from repository secrets, uses the configured demo target, serializes runs with workflow concurrency, and accepts an optional `connection_id` input that maps to `VITABLE_SMOKE_CONNECTION_ID`.
 
+Run the full live certification with:
+
+```sh
+VITABLE_PUBLIC_WEBHOOK_URL=https://your-public-host.example.com/api/v1/webhooks/vitable \
+bin/rails vitable:demo_certification
+```
+
+Certification is intentionally stricter than the smoke check. It creates disposable demo records with a `musto-cert-*` prefix, proves every public Vitable Connect endpoint modeled by the app, verifies signed local webhook fixtures, checks real Vitable webhook delivery evidence, and writes redacted JSON plus Markdown reports to `tmp/vitable/certifications`. It fails if any claimed endpoint lacks live demo evidence.
+
+GitHub includes a manual `Vitable Demo Certification` workflow. It is not triggered on push because it performs controlled writes in Vitable demo and requires a public webhook URL that routes to the Rails process being certified.
+
 ## CQRS Layout
 
 - Commands: `app/commands`
