@@ -4600,6 +4600,34 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal @employee.email, sync.stats.fetch("payload").fetch("members").first.fetch("email")
   end
 
+  test "care member sync submit fails when response omits remote request id" do
+    prepare_care_group_profile(remote_group_id: "grp_ops_123")
+    Vitable::GenerateCareMemberSyncCommand.new(dto: Vitable::GenerateCareMemberSyncDto.new(requested_by: "ops_test")).call
+    response_class = Data.define(:data)
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:submit_group_member_sync) do |group_id, members|
+        response_class.new(data: { group_id:, accepted_at: Time.current, member_count: members.count })
+      end
+    end
+    previous_key = ENV[@connection.api_key_reference]
+    ENV[@connection.api_key_reference] = "vit_apk_test_value"
+
+    result = Vitable::SubmitCareMemberSyncCommand.new(
+      dto: Vitable::SubmitCareMemberSyncDto.new(requested_by: "integration_admin"),
+      gateway_class:
+    ).call
+
+    assert result.failure?
+    assert_nil @employer.reload.settings.to_h.fetch("vitable_care_member_sync_last_request", nil)
+    sync = @connection.sync_runs.where(operation: "care_member_sync_submit").recent_first.first
+    assert_equal "failed", sync.status
+    assert_match "remote request ID", sync.error_message
+    assert_match "remote request ID", result.errors.to_sentence
+  ensure
+    ENV[@connection.api_key_reference] = previous_key
+  end
+
   test "successful care member sync stores request status and refresh results" do
     prepare_care_group_profile(remote_group_id: "grp_ops_123")
     care_location = @employer.work_locations.find_by!(name: "Ops HQ")

@@ -243,6 +243,7 @@ module Vitable
       accepted_at = data.fetch("accepted_at", nil)
       request_id = data.fetch("request_id", nil)
       group_id = data.fetch("group_id", remote_group_id)
+      raise ArgumentError, "Vitable care member sync response did not include a remote request ID" if request_id.blank?
 
       merge_settings(
         MEMBER_SYNC_REQUEST_KEY => {
