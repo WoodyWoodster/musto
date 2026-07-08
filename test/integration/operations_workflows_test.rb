@@ -3236,6 +3236,58 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     ENV[@connection.api_key_reference] = previous_key
   end
 
+  test "Vitable API snapshot refresh fails when remote roster employee omits remote id" do
+    response_class = Data.define(:data)
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:list_all_employers) do
+        response_class.new(
+          data: [
+            {
+              id: "empr_ops_123",
+              name: "Ops Employer",
+              legal_name: "Ops Employer LLC",
+              reference_id: "musto_employer_#{Employer.find_by!(name: "Ops Employer").id}",
+              active: true
+            }
+          ]
+        )
+      end
+      define_method(:list_all_groups) { response_class.new(data: []) }
+      define_method(:list_all_plans) { response_class.new(data: []) }
+      define_method(:list_all_employer_employees) do |_employer_id|
+        response_class.new(
+          data: [
+            {
+              member_id: "mem_remote_casey_missing_snapshot_employee_id",
+              reference_id: "musto_employee_#{Employee.find_by!(email: "casey@example.com").id}",
+              email: "casey@example.com",
+              status: "active"
+            }
+          ]
+        )
+      end
+    end
+    previous_key = ENV[@connection.api_key_reference]
+    ENV[@connection.api_key_reference] = "vit_apk_test_value"
+
+    result = Vitable::RefreshApiSnapshotCommand.new(
+      dto: Vitable::RefreshApiSnapshotDto.new(connection_id: @connection.id, requested_by: "integration_admin"),
+      gateway_class:
+    ).call
+
+    assert result.failure?
+    assert_nil @employee.reload.vitable_id
+    assert_nil @employee.metadata.fetch("vitable_member_id", nil)
+    assert_nil @connection.reload.metadata.fetch("api_snapshot", nil)
+    sync = @connection.sync_runs.where(operation: "api_snapshot_refresh").recent_first.first
+    assert_equal "failed", sync.status
+    assert_match "remote employee ID", sync.error_message
+    assert_match "remote employee ID", result.errors.to_sentence
+  ensure
+    ENV[@connection.api_key_reference] = previous_key
+  end
+
   test "Vitable API snapshot refresh records remote employer id conflicts" do
     @employer.update!(vitable_id: "empr_current_ops")
     response_class = Data.define(:data)
@@ -3902,6 +3954,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
           data: [
             {
               id: "empl_remote_inactive_casey",
+              member_id: "mem_remote_inactive_casey",
               employer_id:,
               reference_id: "musto_employee_#{Employee.find_by!(email: "casey@example.com").id}",
               email: "casey@example.com",

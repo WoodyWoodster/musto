@@ -34,6 +34,7 @@ module Vitable
     end
 
     def reconcile_employee(result:, employer:, remote_employee:, source:, refreshed_at:)
+      validate_remote_employee_identity!(remote_employee)
       employee = employee_for_remote(employer, remote_employee)
       return result.increment(processed_count: 1, unmatched_count: 1) unless employee
 
@@ -57,7 +58,7 @@ module Vitable
     end
 
     def update_employee(employee, remote_employee, source:, refreshed_at:)
-      remote_employee_id = remote_employee.fetch("id", nil).presence || employee.vitable_id
+      remote_employee_id = remote_employee.fetch("id")
       attributes = {
         metadata: employee.metadata.to_h.stringify_keys.merge(
           "vitable_remote_status" => remote_employee.fetch("status", nil),
@@ -137,6 +138,12 @@ module Vitable
 
     def remote_employee_summary(remote_employee)
       remote_employee.slice("id", "reference_id", "email", "status", "member_id")
+    end
+
+    def validate_remote_employee_identity!(remote_employee)
+      reference = remote_employee.fetch("reference_id", nil).presence || remote_employee.fetch("email", nil).presence || "unknown remote employee"
+      raise ArgumentError, "Vitable API snapshot employee #{reference} did not include a remote employee ID" if remote_employee.fetch("id", nil).blank?
+      raise ArgumentError, "Vitable API snapshot employee #{reference} did not include a remote member ID" if remote_employee.fetch("member_id", nil).blank?
     end
   end
 end
