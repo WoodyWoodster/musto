@@ -32,7 +32,7 @@ VITABLE_WIDGET_TOKEN_BROKER_SECRET=...
 VITABLE_WEBHOOK_SECRET=...
 ```
 
-Webhook payloads are stored idempotently by `event_id` and verified with HMAC-SHA512 when `VITABLE_WEBHOOK_SECRET` is configured. Vitable webhook events include identifiers only, so `Vitable::ProcessWebhookCommand` records the event and, when credentials exist, calls `Vitable::FetchResourceCommand` to retrieve the fresh resource state. Fetched employee, enrollment, and employer resources are reconciled back to local records when a tenant-scoped Vitable ID, reference ID, or unambiguous local match exists; conflicts and unmatched resources are recorded on the webhook metadata instead of silently mutating the wrong record. Enrollment reconciliation maps Vitable `enrolled`, `waived`, and `inactive` statuses into local benefit election state while preserving coverage dates, contribution amounts, payroll deductions, and benefit product metadata.
+Webhook payloads are stored idempotently by `event_id` and verified with HMAC-SHA512 when `VITABLE_WEBHOOK_SECRET` is configured. For retrievable resources, `Vitable::ProcessWebhookCommand` records the event and, when credentials exist, calls `Vitable::FetchResourceCommand` to retrieve the fresh resource state. Fetched employee, enrollment, employer, group, webhook-event, and eligibility-policy resources are reconciled back to local records when a tenant-scoped Vitable ID, reference ID, or unambiguous local match exists; conflicts and unmatched resources are recorded on the webhook metadata instead of silently mutating the wrong record. Payload-only webhook resource types such as `dependent`, `payroll_deduction`, and `plan_year` reconcile from the event body without remote fetches. Enrollment reconciliation maps Vitable `enrolled`, `waived`, and `inactive` statuses into local benefit election state while preserving coverage dates, contribution amounts, payroll deductions, and benefit product metadata.
 
 The Vitable employer provisioning workspace builds the documented `POST /v1/employers` payload and, once a remote employer ID exists, switches to the documented settings update path for pay frequency. Eligibility classification and waiting-period data are maintained as a local readiness profile, submitted through the documented eligibility policy create path, and can be retrieved through the documented `GET /v1/benefit-eligibility-policies/:id` endpoint when a policy ID is known. It uses DTO-backed packet review, repository-generated holdbacks, and `needs_credentials` sync runs so the create path can be proofed before an API key exists.
 
@@ -43,6 +43,8 @@ The benefit plan administration workspace reconciles local plans against Vitable
 The embedded enrollment session workspace prepares employee-bound access-token requests for Vitable's embedded flows. It uses `bound_entity: { type: :employee, id: "empl_..." }`, records every issue attempt as a `SyncRun`, and filters token values before any API telemetry is persisted. Just-in-time widget token broker endpoints accept signed short-lived launch tokens through `X-Musto-Widget-Launch`; server-to-server calls can also use `VITABLE_WIDGET_TOKEN_BROKER_SECRET` plus the `X-Musto-Widget-Token` request header before issuing employer-bound or employee-bound access tokens. The employee dashboard, employer benefits, and employer billing widgets are mounted on demand through the real `@vitable-inc/drops/react` package pinned by Rails importmap.
 
 The care groups workspace covers Vitable Embedded Care group creation plus asynchronous group member sync. Member manifests require remote Vitable plan IDs; missing plan mappings are recorded as holdbacks so demo submissions do not fabricate partner identifiers. Completed member-sync retrieve results are reconciled back into local employee and enrollment metadata by `reference_id`, including per-member failure reasons.
+
+The integration connection workspace includes a test event composer for both fetch-backed and payload-only webhook paths. It can generate local event bodies for dependents, payroll deductions, and plan years from existing records, then sends them through the same idempotent webhook intake command used by signed webhook requests.
 
 Run a read-only demo smoke check with:
 
@@ -73,6 +75,7 @@ Read-side UI:
 - `GET /integrations/vitable/employer-provisioning`
 - `GET /integrations/vitable/census`
 - `GET /integrations/vitable/embedded-sessions`
+- `GET /integrations/vitable/admin-sessions`
 - `GET /integrations/vitable/care-groups`
 
 ## Local Setup
