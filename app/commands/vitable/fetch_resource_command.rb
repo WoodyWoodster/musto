@@ -28,14 +28,14 @@ module Vitable
       success(record: sync_run, value: response)
     rescue VitableConnect::Errors::APIError => e
       @repository.fail_sync_run(sync_run, e)
-      failure(record: sync_run, errors: "#{e.class}: #{e.message}")
+      failure(record: sync_run, errors: PayloadRedactor.error_with_class(e))
     rescue ArgumentError => e
       if response
         @repository.fail_sync_run_after_response(sync_run, response, e)
       else
         @repository.fail_sync_run(sync_run, e)
       end
-      failure(record: sync_run, errors: e.message)
+      failure(record: sync_run, errors: PayloadRedactor.error_message(e))
     end
 
     private

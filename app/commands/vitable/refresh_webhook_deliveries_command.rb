@@ -23,10 +23,10 @@ module Vitable
       success(record: sync_run, value: response)
     rescue VitableConnect::Errors::APIError => e
       @repository.fail_webhook_delivery_run(sync_run, e)
-      failure(record: sync_run, errors: "#{e.class}: #{e.message}")
+      failure(record: sync_run, errors: PayloadRedactor.error_with_class(e))
     rescue ArgumentError => e
       @repository.fail_webhook_delivery_run(sync_run, e, response:)
-      failure(record: sync_run, errors: e.message)
+      failure(record: sync_run, errors: PayloadRedactor.error_message(e))
     rescue ActiveRecord::RecordInvalid => e
       failure(record: e.record, errors: e.record.errors.full_messages)
     end

@@ -26,10 +26,10 @@ module Benefits
       success(record: sync_run, value: response)
     rescue VitableConnect::Errors::APIError => e
       @repository.mark_mapping_failed(sync_run, e)
-      failure(record: sync_run, errors: "#{e.class}: #{e.message}")
+      failure(record: sync_run, errors: ::Vitable::PayloadRedactor.error_with_class(e))
     rescue ArgumentError => e
       @repository.mark_mapping_failed(sync_run, e, response:)
-      failure(record: sync_run, errors: e.message)
+      failure(record: sync_run, errors: ::Vitable::PayloadRedactor.error_message(e))
     rescue ActiveRecord::RecordInvalid => e
       failure(record: e.record, errors: e.record.errors.full_messages)
     end

@@ -52,11 +52,11 @@ module Vitable
       end
     rescue KeyError, ArgumentError => e
       if event
-        @repository.mark_failed(event, e.message)
-        return failure(record: event, errors: e.message)
+        @repository.mark_failed(event, PayloadRedactor.error_message(e))
+        return failure(record: event, errors: PayloadRedactor.error_message(e))
       end
 
-      failure(errors: "Invalid Vitable webhook payload: #{e.message}")
+      failure(errors: "Invalid Vitable webhook payload: #{PayloadRedactor.error_message(e)}")
     end
 
     private

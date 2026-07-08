@@ -32,10 +32,10 @@ module Vitable
       success(record: sync_run, value: connection.reload.metadata.fetch("api_snapshot"))
     rescue VitableConnect::Errors::APIError => e
       @repository.fail_api_snapshot_run(connection, sync_run, e, trace: snapshot_trace)
-      failure(record: sync_run, errors: "#{e.class}: #{e.message}")
+      failure(record: sync_run, errors: PayloadRedactor.error_with_class(e))
     rescue ArgumentError => e
       @repository.fail_api_snapshot_run(connection, sync_run, e, trace: snapshot_trace)
-      failure(record: sync_run, errors: e.message)
+      failure(record: sync_run, errors: PayloadRedactor.error_message(e))
     rescue ActiveRecord::RecordInvalid => e
       failure(record: e.record, errors: e.record.errors.full_messages)
     end
@@ -207,7 +207,7 @@ module Vitable
           "employer_name" => employer.name,
           "employees" => [],
           "error_class" => e.class.name,
-          "error_message" => e.message
+          "error_message" => PayloadRedactor.error_message(e)
         }
       end
     end
@@ -233,7 +233,7 @@ module Vitable
           "employee_name" => employee.full_name,
           "email" => employee.email,
           "error_class" => e.class.name,
-          "error_message" => e.message
+          "error_message" => PayloadRedactor.error_message(e)
         }
       end
     end

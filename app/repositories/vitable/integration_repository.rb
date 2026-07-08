@@ -192,7 +192,7 @@ module Vitable
       checked_at = Time.current
       verification = {
         status: "failed",
-        message: error.message,
+        message: PayloadRedactor.error_message(error),
         error_class: error.class.name,
         checked_at: checked_at.iso8601
       }
@@ -376,7 +376,7 @@ module Vitable
     end
 
     def fail_sync_run(sync_run, error)
-      sync_run&.update!(status: "failed", completed_at: Time.current, error_message: error.message)
+      sync_run&.update!(status: "failed", completed_at: Time.current, error_message: PayloadRedactor.error_message(error))
       sync_run
     end
 
@@ -388,7 +388,7 @@ module Vitable
       sync_run.update!(
         status: "failed",
         completed_at:,
-        error_message: error.message,
+        error_message: PayloadRedactor.error_message(error),
         stats: sync_run.stats.to_h.merge(
           "response_class" => response.class.name,
           "remote_response" => response_hash,
@@ -469,7 +469,7 @@ module Vitable
       sync_run.update!(
         status: "failed",
         completed_at:,
-        error_message: error.message,
+        error_message: PayloadRedactor.error_message(error),
         stats:
       )
       sync_run
@@ -540,7 +540,7 @@ module Vitable
     def fail_api_snapshot_run(connection, sync_run, error, trace: {})
       trace = trace.to_h
       error_metadata = {
-        "message" => error.message,
+        "message" => PayloadRedactor.error_message(error),
         "error_class" => error.class.name,
         "checked_at" => Time.current.iso8601
       }
@@ -559,7 +559,7 @@ module Vitable
         sync_run.update!(
           status: "failed",
           completed_at: Time.current,
-          error_message: error.message,
+          error_message: PayloadRedactor.error_message(error),
           stats:
         )
       end
@@ -624,7 +624,7 @@ module Vitable
       sync_run&.update!(
         status: "failed",
         completed_at: Time.current,
-        error_message: error.message,
+        error_message: PayloadRedactor.error_message(error),
         stats: sync_run.stats.to_h.merge("error_class" => error.class.name)
       )
       sync_run

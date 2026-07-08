@@ -22,10 +22,10 @@ module Vitable
       success(record: connection, value: response)
     rescue VitableConnect::Errors::APIError => e
       @repository.mark_connection_failed(connection, e)
-      failure(record: connection, errors: "#{e.class}: #{e.message}")
+      failure(record: connection, errors: PayloadRedactor.error_with_class(e))
     rescue ArgumentError => e
       @repository.mark_connection_failed(connection, e, response:)
-      failure(record: connection, errors: e.message)
+      failure(record: connection, errors: PayloadRedactor.error_message(e))
     end
 
     private

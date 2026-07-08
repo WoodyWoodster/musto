@@ -90,7 +90,7 @@ module Vitable
       sync_run.update!(
         status: "failed",
         completed_at:,
-        error_message: error.message,
+        error_message: PayloadRedactor.error_message(error),
         stats:
       )
       sync_run

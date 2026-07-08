@@ -6180,6 +6180,46 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     ENV[@connection.api_key_reference] = previous_key
   end
 
+  test "connection verification redacts SDK status error bodies" do
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:issue_access_token) do
+        raise VitableConnect::Errors::AuthenticationError.new(
+          url: URI("https://api.demo.vitablehealth.com/v1/auth/access-tokens"),
+          status: 401,
+          headers: {},
+          body: {
+            error: "invalid_api_key",
+            api_key: "vit_apk_verify_bad_status_body",
+            nested: { access_token: "vit_at_verify_bad_status_body" }
+          },
+          request: nil,
+          response: nil
+        )
+      end
+    end
+    previous_key = ENV[@connection.api_key_reference]
+    ENV[@connection.api_key_reference] = "vit_apk_test_value"
+
+    result = Vitable::VerifyConnectionCommand.new(
+      dto: Vitable::VerifyConnectionDto.new(connection_id: @connection.id),
+      gateway_class:
+    ).call
+
+    assert result.failure?
+    @connection.reload
+    assert_equal "failed", @connection.status
+    assert_equal "VitableConnect::Errors::AuthenticationError", @connection.metadata.dig("last_verification", "error_class")
+    assert_match "invalid_api_key", @connection.metadata.dig("last_verification", "message")
+    assert_includes result.errors.to_sentence, "[FILTERED]"
+    assert_not_includes @connection.metadata.to_json, "vit_apk_verify_bad_status_body"
+    assert_not_includes @connection.metadata.to_json, "vit_at_verify_bad_status_body"
+    assert_not_includes result.errors.to_json, "vit_apk_verify_bad_status_body"
+    assert_not_includes result.errors.to_json, "vit_at_verify_bad_status_body"
+  ensure
+    ENV[@connection.api_key_reference] = previous_key
+  end
+
   test "connection verification fails when token response omits expiry" do
     response_class = Data.define(:access_token, :token_type)
     gateway_class = Class.new do

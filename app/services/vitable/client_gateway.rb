@@ -376,7 +376,7 @@ module Vitable
         request_body: PayloadRedactor.redact(request_body.deep_stringify_keys),
         response_body: response_body_for(response:, error:),
         error_class: error&.class&.name,
-        error_message: error&.message
+        error_message: PayloadRedactor.error_message(error)
       )
     end
 

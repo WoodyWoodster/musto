@@ -131,12 +131,20 @@ module Vitable
       assert_raises(VitableConnect::Errors::AuthenticationError) { gateway.issue_access_token }
 
       log = connection.api_request_logs.last
+      expected_error_body = {
+        error: "invalid_api_key",
+        api_key: "[FILTERED]",
+        details: [ { access_token: "[FILTERED]", reason: "expired" } ]
+      }.to_json
       assert_equal 401, log.status_code
       assert_equal "VitableConnect::Errors::AuthenticationError", log.error_class
+      assert_equal "Vitable API request failed with status 401: #{expected_error_body}", log.error_message
       assert_equal "invalid_api_key", log.response_body.fetch("error")
       assert_equal "[FILTERED]", log.response_body.fetch("api_key")
       assert_equal "[FILTERED]", log.response_body.dig("details", 0, "access_token")
       assert_equal "expired", log.response_body.dig("details", 0, "reason")
+      assert_not_includes log.error_message, "vit_apk_bad_error_body"
+      assert_not_includes log.error_message, "vit_at_bad_error_body"
       assert_not_includes log.response_body.to_json, "vit_apk_bad_error_body"
       assert_not_includes log.response_body.to_json, "vit_at_bad_error_body"
     end
