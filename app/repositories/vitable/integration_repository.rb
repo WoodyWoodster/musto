@@ -370,6 +370,25 @@ module Vitable
       sync_run
     end
 
+    def fail_sync_run_after_response(sync_run, response, error)
+      return unless sync_run
+
+      response_hash = serialize_response(response)
+      completed_at = Time.current
+      sync_run.update!(
+        status: "failed",
+        completed_at:,
+        error_message: error.message,
+        stats: sync_run.stats.to_h.merge(
+          "response_class" => response.class.name,
+          "remote_response" => response_hash,
+          "fetched_at" => completed_at.iso8601,
+          "error_class" => error.class.name
+        )
+      )
+      sync_run
+    end
+
     def create_webhook_delivery_run(event:, requested_by:)
       event.integration_connection.sync_runs.create!(
         resource_type: "webhook_event",

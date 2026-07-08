@@ -163,6 +163,11 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
           data: {
             id: resource_id,
             resource_type:,
+            employee_id: "empl_snapshot_casey",
+            benefit: {
+              id: "bprd_snapshot_primary",
+              name: "Primary Care"
+            },
             status: "accepted",
             access_token: "vit_at_never_store"
           }
@@ -307,10 +312,15 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
 
     assert result.failure?
     event = WebhookEvent.find_by!(event_id: "wevt_test_employee_missing_member_id")
+    sync_run = @connection.sync_runs.where(operation: "fetch", resource_type: "employee").recent_first.first
 
     assert_equal "failed", event.status
     assert_match "remote member ID", event.error_message
     assert_match "remote member ID", result.errors.to_sentence
+    assert_equal "failed", sync_run.status
+    assert_match "remote member ID", sync_run.error_message
+    assert_equal "ArgumentError", sync_run.stats.fetch("error_class")
+    assert_equal "empl_remote_casey", sync_run.stats.dig("remote_response", "data", "id")
     assert_nil employee.reload.vitable_id
     assert_nil employee.metadata.fetch("vitable_member_id", nil)
   ensure

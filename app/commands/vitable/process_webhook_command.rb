@@ -35,10 +35,14 @@ module Vitable
         return success(record: event, value: "snapshot_only")
       end
 
-      fetch_dto = FetchResourceDto.from_event(connection:, event:)
-      fetch_result = FetchResourceCommand.new(dto: fetch_dto, repository: @repository, gateway_class: @gateway_class, reconcile: false).call
+      fetch_result = FetchResourceCommand.new(
+        dto: FetchResourceDto.from_event(connection:, event:),
+        repository: @repository,
+        gateway_class: @gateway_class,
+        reconcile: false
+      ).call
       if fetch_result.success?
-        reconciliation = @repository.reconcile_webhook_resource(event, fetch_result.value)
+        reconciliation = reconcile_webhook_resource(event, fetch_result)
         @repository.annotate_sync_run_reconciliation(fetch_result.record, reconciliation)
         @repository.mark_processed(event, response: fetch_result.value, reconciliation:)
         success(record: event, value: fetch_result.value)
@@ -73,6 +77,13 @@ module Vitable
       return false unless @gateway_class.respond_to?(:payload_only_webhook_resource_type?)
 
       @gateway_class.payload_only_webhook_resource_type?(resource_type)
+    end
+
+    def reconcile_webhook_resource(event, fetch_result)
+      @repository.reconcile_webhook_resource(event, fetch_result.value)
+    rescue ArgumentError => e
+      @repository.fail_sync_run_after_response(fetch_result.record, fetch_result.value, e)
+      raise
     end
   end
 end
