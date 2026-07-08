@@ -8,8 +8,6 @@ module Vitable
     :occurred_at,
     :payload
   ) do
-    EVENT_ENVELOPE_KEYS = %i[data webhook_event webhookEvent event object resource].freeze
-
     def self.from_payload(payload)
       raw_attrs = ApplicationDto.coerce_hash(payload).deep_symbolize_keys
       attrs = event_attributes(raw_attrs)
@@ -58,7 +56,7 @@ module Vitable
     end
 
     def self.nested_event_attributes(attrs)
-      EVENT_ENVELOPE_KEYS.each do |key|
+      event_envelope_keys.each do |key|
         value = attrs[key]
         next if value.blank? || !value.respond_to?(:to_h)
 
@@ -70,6 +68,10 @@ module Vitable
       end
 
       nil
+    end
+
+    def self.event_envelope_keys
+      %i[data webhook_event webhookEvent event object resource]
     end
 
     def self.event_id_from(attrs)
@@ -179,6 +181,7 @@ module Vitable
       :dotted_value,
       :event_attributes,
       :event_envelope?,
+      :event_envelope_keys,
       :event_id_from,
       :event_name_from,
       :nested_event_attributes,

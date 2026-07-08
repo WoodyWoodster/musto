@@ -11,21 +11,6 @@ module Vitable
     :status,
     :raw_payload
   ) do
-    RESOURCE_ENVELOPE_KEYS = %w[data resource object].freeze
-    PLAN_YEAR_ENVELOPE_KEYS = %w[plan_year planYear benefit_year benefitYear].freeze
-    EMPLOYER_CONTEXT_KEYS = %w[
-      employer
-      employer_id
-      employerId
-      employer_reference_id
-      employerReferenceId
-      company
-      company_id
-      companyId
-      company_reference_id
-      companyReferenceId
-    ].freeze
-
     def self.from_event(event)
       from_hash(event.payload, fallback_id: event.resource_id)
     end
@@ -112,14 +97,14 @@ module Vitable
     end
 
     def self.resource_payload(attributes)
-      RESOURCE_ENVELOPE_KEYS.reduce(attributes) do |data, key|
+      resource_envelope_keys.reduce(attributes) do |data, key|
         value = data.fetch(key, nil)
         value.present? && value.respond_to?(:to_h) ? value.to_h.stringify_keys : data
       end
     end
 
     def self.plan_year_payload(attributes)
-      PLAN_YEAR_ENVELOPE_KEYS.reduce(attributes) do |data, key|
+      plan_year_envelope_keys.reduce(attributes) do |data, key|
         value = data.fetch(key, nil)
         if value.present? && value.respond_to?(:to_h)
           merge_employer_context(value.to_h.stringify_keys, data)
@@ -130,7 +115,30 @@ module Vitable
     end
 
     def self.merge_employer_context(plan_year, parent)
-      parent.slice(*EMPLOYER_CONTEXT_KEYS).merge(plan_year)
+      parent.slice(*employer_context_keys).merge(plan_year)
+    end
+
+    def self.resource_envelope_keys
+      %w[data resource object]
+    end
+
+    def self.plan_year_envelope_keys
+      %w[plan_year planYear benefit_year benefitYear]
+    end
+
+    def self.employer_context_keys
+      %w[
+        employer
+        employer_id
+        employerId
+        employer_reference_id
+        employerReferenceId
+        company
+        company_id
+        companyId
+        company_reference_id
+        companyReferenceId
+      ]
     end
 
     def self.nested_payload(attributes, key)

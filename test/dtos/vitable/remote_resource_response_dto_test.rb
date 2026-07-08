@@ -42,6 +42,24 @@ module Vitable
       assert_not dto.attributes.key?("employee")
     end
 
+    test "preserves nested employee member objects as attributes" do
+      dto = RemoteResourceResponseDto.from_response(
+        {
+          data: {
+            id: "empl_123",
+            email: "casey@example.com",
+            member: { id: "mem_123" }
+          }
+        },
+        resource_type: "employee",
+        resource_id: "empl_123"
+      ).validate!
+
+      assert_equal "empl_123", dto.attributes.fetch("id")
+      assert_equal "casey@example.com", dto.attributes.fetch("email")
+      assert_equal "mem_123", dto.attributes.dig("member", "id")
+    end
+
     test "normalizes top-level resource envelopes" do
       dto = RemoteResourceResponseDto.from_response(
         {

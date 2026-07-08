@@ -11,9 +11,6 @@ module Vitable
     :eligibility_status,
     :raw_payload
   ) do
-    RESOURCE_ENVELOPE_KEYS = %w[data dependent resource object].freeze
-    CONTEXT_KEYS = %w[employee employee_id subscriber_id employee_reference_id employee_email].freeze
-
     def self.from_hash(payload)
       attributes = normalized_payload(payload)
       employee = nested_payload(attributes, "employee")
@@ -104,7 +101,7 @@ module Vitable
     end
 
     def self.resource_payload(attributes)
-      RESOURCE_ENVELOPE_KEYS.reduce(attributes) do |payload, key|
+      resource_envelope_keys.reduce(attributes) do |payload, key|
         value = payload.fetch(key, nil)
         if value.present? && value.respond_to?(:to_h)
           merge_context(value.to_h.stringify_keys, payload)
@@ -115,7 +112,15 @@ module Vitable
     end
 
     def self.merge_context(resource, parent)
-      parent.slice(*CONTEXT_KEYS).merge(resource)
+      parent.slice(*context_keys).merge(resource)
+    end
+
+    def self.resource_envelope_keys
+      %w[data dependent resource object]
+    end
+
+    def self.context_keys
+      %w[employee employee_id subscriber_id employee_reference_id employee_email]
     end
 
     def self.date_from(value)
@@ -151,6 +156,6 @@ module Vitable
       values.compact_blank.first
     end
 
-    private_class_method :nested_payload, :resource_payload, :merge_context, :date_from, :enrollment_status_for, :eligibility_status_for, :first_present
+    private_class_method :nested_payload, :resource_payload, :merge_context, :resource_envelope_keys, :context_keys, :date_from, :enrollment_status_for, :eligibility_status_for, :first_present
   end
 end

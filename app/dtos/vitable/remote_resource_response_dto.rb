@@ -5,25 +5,6 @@ module Vitable
     :attributes,
     :raw_payload
   ) do
-    SUPPORTED_RESOURCE_TYPES = %w[
-      employee
-      enrollment
-      employer
-      group
-      webhook_event
-      eligibility_policy
-      benefit_eligibility_policy
-    ].freeze
-    RESOURCE_ENVELOPE_KEYS = {
-      "employee" => %w[employee member resource object],
-      "enrollment" => %w[enrollment resource object],
-      "employer" => %w[employer resource object],
-      "group" => %w[group resource object],
-      "webhook_event" => %w[webhook_event webhookEvent event resource object],
-      "eligibility_policy" => %w[eligibility_policy benefit_eligibility_policy policy resource object],
-      "benefit_eligibility_policy" => %w[benefit_eligibility_policy eligibility_policy policy resource object]
-    }.freeze
-
     def self.from_response(response_hash, resource_type:, resource_id:)
       payload = response_payload(response_hash)
       normalized_resource_type = resource_type.to_s
@@ -50,7 +31,7 @@ module Vitable
     end
 
     def self.supported_resource_type?(resource_type)
-      SUPPORTED_RESOURCE_TYPES.include?(resource_type.to_s)
+      supported_resource_types.include?(resource_type.to_s)
     end
 
     def self.resource_attributes(data, resource_type:)
@@ -64,12 +45,12 @@ module Vitable
 
       return {} unless data.respond_to?(:to_h)
 
-      attributes = data.to_h.stringify_keys
+      attributes = data.to_h.deep_stringify_keys
       resource_payload(attributes, resource_type:)
     end
 
     def self.response_payload(response_hash)
-      return response_hash.to_h.stringify_keys if response_hash.respond_to?(:to_h)
+      return response_hash.to_h.deep_stringify_keys if response_hash.respond_to?(:to_h)
 
       {}
     end
@@ -84,9 +65,33 @@ module Vitable
     end
 
     def self.envelope_keys_for(resource_type)
-      RESOURCE_ENVELOPE_KEYS.fetch(resource_type.to_s, %w[resource object])
+      resource_envelope_keys.fetch(resource_type.to_s, %w[resource object])
     end
 
-    private_class_method :resource_attributes, :response_payload, :resource_payload, :envelope_keys_for
+    def self.supported_resource_types
+      %w[
+        employee
+        enrollment
+        employer
+        group
+        webhook_event
+        eligibility_policy
+        benefit_eligibility_policy
+      ]
+    end
+
+    def self.resource_envelope_keys
+      {
+        "employee" => %w[employee resource object],
+        "enrollment" => %w[enrollment resource object],
+        "employer" => %w[employer resource object],
+        "group" => %w[group resource object],
+        "webhook_event" => %w[webhook_event webhookEvent event resource object],
+        "eligibility_policy" => %w[eligibility_policy benefit_eligibility_policy policy resource object],
+        "benefit_eligibility_policy" => %w[benefit_eligibility_policy eligibility_policy policy resource object]
+      }
+    end
+
+    private_class_method :resource_attributes, :response_payload, :resource_payload, :envelope_keys_for, :supported_resource_types, :resource_envelope_keys
   end
 end

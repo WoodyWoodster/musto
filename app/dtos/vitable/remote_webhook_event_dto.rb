@@ -8,9 +8,6 @@ module Vitable
     :occurred_at,
     :raw_payload
   ) do
-    EVENT_ENVELOPE_KEYS = %w[data webhook_event webhookEvent event object resource].freeze
-    EVENT_ID_ENVELOPE_KEYS = %w[data webhook_event webhookEvent event object].freeze
-
     def self.from_remote_event(remote_event)
       attributes = event_attributes(remote_event.to_h.deep_stringify_keys)
       event_id = event_id_from(attributes)
@@ -84,7 +81,7 @@ module Vitable
     end
 
     def self.nested_event_attributes(attributes)
-      EVENT_ENVELOPE_KEYS.each do |key|
+      event_envelope_keys.each do |key|
         value = attributes[key]
         next if value.blank? || !value.respond_to?(:to_h)
 
@@ -96,6 +93,10 @@ module Vitable
       end
 
       nil
+    end
+
+    def self.event_envelope_keys
+      %w[data webhook_event webhookEvent event object resource]
     end
 
     def self.event_id_from(attributes)
@@ -153,7 +154,7 @@ module Vitable
     end
 
     def self.nested_event_id(attributes)
-      EVENT_ID_ENVELOPE_KEYS.each do |key|
+      event_id_envelope_keys.each do |key|
         value = attributes[key]
         next if value.blank? || !value.respond_to?(:to_h)
 
@@ -163,6 +164,10 @@ module Vitable
       end
 
       nil
+    end
+
+    def self.event_id_envelope_keys
+      %w[data webhook_event webhookEvent event object]
     end
 
     def self.parse_time(value)
@@ -178,6 +183,8 @@ module Vitable
       :dotted_value,
       :event_attributes,
       :event_envelope?,
+      :event_envelope_keys,
+      :event_id_envelope_keys,
       :event_id_from,
       :event_name_from,
       :nested_event_attributes,

@@ -11,9 +11,6 @@ module Vitable
     :remote_status,
     :raw_payload
   ) do
-    RESOURCE_ENVELOPE_KEYS = %w[data resource object].freeze
-    DEDUCTION_ENVELOPE_KEYS = %w[payroll_deduction payrollDeduction employee_deduction deduction].freeze
-
     def self.from_hash(payload)
       attributes = normalized_payload(payload)
       benefit = nested_payload(attributes, "benefit")
@@ -105,21 +102,29 @@ module Vitable
     end
 
     def self.resource_payload(attributes)
-      RESOURCE_ENVELOPE_KEYS.reduce(attributes) do |payload, key|
+      resource_envelope_keys.reduce(attributes) do |payload, key|
         value = payload[key]
         value.present? && value.respond_to?(:to_h) ? value.to_h.stringify_keys : payload
       end
     end
 
     def self.deduction_payload(attributes)
-      DEDUCTION_ENVELOPE_KEYS.reduce(attributes) do |payload, key|
+      deduction_envelope_keys.reduce(attributes) do |payload, key|
         value = payload[key]
         if value.present? && value.respond_to?(:to_h)
-          payload.except(*DEDUCTION_ENVELOPE_KEYS).merge(value.to_h.stringify_keys)
+          payload.except(*deduction_envelope_keys).merge(value.to_h.stringify_keys)
         else
           payload
         end
       end
+    end
+
+    def self.resource_envelope_keys
+      %w[data resource object]
+    end
+
+    def self.deduction_envelope_keys
+      %w[payroll_deduction payrollDeduction employee_deduction deduction]
     end
 
     def self.nested_payload(attributes, key)
@@ -133,6 +138,6 @@ module Vitable
       values.compact_blank.first
     end
 
-    private_class_method :parse_date, :resource_payload, :deduction_payload, :nested_payload, :first_present
+    private_class_method :parse_date, :resource_payload, :deduction_payload, :resource_envelope_keys, :deduction_envelope_keys, :nested_payload, :first_present
   end
 end
