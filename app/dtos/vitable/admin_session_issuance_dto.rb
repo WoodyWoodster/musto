@@ -10,7 +10,7 @@ module Vitable
     :token_present
   ) do
     def self.from_response(response_hash, issued_at:, sync_run_id:)
-      attributes = response_hash.to_h.stringify_keys
+      attributes = token_attributes(response_hash)
       expires_in = attributes.fetch("expires_in", nil)
 
       new(
@@ -67,5 +67,12 @@ module Vitable
     end
 
     private_class_method :parse_time
+
+    def self.token_attributes(response_hash)
+      attributes = response_hash.to_h.stringify_keys
+      attributes.fetch("data", attributes).to_h.stringify_keys
+    end
+
+    private_class_method :token_attributes
   end
 end

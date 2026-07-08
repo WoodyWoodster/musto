@@ -24,9 +24,9 @@ module Vitable
 
       response = issue_token(context.fetch(:remote_id))
       response_hash = serialize_response(response)
-      raise ArgumentError, "Vitable widget token response did not include an access token" if response_hash.fetch("access_token", nil).blank?
-
       response_dto = WidgetTokenResponseDto.from_response(response_hash, issued_at: Time.current)
+      raise ArgumentError, "Vitable widget token response did not include an access token" if response_dto.access_token.blank?
+
       sync_run = @repository.mark_succeeded(sync_run, response_dto)
       success(record: sync_run, value: response_dto)
     rescue ::VitableConnect::Errors::APIError => e
