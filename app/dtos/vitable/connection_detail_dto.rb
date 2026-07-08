@@ -36,6 +36,7 @@ module Vitable
         fetch_path: "/v1/employers",
         operations: %w[employer.list employer.create],
         sync_operations: %w[employer_create api_snapshot_refresh demo_smoke_check],
+        fetch_resource_types: %w[employer],
         snapshot_count_key: "remote_employer_count",
         event_resource_types: %w[employer]
       },
@@ -74,6 +75,7 @@ module Vitable
         fetch_path: "/v1/employees/:id",
         operations: %w[resource.fetch],
         resource_fetch_fragments: %w[/employees/],
+        fetch_resource_types: %w[employee],
         event_resource_types: %w[employee]
       },
       {
@@ -90,6 +92,7 @@ module Vitable
         fetch_path: "/v1/enrollments/:id",
         operations: %w[resource.fetch],
         resource_fetch_fragments: %w[/enrollments/],
+        fetch_resource_types: %w[enrollment],
         event_resource_types: %w[enrollment]
       },
       {
@@ -106,6 +109,7 @@ module Vitable
         fetch_path: "/v1/groups",
         operations: %w[group.list group.retrieve group.create group.update],
         sync_operations: %w[care_group_upsert api_snapshot_refresh demo_smoke_check],
+        fetch_resource_types: %w[group],
         snapshot_count_key: "remote_group_count",
         event_resource_types: %w[group]
       },
@@ -122,6 +126,7 @@ module Vitable
         fetch_path: "/v1/webhook-events",
         operations: %w[webhook_event.list webhook_event.retrieve webhook_event.list_deliveries],
         sync_operations: %w[webhook_replay webhook_delivery_refresh api_snapshot_refresh demo_smoke_check],
+        fetch_resource_types: %w[webhook_event],
         snapshot_count_key: "remote_webhook_event_count"
       }
     ].freeze
@@ -240,7 +245,10 @@ module Vitable
     end
 
     def self.matching_sync_runs(endpoint, sync_runs)
-      sync_runs.select { |sync| endpoint.fetch(:sync_operations, []).include?(sync.operation) }
+      sync_runs.select do |sync|
+        endpoint.fetch(:sync_operations, []).include?(sync.operation) ||
+          (sync.operation == "fetch" && endpoint.fetch(:fetch_resource_types, []).include?(sync.resource_type))
+      end
     end
 
     def self.matching_webhook_events(endpoint, webhook_events)

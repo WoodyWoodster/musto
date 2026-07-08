@@ -2719,6 +2719,19 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     groups_coverage = detail.endpoint_coverage.find { |coverage| coverage.resource_type == "groups" }
     assert_equal "pending", groups_coverage.status
 
+    group_fetch_run = @connection.sync_runs.create!(
+      resource_type: "group",
+      operation: "fetch",
+      status: "succeeded",
+      started_at: Time.current,
+      completed_at: Time.current,
+      stats: { resource_id: "grp_ops_123" }
+    )
+    detail_with_group_fetch = Vitable::ConnectionDetailQuery.new.call(@connection.id)
+    groups_coverage = detail_with_group_fetch.endpoint_coverage.find { |coverage| coverage.resource_type == "groups" }
+    assert_equal "ready", groups_coverage.status
+    assert_equal group_fetch_run.completed_at.to_i, groups_coverage.last_seen_at.to_i
+
     group_event = @connection.webhook_events.create!(
       event_id: "wevt_ops_group_updated",
       organization_external_id: @organization.external_id,
