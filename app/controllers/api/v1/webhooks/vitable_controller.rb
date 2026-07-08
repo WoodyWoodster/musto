@@ -25,7 +25,7 @@ module Api
         end
 
         def webhook_payload
-          params.except(:controller, :action, :vitable).permit!.to_h
+          request.request_parameters.deep_dup
         end
       end
     end

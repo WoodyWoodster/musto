@@ -4319,10 +4319,12 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
   end
 
   test "Vitable API snapshot refresh fails when list response omits data array" do
-    response_class = Data.define(:items, :api_key)
+    response_class = Data.define(:api_key)
     gateway_class = Class.new do
       define_method(:initialize) { |_connection| }
-      define_method(:list_all_employers) { response_class.new(items: [], api_key: "vit_apk_bad_snapshot_list") }
+      define_method(:list_all_employers) { response_class.new(api_key: "vit_apk_bad_snapshot_list") }
+      define_method(:list_all_groups) { raise "gateway should fail before listing groups" }
+      define_method(:list_all_plans) { raise "gateway should fail before listing plans" }
     end
     previous_key = ENV[@connection.api_key_reference]
     ENV[@connection.api_key_reference] = "vit_apk_test_value"
