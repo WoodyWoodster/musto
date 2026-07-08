@@ -310,6 +310,42 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
     ENV.delete("VITABLE_CONNECT_API_KEY")
   end
 
+  test "direct resource fetch fails when response id differs from requested resource id" do
+    employer = @organization.employers.create!(name: "Direct Fetch Employer", status: "active")
+    employee = employer.employees.create!(first_name: "Drew", last_name: "Miller", email: "drew.fetch@example.com")
+    ENV["VITABLE_CONNECT_API_KEY"] = "vit_apk_test_value"
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:fetch_resource) do |_resource_type, _resource_id|
+        {
+          data: {
+            id: "empl_wrong_drew",
+            reference_id: "musto_employee_#{Employee.find_by!(email: "drew.fetch@example.com").id}",
+            email: "drew.fetch@example.com",
+            status: "active",
+            member_id: "mem_direct_drew"
+          }
+        }
+      end
+    end
+
+    result = Vitable::FetchResourceCommand.new(
+      dto: Vitable::FetchResourceDto.new(connection_id: @connection.id, resource_type: "employee", resource_id: "empl_direct_drew"),
+      gateway_class:
+    ).call
+
+    assert result.failure?
+    sync_run = @connection.sync_runs.where(operation: "fetch", resource_type: "employee").recent_first.first
+
+    assert_equal "failed", sync_run.status
+    assert_match "expected empl_direct_drew", sync_run.error_message
+    assert_match "expected empl_direct_drew", result.errors.to_sentence
+    assert_nil employee.reload.vitable_id
+    assert_nil employee.metadata.fetch("vitable_member_id", nil)
+  ensure
+    ENV.delete("VITABLE_CONNECT_API_KEY")
+  end
+
   test "employee deactivated webhooks terminate the local HRIS employee" do
     employer = @organization.employers.create!(name: "Deactivation Employer", status: "active")
     employee = employer.employees.create!(first_name: "Dana", last_name: "Inactive", email: "dana.inactive@example.com")

@@ -444,6 +444,9 @@ module Vitable
         remote_resource.fetch("name", nil).presence ||
         @event.resource_id
       raise ArgumentError, "Vitable #{@event.resource_type} resource #{reference} did not include a remote resource ID" if remote_resource.fetch("id", nil).blank?
+      if @event.resource_id.present? && remote_resource.fetch("id") != @event.resource_id
+        raise ArgumentError, "Vitable #{@event.resource_type} resource #{reference} returned remote resource ID #{remote_resource.fetch("id")}, expected #{@event.resource_id}"
+      end
 
       case @event.resource_type
       when "employee"
