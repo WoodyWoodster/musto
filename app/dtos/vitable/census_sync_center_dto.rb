@@ -9,6 +9,7 @@ module Vitable
     :metrics,
     :preflight_checks,
     :employees,
+    :offboarding_omissions,
     :holdbacks,
     :latest_manifest,
     :latest_submission,
@@ -24,7 +25,7 @@ module Vitable
     end
 
     def submittable?
-      generated? && latest_manifest.ready_count.positive?
+      generated? && (latest_manifest.ready_count.positive? || latest_manifest.offboarding_omission_count.positive?)
     end
   end
 end

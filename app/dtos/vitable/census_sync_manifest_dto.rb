@@ -11,6 +11,7 @@ module Vitable
     :ready_count,
     :holdback_count,
     :remote_pending_count,
+    :offboarding_omission_count,
     :max_employees
   ) do
     def self.from_hash(payload)
@@ -30,6 +31,7 @@ module Vitable
         ready_count: totals.fetch("ready_count", 0),
         holdback_count: totals.fetch("holdback_count", 0),
         remote_pending_count: totals.fetch("remote_pending_count", 0),
+        offboarding_omission_count: totals.fetch("offboarding_omission_count", 0),
         max_employees: limits.fetch("max_employees", CensusSyncRepository::MAX_EMPLOYEES)
       )
     end

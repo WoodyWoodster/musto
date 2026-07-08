@@ -13,6 +13,7 @@ module Vitable
       latest_submission = submission_payload.present? ? CensusSyncSubmissionDto.from_hash(submission_payload) : nil
       latest_verification = verification_payload.present? ? CensusRosterVerificationDto.from_hash(verification_payload) : nil
       employees = manifest_payload.to_h.fetch("employees", []).map { |payload| CensusSyncEmployeeDto.from_hash(payload) }
+      offboarding_omissions = manifest_payload.to_h.fetch("offboarding_omissions", []).map { |payload| CensusSyncOffboardingOmissionDto.from_hash(payload) }
       holdbacks = manifest_payload.to_h.fetch("holdbacks", []).map { |payload| CensusSyncHoldbackDto.from_hash(payload) }
       connection = @repository.connection
       roster = @repository.employees.to_a
@@ -27,6 +28,7 @@ module Vitable
         metrics: metrics(roster, latest_manifest, holdbacks, connection),
         preflight_checks: preflight_checks(roster, latest_manifest, holdbacks, connection),
         employees:,
+        offboarding_omissions:,
         holdbacks:,
         latest_manifest:,
         latest_submission:,
@@ -45,11 +47,13 @@ module Vitable
       ready_count = latest_manifest&.ready_count || 0
       last_sync = @repository.sync_runs.first
       remote_id_count = roster.count { |employee| employee.vitable_id.present? }
+      omission_count = latest_manifest&.offboarding_omission_count || 0
 
       [
         CensusSyncMetricDto.new(label: "Active employees", value: roster.count, hint: "eligible for census review", status: roster.any? ? "ready" : "empty", accent: "bg-cyan-500", format: "number"),
         CensusSyncMetricDto.new(label: "Ready rows", value: ready_count, hint: "complete required Vitable fields", status: ready_count.positive? ? "ready" : "needs_review", accent: "bg-emerald-500", format: "number"),
         CensusSyncMetricDto.new(label: "Remote IDs", value: remote_id_count, hint: "mapped from Vitable roster", status: remote_id_count == roster.count && roster.any? ? "ready" : "pending", accent: "bg-violet-500", format: "number"),
+        CensusSyncMetricDto.new(label: "Offboarding omissions", value: omission_count, hint: "employees omitted for deactivation", status: omission_count.positive? ? "ready" : "pending", accent: "bg-rose-500", format: "number"),
         CensusSyncMetricDto.new(label: "Holdbacks", value: holdbacks.count, hint: "missing DOB, phone, or batch capacity", status: holdbacks.any? ? "blocked" : "ready", accent: "bg-rose-500", format: "number"),
         CensusSyncMetricDto.new(label: "Roster verification", value: verification_label, hint: verification_hint, status: verification_status, accent: "bg-sky-500", format: "text"),
         CensusSyncMetricDto.new(label: "Last submit", value: last_sync&.status&.humanize || "Not sent", hint: connection ? "credential-aware sync run" : "no Vitable connection", status: last_sync&.status || "pending", accent: "bg-indigo-500", format: "text")

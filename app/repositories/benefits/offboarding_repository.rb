@@ -43,7 +43,8 @@ module Benefits
         "requested_by" => requested_by,
         "employer_id" => @employer.id,
         "status" => holdbacks.any? ? "needs_review" : "ready",
-        "endpoint" => "/v1/groups/members/sync",
+        "endpoint" => "/v1/employers/:employer_id/census-sync",
+        "deactivation_strategy" => "omit_employee_from_next_census_sync",
         "totals" => {
           "event_count" => selected_events.count,
           "member_count" => ready_lines.count,

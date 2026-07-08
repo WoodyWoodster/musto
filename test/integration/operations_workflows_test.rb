@@ -2562,7 +2562,8 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal 2, packet.fetch("totals").fetch("member_count")
     assert_equal 1, packet.fetch("totals").fetch("employee_count")
     assert_equal 0, packet.fetch("totals").fetch("holdback_count")
-    assert_equal "/v1/groups/members/sync", packet.fetch("endpoint")
+    assert_equal "/v1/employers/:employer_id/census-sync", packet.fetch("endpoint")
+    assert_equal "omit_employee_from_next_census_sync", packet.fetch("deactivation_strategy")
     assert_equal "employee", packet.fetch("terminations").first.fetch("member_type")
 
     detail = Benefits::OffboardingQuery.new.call
@@ -3037,6 +3038,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_select "h1", "Vitable census sync"
     assert_select "h2", "Submit preflight"
     assert_select "h2", "Ready census rows"
+    assert_select "h2", "Offboarding omissions"
     assert_select "h2", "Holdbacks"
     assert_select "h2", "Sync attempts"
     assert_select "h2", "Submission activity"
@@ -3059,6 +3061,64 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal "5551234567", batch.fetch("employees").first.fetch("phone")
     assert_equal "missing_required_fields", batch.fetch("holdbacks").first.fetch("reason_code")
     assert_equal "/v1/employers/:employer_id/census-sync", batch.fetch("endpoint")
+  end
+
+  test "census manifest omits approved offboarding employees for Vitable deactivation" do
+    @employer.update!(vitable_id: "empr_ops_123")
+    @employee.update!(vitable_id: "empl_ops_casey")
+    @enrollment.update!(vitable_id: "enrl_ops_primary")
+    @dependent.update!(vitable_id: "dep_ops_harper")
+    Benefits::GenerateOffboardingPacketCommand.new(dto: Benefits::GenerateOffboardingPacketDto.new(requested_by: "benefits_admin")).call
+
+    post generate_vitable_census_manifest_path, params: { requested_by: "integration_admin" }
+
+    assert_redirected_to vitable_census_sync_path
+    batch = @employer.reload.settings.fetch("vitable_census_sync_batch")
+    assert_equal "ready", batch.fetch("status")
+    assert_equal 1, batch.fetch("totals").fetch("offboarding_omission_count")
+    assert_empty batch.fetch("api_payload").fetch("employees")
+    omission = batch.fetch("offboarding_omissions").first
+    assert_equal @employee.id, omission.fetch("employee_id")
+    assert_equal "musto_employee_#{@employee.id}", omission.fetch("reference_id")
+    assert_equal "empl_ops_casey", omission.fetch("remote_employee_id")
+
+    detail = Vitable::CensusSyncQuery.new.call
+    assert_instance_of Vitable::CensusSyncOffboardingOmissionDto, detail.offboarding_omissions.first
+  end
+
+  test "submits offboarding-only Vitable census sync for employee deactivation" do
+    @employer.update!(vitable_id: "empr_ops_123")
+    @employee.update!(vitable_id: "empl_ops_casey")
+    @enrollment.update!(vitable_id: "enrl_ops_primary")
+    @dependent.update!(vitable_id: "dep_ops_harper")
+    Benefits::GenerateOffboardingPacketCommand.new(dto: Benefits::GenerateOffboardingPacketDto.new(requested_by: "benefits_admin")).call
+    Vitable::GenerateCensusManifestCommand.new(dto: Vitable::GenerateCensusManifestDto.new(requested_by: "ops_test")).call
+
+    response_class = Data.define(:data)
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:submit_census_sync) do |employer_id, employees|
+        response_class.new(data: { employer_id:, accepted_at: Time.current, employee_count: employees.count })
+      end
+    end
+    previous_key = ENV[@connection.api_key_reference]
+    ENV[@connection.api_key_reference] = "vit_apk_test_value"
+
+    result = Vitable::SubmitCensusSyncCommand.new(
+      dto: Vitable::SubmitCensusSyncDto.new(requested_by: "integration_admin"),
+      gateway_class:
+    ).call
+
+    assert result.success?
+    submission = @employer.reload.settings.fetch("vitable_census_sync_last_submission")
+    assert_equal "accepted", submission.fetch("status")
+    assert_equal 0, submission.fetch("ready_count")
+    assert_equal 1, submission.fetch("offboarding_omission_count")
+    assert_empty submission.fetch("employee_reference_ids")
+    assert_equal "deactivation_submitted", @employee.reload.metadata.fetch("vitable_census_sync_status")
+    assert_equal "submitted", @employer.settings.fetch("vitable_census_sync_batch").fetch("offboarding_omissions").first.fetch("status")
+  ensure
+    ENV[@connection.api_key_reference] = previous_key
   end
 
   test "submits Vitable census sync as missing credentials sync run without API key" do

@@ -50,10 +50,14 @@ module Vitable
 
     def generate_manifest(requested_by:)
       roster = employees.to_a
+      offboarding_omissions = offboarding_omissions_for(roster)
+      omitted_employee_ids = offboarding_omissions.map { |omission| omission.fetch("employee_id") }
       lines = []
       holdbacks = []
 
       roster.each_with_index do |employee, index|
+        next if omitted_employee_ids.include?(employee.id)
+
         if index >= MAX_EMPLOYEES
           holdbacks << holdback_for(employee, "batch_limit", "Vitable census sync accepts up to #{MAX_EMPLOYEES} employees per request.")
           next
@@ -75,7 +79,7 @@ module Vitable
         "employer_id" => @employer.id,
         "remote_employer_id" => @employer.vitable_id,
         "endpoint" => "/v1/employers/:employer_id/census-sync",
-        "status" => manifest_status(lines, holdbacks),
+        "status" => manifest_status(lines, holdbacks, offboarding_omissions),
         "limits" => {
           "max_employees" => MAX_EMPLOYEES,
           "requested_employee_count" => roster.count
@@ -84,9 +88,11 @@ module Vitable
           "employee_count" => roster.count,
           "ready_count" => lines.count,
           "holdback_count" => holdbacks.count,
-          "remote_pending_count" => lines.count { |line| line.fetch("remote_employee_id").blank? }
+          "remote_pending_count" => lines.count { |line| line.fetch("remote_employee_id").blank? },
+          "offboarding_omission_count" => offboarding_omissions.count
         },
         "employees" => lines,
+        "offboarding_omissions" => offboarding_omissions,
         "holdbacks" => holdbacks,
         "api_payload" => {
           "employer_id" => @employer.vitable_id,
@@ -151,7 +157,8 @@ module Vitable
           "remote_response" => response_hash,
           "remote_accepted_at" => accepted_at,
           "remote_employer_id" => remote_employer_id,
-          "submitted_employee_count" => submission.fetch("ready_count", 0)
+          "submitted_employee_count" => submission.fetch("ready_count", 0),
+          "offboarding_omission_count" => submission.fetch("offboarding_omission_count", 0)
         )
       )
       sync_run
@@ -244,8 +251,8 @@ module Vitable
 
     private
 
-    def manifest_status(lines, holdbacks)
-      return "blocked" if lines.empty?
+    def manifest_status(lines, holdbacks, offboarding_omissions)
+      return "blocked" if lines.empty? && offboarding_omissions.empty?
       return "needs_review" if @employer.vitable_id.blank? || holdbacks.any?
 
       "ready"
@@ -342,6 +349,8 @@ module Vitable
         "ready_count" => totals.fetch("ready_count", 0),
         "holdback_count" => totals.fetch("holdback_count", 0),
         "remote_pending_count" => totals.fetch("remote_pending_count", 0),
+        "offboarding_omission_count" => totals.fetch("offboarding_omission_count", 0),
+        "offboarding_omissions" => manifest.fetch("offboarding_omissions", []),
         "endpoint" => manifest.fetch("endpoint"),
         "payload" => manifest.fetch("api_payload", {})
       }
@@ -420,6 +429,7 @@ module Vitable
     def census_submission_payload(manifest:, accepted_at:, remote_employer_id:, submitted_at:)
       manifest = manifest.to_h.stringify_keys
       employees = manifest.fetch("employees", [])
+      offboarding_omissions = manifest.fetch("offboarding_omissions", [])
 
       {
         "batch_id" => manifest.fetch("batch_id", nil),
@@ -428,7 +438,9 @@ module Vitable
         "submitted_at" => submitted_at,
         "remote_employer_id" => remote_employer_id,
         "ready_count" => employees.count,
-        "employee_reference_ids" => employees.filter_map { |employee| employee.to_h.stringify_keys.fetch("reference_id", nil) }
+        "offboarding_omission_count" => offboarding_omissions.count,
+        "employee_reference_ids" => employees.filter_map { |employee| employee.to_h.stringify_keys.fetch("reference_id", nil) },
+        "offboarding_omissions" => offboarding_omissions
       }.compact
     end
 
@@ -449,12 +461,36 @@ module Vitable
           "accepted_at" => accepted_at
         ).compact
       end
+      manifest["offboarding_omissions"] = manifest.fetch("offboarding_omissions", []).map do |omission|
+        attributes = omission.to_h.stringify_keys
+        employee = employee_for_manifest_line(attributes)
+        mark_employee_census_deactivation_submitted(employee, submission) if employee
+
+        attributes.merge(
+          "status" => "submitted",
+          "readiness_status" => "submitted",
+          "readiness_reason" => "Omitted from the accepted census sync for Vitable deactivation.",
+          "submitted_at" => submitted_at,
+          "accepted_at" => accepted_at
+        ).compact
+      end
 
       @employer.update!(
         settings: @employer.settings.to_h.merge(
           MANIFEST_KEY => manifest,
           SUBMISSION_KEY => submission
         )
+      )
+    end
+
+    def mark_employee_census_deactivation_submitted(employee, submission)
+      employee.update!(
+        metadata: employee.metadata.to_h.stringify_keys.merge(
+          "vitable_census_sync_status" => "deactivation_submitted",
+          "vitable_census_sync_batch_id" => submission.fetch("batch_id", nil),
+          "vitable_census_sync_accepted_at" => submission.fetch("accepted_at", nil),
+          "vitable_census_sync_submitted_at" => submission.fetch("submitted_at", nil)
+        ).compact
       )
     end
 
@@ -571,6 +607,33 @@ module Vitable
       employee_id = attributes.fetch("employee_id", nil)
       employee = @employer.employees.find_by(id: employee_id) if employee_id.present?
       employee || employee_for_remote(attributes)
+    end
+
+    def offboarding_omissions_for(roster)
+      packet = @employer.settings.to_h.fetch(Benefits::OffboardingRepository::PACKET_KEY, {}).to_h.stringify_keys
+      return [] unless packet.fetch("status", nil) == "ready"
+
+      roster_by_id = roster.index_by(&:id)
+      packet.fetch("terminations", [])
+        .map { |line| line.to_h.stringify_keys }
+        .select { |line| line.fetch("member_type", nil) == "employee" && line.fetch("status", nil) == "ready" }
+        .filter_map do |line|
+          employee_id = line.fetch("employee_id", nil).to_i
+          employee = roster_by_id[employee_id]
+          next unless employee
+
+          {
+            "employee_id" => employee.id,
+            "employee_name" => employee.full_name,
+            "event_id" => line.fetch("event_id", nil),
+            "reference_id" => "musto_employee_#{employee.id}",
+            "remote_employee_id" => employee.vitable_id,
+            "coverage_end_on" => line.fetch("coverage_end_on", nil),
+            "reason_code" => "benefits_offboarding",
+            "reason" => "Omitted from census sync so Vitable deactivates the employee and terminates active enrollments."
+          }.compact
+        end
+        .uniq { |line| line.fetch("employee_id") }
     end
   end
 end
