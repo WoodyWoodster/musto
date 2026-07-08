@@ -208,7 +208,7 @@ module Vitable
 
     def mark_group_succeeded(sync_run, response, packet:)
       response_hash = serialize_response(response)
-      dto = RemoteCareGroupResponseDto.from_hash(response_hash).validate!(
+      dto = RemoteGroupDto.from_hash(response_hash).validate_care_group_response!(
         expected_group_id: packet.fetch("remote_group_id", nil),
         expected_external_reference_id: packet.dig("api_payload", "external_reference_id")
       )

@@ -3572,7 +3572,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
             id: group_id,
             organization_id: "org_remote_group",
             name: "Sparse remote group",
-            external_reference_id: "musto_care_group_#{Employer.find_by!(name: "Ops Employer").id}",
+            reference_id: "musto_care_group_#{Employer.find_by!(name: "Ops Employer").id}",
             created_at: "2026-01-01T00:00:00Z",
             updated_at: "2026-01-02T00:00:00Z",
             access_token: "vit_at_group_detail_secret"
@@ -3606,6 +3606,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal "external_reference_id", @employer.settings.fetch("vitable_care_group_snapshot_matched_by")
     assert_equal "grp_ops_detail", @employer.settings.dig("vitable_care_group_snapshot", "id")
     assert_equal "org_remote_group", @employer.settings.dig("vitable_care_group_snapshot", "organization_id")
+    assert_equal "musto_care_group_#{@employer.id}", @employer.settings.dig("vitable_care_group_snapshot", "external_reference_id")
     assert_not_includes @employer.settings.to_json, "vit_at_group_detail_secret"
 
     dto = Vitable::ConnectionDetailQuery.new.call(@connection.id).api_snapshot

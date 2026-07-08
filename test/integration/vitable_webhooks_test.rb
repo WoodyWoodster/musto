@@ -2100,8 +2100,8 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
           data: {
             id: resource_id,
             name: "Care Group Employer",
-            external_reference_id: "musto_care_group_#{Employer.find_by!(name: "Care Group Employer").id}",
-            organization_id: "org_demo_vitable",
+            reference_id: "musto_care_group_#{Employer.find_by!(name: "Care Group Employer").id}",
+            organization_external_id: "org_demo_vitable",
             updated_at: Time.current.iso8601
           }
         }
@@ -2129,6 +2129,8 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
     assert_equal "group.updated", employer.settings.fetch("vitable_care_group_last_webhook_event_name")
     assert_equal "vitable_webhook_resource", employer.settings.fetch("vitable_care_group_snapshot_source")
     assert_equal "grp_remote_care", employer.settings.dig("vitable_care_group_snapshot", "id")
+    assert_equal "org_demo_vitable", employer.settings.dig("vitable_care_group_snapshot", "organization_id")
+    assert_equal "musto_care_group_#{employer.id}", employer.settings.dig("vitable_care_group_snapshot", "external_reference_id")
     assert_equal "matched", reconciliation.fetch("status")
     assert_equal "Employer", reconciliation.fetch("local_record_type")
     assert_equal employer.id, reconciliation.fetch("local_record_id")

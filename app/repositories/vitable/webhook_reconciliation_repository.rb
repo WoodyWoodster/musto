@@ -180,10 +180,11 @@ module Vitable
     end
 
     def reconcile_group_resource(remote_resource)
-      employer, matched_by = group_employer_match_for(remote_resource)
+      dto = RemoteGroupDto.from_hash(remote_resource)
+      employer, matched_by = group_employer_match_for(dto)
       return reconciliation_result(status: "unmatched", remote_resource:, warnings: [ "No local employer matched this Vitable group." ]) unless employer
 
-      remote_id = remote_resource_id(remote_resource)
+      remote_id = dto.group_id.presence || remote_resource_id(remote_resource)
       local_group_id = care_group_id_for(employer)
       if local_group_id.present? && remote_id.present? && local_group_id != remote_id
         return reconciliation_result(
@@ -196,23 +197,15 @@ module Vitable
       end
 
       timestamp = Time.current.iso8601
-      settings_updates = {
+      settings_updates = dto.settings_metadata(
+        source: "vitable_webhook_resource",
+        refreshed_at: timestamp,
+        matched_by:
+      ).merge(
         CareGroupRepository::GROUP_ID_KEY => remote_id,
-        "vitable_care_group_remote_reference_id" => group_remote_reference_id(remote_resource),
-        "vitable_care_group_last_refreshed_at" => timestamp,
         "vitable_care_group_last_webhook_event_id" => @event.event_id,
-        "vitable_care_group_last_webhook_event_name" => @event.event_name,
-        "vitable_care_group_snapshot_source" => "vitable_webhook_resource",
-        "vitable_care_group_snapshot_matched_by" => matched_by,
-        RemoteGroupSnapshotRepository::SNAPSHOT_KEY => remote_resource_summary(
-          remote_resource,
-          %w[id organization_id name external_reference_id created_at updated_at]
-        ).merge(
-          "matched_by" => matched_by,
-          "source" => "vitable_webhook_resource",
-          "refreshed_at" => timestamp
-        )
-      }.compact
+        "vitable_care_group_last_webhook_event_name" => @event.event_name
+      ).compact
       settings = employer.settings.to_h.stringify_keys.merge(settings_updates)
       settings.delete(RemoteGroupSnapshotRepository::CONFLICT_KEY)
       employer.update!(settings:)
@@ -371,8 +364,8 @@ module Vitable
       [ nil, nil ]
     end
 
-    def group_employer_match_for(remote_resource)
-      remote_id = remote_resource_id(remote_resource)
+    def group_employer_match_for(dto)
+      remote_id = dto.group_id
       employers = employer_scope.to_a
 
       if remote_id.present?
@@ -380,10 +373,10 @@ module Vitable
         return [ employer, "care_group_id" ] if employer
       end
 
-      employer = employer_from_care_group_reference_id(remote_resource)
+      employer = employer_from_care_group_reference_id(dto.external_reference_id)
       return [ employer, "external_reference_id" ] if employer
 
-      name = remote_resource.fetch("name", nil).to_s.strip.downcase.presence
+      name = dto.name.to_s.strip.downcase.presence
       if name
         matches = employers.select { |employer_record| employer_record.name.to_s.strip.downcase == name }
         return [ matches.first, "name" ] if matches.one?
@@ -437,8 +430,8 @@ module Vitable
       scope.find_by(id: value.delete_prefix("musto_employer_").to_i)
     end
 
-    def employer_from_care_group_reference_id(remote_resource)
-      value = group_remote_reference_id(remote_resource).to_s
+    def employer_from_care_group_reference_id(reference_id)
+      value = reference_id.to_s
       return unless value.match?(/\Amusto_care_group_\d+\z/)
 
       employer_scope.find_by(id: value.delete_prefix("musto_care_group_").to_i)
@@ -446,10 +439,6 @@ module Vitable
 
     def care_group_id_for(employer)
       employer.settings.to_h.stringify_keys.fetch(CareGroupRepository::GROUP_ID_KEY, nil).presence
-    end
-
-    def group_remote_reference_id(remote_resource)
-      remote_resource.fetch("external_reference_id", nil).presence || remote_resource.fetch("reference_id", nil).presence
     end
 
     def employee_by_remote_id(remote_id)
