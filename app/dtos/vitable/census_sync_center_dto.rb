@@ -25,7 +25,12 @@ module Vitable
     end
 
     def submittable?
-      generated? && latest_manifest.ready_count >= CensusSyncRepository::MIN_EMPLOYEES
+      generated? &&
+        latest_manifest.status == "ready" &&
+        latest_manifest.ready_count >= CensusSyncRepository::MIN_EMPLOYEES &&
+        latest_manifest.holdback_count.zero? &&
+        remote_employer_id.present? &&
+        credentials_present
     end
   end
 end

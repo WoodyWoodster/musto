@@ -4151,6 +4151,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_nil detail.latest_verification
     assert_equal @employee.id, detail.employees.first.employee_id
     assert_equal holdback_employee.id, detail.holdbacks.first.employee_id
+    assert_not detail.submittable?
 
     get vitable_census_sync_path
 
@@ -4324,6 +4325,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     end
 
     assert_redirected_to vitable_census_sync_path
+    assert_not Vitable::CensusSyncQuery.new.call.submittable?
     sync = @connection.sync_runs.where(operation: "census_sync").recent_first.first
     assert_equal "needs_credentials", sync.status
     assert_match @connection.api_key_reference, sync.error_message
@@ -4340,6 +4342,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     end
     previous_key = ENV[@connection.api_key_reference]
     ENV[@connection.api_key_reference] = "vit_apk_test_value"
+    assert_not Vitable::CensusSyncQuery.new.call.submittable?
 
     result = Vitable::SubmitCensusSyncCommand.new(
       dto: Vitable::SubmitCensusSyncDto.new(requested_by: "integration_admin"),
@@ -4378,6 +4381,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     end
     previous_key = ENV[@connection.api_key_reference]
     ENV[@connection.api_key_reference] = "vit_apk_test_value"
+    assert Vitable::CensusSyncQuery.new.call.submittable?
 
     result = Vitable::SubmitCensusSyncCommand.new(
       dto: Vitable::SubmitCensusSyncDto.new(requested_by: "integration_admin"),
