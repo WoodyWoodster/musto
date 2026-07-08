@@ -2124,6 +2124,37 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     ENV[@connection.api_key_reference] = previous_key
   end
 
+  test "Vitable plan mapping refresh fails when remote plan omits name" do
+    response_class = Data.define(:data)
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:list_all_plans) do
+        response_class.new(
+          data: [
+            { id: "plan_remote_primary" }
+          ]
+        )
+      end
+    end
+    previous_key = ENV[@connection.api_key_reference]
+    ENV[@connection.api_key_reference] = "vit_apk_test_value"
+
+    result = Benefits::RefreshVitablePlanMappingsCommand.new(
+      dto: Benefits::RefreshVitablePlanMappingsDto.new(requested_by: "benefits_admin"),
+      gateway_class:
+    ).call
+
+    assert result.failure?
+    assert_nil @plan.reload.vitable_id
+    assert_nil @employer.reload.settings.to_h.fetch("vitable_plan_catalog_snapshot", nil)
+    sync = @connection.sync_runs.where(operation: "plan_mapping_refresh").recent_first.first
+    assert_equal "failed", sync.status
+    assert_match "remote plan name", sync.error_message
+    assert_match "remote plan name", result.errors.to_sentence
+  ensure
+    ENV[@connection.api_key_reference] = previous_key
+  end
+
   test "Vitable plan mapping refresh keeps one remote plan per local plan" do
     response_class = Data.define(:data)
     gateway_class = Class.new do
@@ -2953,7 +2984,11 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       define_method(:list_all_plans) { response_class.new(data: [ { id: "plan_dpc", name: "Direct Primary Care" }, { id: "plan_mec", name: "MEC" } ]) }
       define_method(:list_all_webhook_events) { response_class.new(data: remote_webhook_events) }
       define_method(:list_all_employee_enrollments) do |employee_id|
-        response_class.new(data: [ { id: "enrl_remote_123", employee_id:, status: "pending" } ])
+        response_class.new(
+          data: [
+            { id: "enrl_remote_123", employee_id:, benefit: { id: "plan_dpc", name: "Direct Primary Care" }, status: "pending" }
+          ]
+        )
       end
       define_method(:fetch_resource) do |resource_type, resource_id|
         raise ArgumentError, "unexpected resource fetch #{resource_type}:#{resource_id}" unless resource_type == "employee" && resource_id == "empl_remote_casey"
@@ -2978,7 +3013,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
         gateway_class:
       ).call
 
-      assert result.success?
+      assert result.success?, result.errors.to_sentence
     end
 
     snapshot = @connection.reload.metadata.fetch("api_snapshot")

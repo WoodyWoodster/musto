@@ -123,7 +123,7 @@ module Benefits
 
     def mark_mapping_succeeded(sync_run, response)
       response_hash = serialize_response(response)
-      remote_plans = response_hash.fetch("data", []).map { |payload| payload.to_h.stringify_keys }
+      remote_plans = remote_plan_payloads_from_response(response_hash)
       refreshed_at = Time.current.iso8601
       snapshot = reconcile_remote_plan_snapshot(remote_plans:, refreshed_at:, source: "plans.list")
 
@@ -144,8 +144,7 @@ module Benefits
     end
 
     def reconcile_remote_plan_snapshot(remote_plans:, refreshed_at: Time.current.iso8601, source: "plans.list")
-      remote_plans = Array(remote_plans).map { |payload| payload.to_h.stringify_keys }
-      remote_plans.each { |remote_plan| validate_remote_plan_identity!(remote_plan) }
+      remote_plans = remote_plan_payloads(remote_plans)
       mapping = reconcile_remote_plans(remote_plans, matched_at: refreshed_at, source:)
       snapshot = mapping.merge(
         "refreshed_at" => refreshed_at,
@@ -280,10 +279,23 @@ module Benefits
         plan.metadata.to_h.dig("vitable_plan_mapping", "remote_plan_id") == remote_id
     end
 
-    def validate_remote_plan_identity!(remote_plan)
-      reference = remote_plan.fetch("name", nil).presence || "unknown plan"
-      raise ArgumentError, "Vitable plan catalog item #{reference} did not include a remote plan ID" if remote_plan.fetch("id", nil).blank?
-      raise ArgumentError, "Vitable plan catalog item #{remote_plan.fetch("id", nil)} did not include a remote plan name" if remote_plan.fetch("name", nil).blank?
+    def remote_plan_payloads_from_response(response_hash)
+      data = response_hash.fetch("data", [])
+      raise ArgumentError, "Vitable plan catalog response did not include a data array" unless data.is_a?(Array)
+
+      remote_plan_payloads(data)
+    end
+
+    def remote_plan_payloads(remote_plans)
+      Array(remote_plans).map do |payload|
+        remote_plan_dto(payload).validate!.to_snapshot_hash
+      end
+    end
+
+    def remote_plan_dto(payload)
+      return payload if payload.is_a?(::Vitable::RemotePlanDto)
+
+      ::Vitable::RemotePlanDto.from_hash(payload)
     end
 
     def apply_remote_plan_mapping(plan, remote_plan, matched_at:, source:)
