@@ -66,8 +66,6 @@ bin/rails vitable:demo_certification
 
 Certification is intentionally stricter than the smoke check. It creates disposable demo records with a `musto-cert-*` prefix, proves every public Vitable Connect endpoint modeled by the app, verifies signed local webhook fixtures, checks real Vitable webhook delivery evidence, and writes redacted JSON plus Markdown reports to `tmp/vitable/certifications`. It fails if any claimed endpoint lacks live demo evidence.
 
-GitHub includes a manual `Vitable Demo Certification` workflow. It is not triggered on push because it performs controlled writes in Vitable demo and requires a public webhook URL that routes to the Rails process being certified.
-
 ## CQRS Layout
 
 - Commands: `app/commands`
