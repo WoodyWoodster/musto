@@ -374,7 +374,7 @@ module Vitable
         status_code: status_code || 200,
         duration_ms:,
         request_body: PayloadRedactor.redact(request_body.deep_stringify_keys),
-        response_body: serialize_response(response),
+        response_body: response_body_for(response:, error:),
         error_class: error&.class&.name,
         error_message: error&.message
       )
@@ -385,17 +385,37 @@ module Vitable
     end
 
     def serialize_response(response)
-      serialized = if response.blank?
-        {}
-      elsif response.respond_to?(:deep_to_h)
-        response.deep_to_h
-      elsif response.respond_to?(:to_h)
-        response.to_h
-      else
-        { value: response.to_s }
-      end
+      serialized = normalized_response_payload(response)
 
       PayloadRedactor.redact(serialized.deep_stringify_keys)
+    end
+
+    def response_body_for(response:, error:)
+      return serialize_response(response) unless response.nil?
+      return serialize_response(error.body) if error.respond_to?(:body) && !error.body.nil?
+
+      {}
+    end
+
+    def normalized_response_payload(response)
+      case response
+      when nil
+        {}
+      when Hash
+        response
+      when Array
+        { data: response }
+      when String, Numeric, TrueClass, FalseClass
+        { value: response }
+      else
+        if response.respond_to?(:deep_to_h)
+          response.deep_to_h
+        elsif response.respond_to?(:to_h)
+          response.to_h
+        else
+          { value: response.to_s }
+        end
+      end
     end
 
     def page_response(page)

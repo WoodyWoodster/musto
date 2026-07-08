@@ -105,6 +105,42 @@ module Vitable
       assert_not_includes log.request_body.to_json, "client_secret_value"
     end
 
+    test "logs redacted SDK status error bodies" do
+      organization = Organization.create!(name: "Gateway Error Body Test", external_id: "org_gateway_error_body_test")
+      connection = organization.integration_connections.create!(provider: "vitable", environment: "demo")
+      gateway = ClientGateway.new(connection)
+      auth = Object.new
+      auth.define_singleton_method(:issue_access_token) do |_params|
+        raise VitableConnect::Errors::AuthenticationError.new(
+          url: URI("https://api.demo.vitablehealth.com/v1/auth/access-tokens"),
+          status: 401,
+          headers: {},
+          body: {
+            error: "invalid_api_key",
+            api_key: "vit_apk_bad_error_body",
+            details: [ { access_token: "vit_at_bad_error_body", reason: "expired" } ]
+          },
+          request: nil,
+          response: nil
+        )
+      end
+      fake_client = Object.new
+      fake_client.define_singleton_method(:auth) { auth }
+      gateway.define_singleton_method(:client) { fake_client }
+
+      assert_raises(VitableConnect::Errors::AuthenticationError) { gateway.issue_access_token }
+
+      log = connection.api_request_logs.last
+      assert_equal 401, log.status_code
+      assert_equal "VitableConnect::Errors::AuthenticationError", log.error_class
+      assert_equal "invalid_api_key", log.response_body.fetch("error")
+      assert_equal "[FILTERED]", log.response_body.fetch("api_key")
+      assert_equal "[FILTERED]", log.response_body.dig("details", 0, "access_token")
+      assert_equal "expired", log.response_body.dig("details", 0, "reason")
+      assert_not_includes log.response_body.to_json, "vit_apk_bad_error_body"
+      assert_not_includes log.response_body.to_json, "vit_at_bad_error_body"
+    end
+
     test "normalizes employer provisioning payloads for the SDK" do
       organization = Organization.create!(name: "Gateway Payload Test", external_id: "org_gateway_payload_test")
       connection = organization.integration_connections.create!(provider: "vitable", environment: "production")
