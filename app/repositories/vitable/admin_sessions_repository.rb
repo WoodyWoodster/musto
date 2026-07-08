@@ -63,8 +63,10 @@ module Vitable
         "token_request" => {
           "grant_type" => "client_credentials",
           "bound_entity_type" => "employer",
-          "endpoint" => "/v1/auth/access-tokens"
+          "endpoint" => "/v1/auth/access-tokens",
+          "authorization_header" => WidgetLaunchToken::HEADER
         },
+        "launch_authorization" => launch_authorization,
         "widgets" => WIDGETS.map { |widget| widget.merge("status" => holdbacks.any? ? "blocked" : "ready") },
         "holdbacks" => holdbacks
       }
@@ -159,6 +161,17 @@ module Vitable
       end
 
       holdbacks
+    end
+
+    def launch_authorization
+      expires_at = WidgetLaunchToken.expires_at
+
+      {
+        "type" => "signed_launch_token",
+        "header" => WidgetLaunchToken::HEADER,
+        "expires_at" => expires_at.iso8601,
+        "token" => WidgetLaunchToken.issue(scope: "employer", employer_id: @employer.id, expires_at:)
+      }
     end
 
     def persist_issuance(issuance)

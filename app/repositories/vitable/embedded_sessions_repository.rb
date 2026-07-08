@@ -71,7 +71,8 @@ module Vitable
         "token_request" => {
           "grant_type" => "client_credentials",
           "bound_entity_type" => "employee",
-          "endpoint" => "/v1/auth/access-tokens"
+          "endpoint" => "/v1/auth/access-tokens",
+          "authorization_header" => WidgetLaunchToken::HEADER
         },
         "employees" => lines,
         "holdbacks" => holdbacks
@@ -185,6 +186,7 @@ module Vitable
         "pending_enrollment_count" => pending,
         "accepted_enrollment_count" => accepted,
         "next_effective_on" => active_enrollments.map(&:effective_on).compact.min&.iso8601,
+        "launch_authorization" => launch_authorization(scope: "employee", employee_id: employee.id),
         "status" => "ready",
         "readiness_reason" => "Ready to issue employee-bound Vitable access token"
       }
@@ -215,6 +217,17 @@ module Vitable
       return "needs_review" if holdbacks.any?
 
       "ready"
+    end
+
+    def launch_authorization(scope:, employee_id: nil)
+      expires_at = WidgetLaunchToken.expires_at
+
+      {
+        "type" => "signed_launch_token",
+        "header" => WidgetLaunchToken::HEADER,
+        "expires_at" => expires_at.iso8601,
+        "token" => WidgetLaunchToken.issue(scope:, employer_id: @employer.id, employee_id:, expires_at:)
+      }
     end
 
     def persist_issuance(employee, issuance)

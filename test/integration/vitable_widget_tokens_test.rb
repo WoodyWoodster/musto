@@ -86,6 +86,99 @@ class VitableWidgetTokensTest < ActionDispatch::IntegrationTest
     ENV.delete("VITABLE_WIDGET_TOKEN_BROKER_SECRET")
   end
 
+  test "employer widget token endpoint accepts a signed launch token without broker secret" do
+    ENV["VITABLE_CONNECT_API_KEY"] = "vit_apk_test_value"
+    gateway = gateway_with_tokens
+    launch_token = Vitable::WidgetLaunchToken.issue(scope: "employer", employer_id: @employer.id)
+
+    with_gateway(gateway) do
+      post "/api/v1/vitable/widget-tokens/employer",
+           params: { requested_by: "widget_test" },
+           headers: launch_headers(launch_token)
+    end
+
+    assert_response :created
+    body = JSON.parse(response.body)
+    assert_equal "vit_at_employer_secret", body.fetch("access_token")
+    assert_equal "employer", body.dig("bound_entity", "type")
+
+    sync = @connection.sync_runs.where(operation: "widget_token_broker", resource_type: "employer").recent_first.first
+    assert_equal "succeeded", sync.status
+    assert_equal @employer.id, sync.stats.dig("local_record", "id")
+  ensure
+    ENV.delete("VITABLE_CONNECT_API_KEY")
+  end
+
+  test "employee widget token endpoint accepts a signed employee launch token" do
+    ENV["VITABLE_CONNECT_API_KEY"] = "vit_apk_test_value"
+    gateway = gateway_with_tokens
+    launch_token = Vitable::WidgetLaunchToken.issue(scope: "employee", employer_id: @employer.id, employee_id: @employee.id)
+
+    with_gateway(gateway) do
+      post "/api/v1/vitable/widget-tokens/employees/#{@employee.id}",
+           params: { requested_by: "widget_test" },
+           headers: launch_headers(launch_token)
+    end
+
+    assert_response :created
+    body = JSON.parse(response.body)
+    assert_equal "vit_at_employee_secret", body.fetch("access_token")
+    assert_equal "employee", body.dig("bound_entity", "type")
+
+    sync = @connection.sync_runs.where(operation: "widget_token_broker", resource_type: "employee").recent_first.first
+    assert_equal "succeeded", sync.status
+    assert_equal @employee.id, sync.stats.dig("local_record", "id")
+  ensure
+    ENV.delete("VITABLE_CONNECT_API_KEY")
+  end
+
+  test "employee widget token endpoint rejects a launch token for a different employee" do
+    other_employee = @employer.employees.create!(
+      first_name: "Jordan",
+      last_name: "Widget",
+      email: "jordan.widget@example.com",
+      department: @department,
+      work_location: @location,
+      title: "Account Manager",
+      compensation_cents: 90_000_00,
+      onboarding_status: "complete",
+      vitable_id: "empl_widget_999"
+    )
+    ENV["VITABLE_CONNECT_API_KEY"] = "vit_apk_test_value"
+    launch_token = Vitable::WidgetLaunchToken.issue(scope: "employee", employer_id: @employer.id, employee_id: other_employee.id)
+
+    post "/api/v1/vitable/widget-tokens/employees/#{@employee.id}",
+         params: { requested_by: "widget_test" },
+         headers: launch_headers(launch_token)
+
+    assert_response :unauthorized
+    body = JSON.parse(response.body)
+    assert_match "does not match", body.fetch("errors").to_sentence
+    assert_nil @connection.sync_runs.find_by(operation: "widget_token_broker")
+  ensure
+    ENV.delete("VITABLE_CONNECT_API_KEY")
+  end
+
+  test "widget token endpoint rejects an expired launch token" do
+    ENV["VITABLE_CONNECT_API_KEY"] = "vit_apk_test_value"
+    launch_token = Vitable::WidgetLaunchToken.issue(
+      scope: "employer",
+      employer_id: @employer.id,
+      expires_at: 1.minute.ago
+    )
+
+    post "/api/v1/vitable/widget-tokens/employer",
+         params: { requested_by: "widget_test" },
+         headers: launch_headers(launch_token)
+
+    assert_response :unauthorized
+    body = JSON.parse(response.body)
+    assert_match "Widget token broker authorization", body.fetch("errors").to_sentence
+    assert_nil @connection.sync_runs.find_by(operation: "widget_token_broker")
+  ensure
+    ENV.delete("VITABLE_CONNECT_API_KEY")
+  end
+
   test "widget token endpoint reports missing credentials" do
     ENV["VITABLE_WIDGET_TOKEN_BROKER_SECRET"] = "broker_secret"
 
@@ -157,6 +250,10 @@ class VitableWidgetTokensTest < ActionDispatch::IntegrationTest
 
   def broker_headers(secret = "broker_secret")
     { "X-Musto-Widget-Token" => secret }
+  end
+
+  def launch_headers(token)
+    { "X-Musto-Widget-Launch" => token }
   end
 
   def with_gateway(gateway)

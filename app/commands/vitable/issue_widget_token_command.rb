@@ -2,12 +2,14 @@ module Vitable
   class IssueWidgetTokenCommand < ApplicationCommand
     def initialize(dto:, employer_repository: Employers::EmployerRepository.new, gateway_class: ClientGateway)
       @dto = dto
-      @employer = employer_repository.first_for_operations
-      @repository = WidgetTokenRepository.new(employer: @employer)
+      @employer_repository = employer_repository
       @gateway_class = gateway_class
     end
 
     def call
+      @employer = employer
+      @repository = WidgetTokenRepository.new(employer: @employer)
+
       return failure(errors: "No employer is available for Vitable widget tokens") unless @employer
       return failure(errors: "No Vitable connection is available for widget tokens") unless @repository.connection
 
@@ -28,12 +30,18 @@ module Vitable
       @repository.mark_failed(sync_run, e)
       failure(record: sync_run, errors: "#{e.class}: #{e.message}")
     rescue ActiveRecord::RecordNotFound
-      failure(errors: "Employee is not available for Vitable widget token issuance")
+      failure(errors: missing_record_message)
     rescue ActiveRecord::RecordInvalid => e
       failure(record: e.record, errors: e.record.errors.full_messages)
     end
 
     private
+
+    def employer
+      return @employer_repository.find(@dto.employer_id) if @dto.employer_id.present?
+
+      @employer_repository.first_for_operations
+    end
 
     def token_context
       case @dto.bound_entity_type
@@ -76,6 +84,14 @@ module Vitable
     def blocked(sync_run, message)
       sync_run = @repository.mark_blocked(sync_run, message)
       failure(record: sync_run, errors: message)
+    end
+
+    def missing_record_message
+      if @dto.bound_entity_type == "employee"
+        "Employee is not available for Vitable widget token issuance"
+      else
+        "Employer is not available for Vitable widget token issuance"
+      end
     end
   end
 end

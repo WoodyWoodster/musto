@@ -10,7 +10,8 @@ module Vitable
     :ready_count,
     :holdback_count,
     :pending_election_count,
-    :endpoint
+    :endpoint,
+    :authorization_header
   ) do
     def self.from_hash(payload)
       attributes = payload.to_h.stringify_keys
@@ -28,7 +29,8 @@ module Vitable
         ready_count: totals.fetch("ready_count", 0),
         holdback_count: totals.fetch("holdback_count", 0),
         pending_election_count: totals.fetch("pending_election_count", 0),
-        endpoint: token_request.fetch("endpoint", "/v1/auth/access-tokens")
+        endpoint: token_request.fetch("endpoint", "/v1/auth/access-tokens"),
+        authorization_header: token_request.fetch("authorization_header", "X-Musto-Widget-Launch")
       )
     end
   end

@@ -11,6 +11,8 @@ module Vitable
     :pending_enrollment_count,
     :accepted_enrollment_count,
     :next_effective_on,
+    :launch_token_present,
+    :launch_token_expires_at,
     :status,
     :readiness_reason,
     :session_status,
@@ -20,6 +22,7 @@ module Vitable
     def self.from_hash(payload)
       attributes = payload.to_h.stringify_keys
       issuance = attributes.fetch("latest_session", {}).to_h.stringify_keys
+      launch_authorization = attributes.fetch("launch_authorization", {}).to_h.stringify_keys
 
       new(
         employee_id: attributes.fetch("employee_id"),
@@ -33,6 +36,8 @@ module Vitable
         pending_enrollment_count: attributes.fetch("pending_enrollment_count", 0),
         accepted_enrollment_count: attributes.fetch("accepted_enrollment_count", 0),
         next_effective_on: attributes["next_effective_on"].present? ? Date.iso8601(attributes.fetch("next_effective_on")) : nil,
+        launch_token_present: launch_authorization.fetch("token", nil).present?,
+        launch_token_expires_at: parse_time(launch_authorization.fetch("expires_at", nil)),
         status: attributes.fetch("status"),
         readiness_reason: attributes.fetch("readiness_reason"),
         session_status: issuance.fetch("status", "not_issued"),
@@ -43,6 +48,10 @@ module Vitable
 
     def session_active?(at: Time.current)
       session_status == "issued" && session_expires_at.present? && session_expires_at > at
+    end
+
+    def launch_token_active?(at: Time.current)
+      launch_token_present && launch_token_expires_at.present? && launch_token_expires_at > at
     end
 
     def self.parse_time(value)

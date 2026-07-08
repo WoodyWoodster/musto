@@ -73,6 +73,11 @@ module Vitable
           detail: widgets.map(&:name).to_sentence.presence || "No employer widgets are configured."
         ),
         AdminSessionPreflightCheckDto.new(
+          label: "Launch authorization",
+          status: latest_packet&.launch_token_active? ? "ready" : "pending",
+          detail: latest_packet&.launch_token_active? ? "Signed launch token is ready for employer-bound widget token exchange." : "Generate an admin packet to prepare a signed widget launch token."
+        ),
+        AdminSessionPreflightCheckDto.new(
           label: "Session packet",
           status: latest_packet ? latest_packet.status : "pending",
           detail: latest_packet ? "Generated #{latest_packet.packet_id} by #{latest_packet.requested_by}." : "Generate an admin session packet before issuing employer sessions."

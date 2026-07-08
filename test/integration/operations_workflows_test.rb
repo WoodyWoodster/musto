@@ -3319,7 +3319,15 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal 0, packet.fetch("totals").fetch("holdback_count")
     assert_equal 2, packet.fetch("totals").fetch("pending_election_count")
     assert_equal "employee", packet.fetch("token_request").fetch("bound_entity_type")
+    assert_equal "X-Musto-Widget-Launch", packet.fetch("token_request").fetch("authorization_header")
     assert_equal @employee.vitable_id, packet.fetch("employees").first.fetch("remote_employee_id")
+
+    launch_authorization = packet.fetch("employees").first.fetch("launch_authorization")
+    verification = Vitable::WidgetLaunchToken.verify(launch_authorization.fetch("token"))
+    assert verification.success?
+    assert_equal @employer.id, verification.claims.employer_id
+    assert_equal @employee.id, verification.claims.employee_id
+    assert_equal "X-Musto-Widget-Launch", launch_authorization.fetch("header")
   end
 
   test "issues embedded enrollment session as missing credentials sync run without API key" do
@@ -3425,8 +3433,15 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal "empr_ops_123", packet.fetch("remote_employer_id")
     assert_equal "employer", packet.fetch("token_request").fetch("bound_entity_type")
     assert_equal "/v1/auth/access-tokens", packet.fetch("token_request").fetch("endpoint")
+    assert_equal "X-Musto-Widget-Launch", packet.fetch("token_request").fetch("authorization_header")
     assert_equal [ "Employer benefits", "Employer billing" ], packet.fetch("widgets").map { |widget| widget.fetch("name") }
     assert_empty packet.fetch("holdbacks")
+
+    launch_authorization = packet.fetch("launch_authorization")
+    verification = Vitable::WidgetLaunchToken.verify(launch_authorization.fetch("token"))
+    assert verification.success?
+    assert_equal @employer.id, verification.claims.employer_id
+    assert_equal "employer", verification.claims.scope
   end
 
   test "issues employer admin session as missing credentials sync run without API key" do

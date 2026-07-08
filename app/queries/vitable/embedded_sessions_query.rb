@@ -62,6 +62,11 @@ module Vitable
           detail: @employer&.settings.to_h.fetch("enrollment_widget", "No embedded enrollment widget setting is configured.").to_s
         ),
         EmbeddedSessionPreflightCheckDto.new(
+          label: "Launch authorization",
+          status: employees.any?(&:launch_token_active?) ? "ready" : "pending",
+          detail: employees.any?(&:launch_token_active?) ? "#{employees.count(&:launch_token_active?)} employee launch tokens are ready for the widget broker." : "Generate a session packet to prepare signed widget launch tokens."
+        ),
+        EmbeddedSessionPreflightCheckDto.new(
           label: "Remote employee IDs",
           status: holdbacks.any? ? "needs_review" : "ready",
           detail: holdbacks.any? ? "#{holdbacks.count} employees need Vitable employee IDs before tokens can be bound." : "#{employees.count} employees can receive employee-bound tokens."

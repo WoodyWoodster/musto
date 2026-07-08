@@ -44,7 +44,7 @@
           <div class="mt-3 rounded-md border border-slate-200 bg-white p-4">
             <p class="text-xs font-semibold uppercase text-slate-400">Widget token broker</p>
             <p class="mt-2 break-all font-mono text-xs text-slate-600">POST /api/v1/vitable/widget-tokens/employees/:employee_id</p>
-            <p class="mt-2 break-all font-mono text-xs text-slate-400">X-Musto-Widget-Token required</p>
+            <p class="mt-2 break-all font-mono text-xs text-slate-400"><%= @sessions.latest_packet.authorization_header %> or server broker header required</p>
           </div>
         <% else %>
           <p class="mt-6 text-3xl font-semibold">No packet</p>
@@ -151,6 +151,10 @@
               <td class="px-5 py-4">
                 <%= status_pill(employee.status) %>
                 <p class="mt-1 max-w-40 truncate font-mono text-xs text-slate-500"><%= employee.remote_employee_id %></p>
+                <div class="mt-2"><%= status_pill(employee.launch_token_active? ? "ready" : "pending") %></div>
+                <% if employee.launch_token_expires_at.present? %>
+                  <p class="mt-1 text-xs text-slate-500">Launch token <%= employee.launch_token_active? ? "expires #{time_ago_in_words(employee.launch_token_expires_at)} from now" : "expired #{time_ago_in_words(employee.launch_token_expires_at)} ago" %></p>
+                <% end %>
                 <div class="mt-2"><%= status_pill(employee.session_status) %></div>
                 <% if employee.session_expires_at.present? %>
                   <p class="mt-1 text-xs text-slate-500"><%= employee.session_active? ? "Expires #{time_ago_in_words(employee.session_expires_at)} from now" : "Expired #{time_ago_in_words(employee.session_expires_at)} ago" %></p>
