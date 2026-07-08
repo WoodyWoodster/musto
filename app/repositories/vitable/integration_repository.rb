@@ -964,21 +964,11 @@ module Vitable
     end
 
     def payroll_deduction_payload(event)
-      payload = event.payload.to_h.stringify_keys
-      envelope_payload = %w[data resource object].lazy.filter_map do |key|
-        value = payload.fetch(key, nil)
-        value.to_h.stringify_keys if !value.nil? && value.respond_to?(:to_h)
-      end.first || payload
-      nested_keys = %w[payroll_deduction payrollDeduction employee_deduction deduction]
-      nested_payload = nested_keys.lazy.filter_map do |key|
-        value = envelope_payload.fetch(key, nil)
-        value.to_h.stringify_keys if !value.nil? && value.respond_to?(:to_h)
-      end.first
-      resource_payload = nested_payload ? envelope_payload.except(*nested_keys).merge(nested_payload) : envelope_payload
+      payload = RemotePayrollDeductionDto.normalized_payload(event.payload)
 
-      resource_payload.merge(
-        "id" => resource_payload.fetch("id", nil).presence ||
-          resource_payload.fetch("deduction_id", nil).presence ||
+      payload.merge(
+        "id" => payload.fetch("id", nil).presence ||
+          payload.fetch("deduction_id", nil).presence ||
           event.resource_id
       )
     end

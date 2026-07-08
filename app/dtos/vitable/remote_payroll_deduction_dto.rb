@@ -11,8 +11,11 @@ module Vitable
     :remote_status,
     :raw_payload
   ) do
+    RESOURCE_ENVELOPE_KEYS = %w[data resource object].freeze
+    DEDUCTION_ENVELOPE_KEYS = %w[payroll_deduction payrollDeduction employee_deduction deduction].freeze
+
     def self.from_hash(payload)
-      attributes = resource_payload(payload.respond_to?(:to_h) ? payload.to_h.stringify_keys : {})
+      attributes = normalized_payload(payload)
       benefit = nested_payload(attributes, "benefit")
       plan = nested_payload(attributes, "plan")
       enrollment = nested_payload(attributes, "enrollment")
@@ -51,6 +54,12 @@ module Vitable
           "period_end_date" => period_end_on&.iso8601
         ).compact
       )
+    end
+
+    def self.normalized_payload(payload)
+      attributes = payload.respond_to?(:to_h) ? payload.to_h.stringify_keys : {}
+
+      deduction_payload(resource_payload(attributes))
     end
 
     def payroll_code
@@ -96,29 +105,34 @@ module Vitable
     end
 
     def self.resource_payload(attributes)
-      %w[
-        data
-        payroll_deduction
-        payrollDeduction
-        employee_deduction
-        deduction
-        resource
-        object
-      ].reduce(attributes) do |payload, key|
+      RESOURCE_ENVELOPE_KEYS.reduce(attributes) do |payload, key|
         value = payload[key]
-        !value.nil? && value.respond_to?(:to_h) ? value.to_h.stringify_keys : payload
+        value.present? && value.respond_to?(:to_h) ? value.to_h.stringify_keys : payload
+      end
+    end
+
+    def self.deduction_payload(attributes)
+      DEDUCTION_ENVELOPE_KEYS.reduce(attributes) do |payload, key|
+        value = payload[key]
+        if value.present? && value.respond_to?(:to_h)
+          payload.except(*DEDUCTION_ENVELOPE_KEYS).merge(value.to_h.stringify_keys)
+        else
+          payload
+        end
       end
     end
 
     def self.nested_payload(attributes, key)
       value = attributes[key]
-      value.respond_to?(:to_h) ? value.to_h.stringify_keys : {}
+      return {} if value.blank? || !value.respond_to?(:to_h)
+
+      value.to_h.stringify_keys
     end
 
     def self.first_present(*values)
       values.compact_blank.first
     end
 
-    private_class_method :parse_date, :resource_payload, :nested_payload, :first_present
+    private_class_method :parse_date, :resource_payload, :deduction_payload, :nested_payload, :first_present
   end
 end

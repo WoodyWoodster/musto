@@ -38,6 +38,29 @@ module Vitable
       assert_equal "2026-07-31", dto.raw_payload.fetch("period_end_date")
     end
 
+    test "preserves employee context around nested deduction envelopes" do
+      dto = RemotePayrollDeductionDto.from_hash(
+        "data" => {
+          "employee" => {
+            "id" => "empl_remote_123",
+            "email" => "casey@example.com"
+          },
+          "payroll_deduction" => {
+            "id" => "pded_remote_context",
+            "benefit_name" => "Primary Care",
+            "amount_cents" => 5_500,
+            "status" => "active"
+          }
+        }
+      )
+
+      assert_equal "pded_remote_context", dto.remote_id
+      assert_equal "Primary Care", dto.benefit_name
+      assert_equal 5_500, dto.amount_cents
+      assert_equal "empl_remote_123", dto.raw_payload.dig("employee", "id")
+      assert_equal "casey@example.com", dto.raw_payload.dig("employee", "email")
+    end
+
     test "falls back to enrollment benefit data for deduction naming" do
       dto = RemotePayrollDeductionDto.from_hash(
         "deduction" => {
