@@ -7,6 +7,7 @@ module Vitable
     end
 
     def call
+      response = nil
       connection = @repository.find_connection(@dto.connection_id)
 
       unless connection.credentials_present?
@@ -23,7 +24,7 @@ module Vitable
       @repository.mark_connection_failed(connection, e)
       failure(record: connection, errors: "#{e.class}: #{e.message}")
     rescue ArgumentError => e
-      @repository.mark_connection_failed(connection, e)
+      @repository.mark_connection_failed(connection, e, response:)
       failure(record: connection, errors: e.message)
     end
 

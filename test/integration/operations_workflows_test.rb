@@ -6198,7 +6198,11 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     @connection.reload
     assert_equal "failed", @connection.status
     assert_match "expected Bearer", @connection.metadata.dig("last_verification", "message")
+    assert_equal "ArgumentError", @connection.metadata.dig("last_verification", "error_class")
+    assert_equal "Basic", @connection.metadata.dig("last_verification", "remote_response", "token_type")
+    assert_equal "[FILTERED]", @connection.metadata.dig("last_verification", "remote_response", "access_token")
     assert_match "expected Bearer", result.errors.to_sentence
+    assert_not_includes @connection.metadata.to_json, "vit_at_verify_secret"
   ensure
     ENV[@connection.api_key_reference] = previous_key
   end

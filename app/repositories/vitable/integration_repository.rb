@@ -188,16 +188,26 @@ module Vitable
       )
     end
 
-    def mark_connection_failed(connection, error)
+    def mark_connection_failed(connection, error, response: nil)
+      checked_at = Time.current
+      verification = {
+        status: "failed",
+        message: error.message,
+        error_class: error.class.name,
+        checked_at: checked_at.iso8601
+      }
+
+      if response
+        verification = verification.merge(
+          response_class: response.class.name,
+          remote_response: serialize_response(response)
+        )
+      end
+
       update_connection_verification(
         connection,
         status: "failed",
-        verification: {
-          status: "failed",
-          message: error.message,
-          error_class: error.class.name,
-          checked_at: Time.current.iso8601
-        }
+        verification:
       )
     end
 
