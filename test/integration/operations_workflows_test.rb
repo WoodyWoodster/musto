@@ -4114,7 +4114,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       define_method(:initialize) { |_connection| }
       define_method(:list_all_employers) { response_class.new(data: []) }
       define_method(:list_all_groups) { response_class.new(data: []) }
-      define_method(:list_all_plans) { response_class.new(data: [ { id: "bprd_remote_dental", name: "Dental" } ]) }
+      define_method(:list_all_plans) { response_class.new(data: []) }
       define_method(:list_all_webhook_events) { |**_filters| response_class.new(data: []) }
       define_method(:list_all_employee_enrollments) do |_employee_id|
         response_class.new(data: [ { id: "enrl_remote_dental_detail" } ])
@@ -4124,7 +4124,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
           data: {
             id: enrollment_id,
             employee_id: "empl_ops_casey",
-            benefit: { id: "bprd_remote_dental", name: "Dental", category: "Dental" },
+            benefit: { id: "bprd_remote_dental", name: "Dental", category: "Dental", product_code: "VD" },
             status: "enrolled",
             answered_at:,
             coverage_start:,
@@ -4158,18 +4158,26 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal "enrl_remote_dental_detail", detail.fetch("remote_enrollment_id")
     assert_equal "[FILTERED]", detail.dig("response", "data", "access_token")
     assert_equal "bprd_remote_dental", @pending_plan.vitable_id
+    assert_equal "Vitable", @pending_plan.carrier
+    assert_equal "VD", @pending_plan.metadata.dig("vitable_remote_benefit", "product_code")
+    assert_equal "benefit_name", @pending_plan.metadata.dig("vitable_plan_mapping", "match_strategy")
+    assert_equal "vitable_api_snapshot", @pending_plan.metadata.dig("vitable_plan_mapping", "last_enrollment_matched_by")
     assert_equal "enrl_remote_dental_detail", @pending_enrollment.vitable_id
     assert_equal "accepted", @pending_enrollment.status
     assert_equal answered_at.to_i, @pending_enrollment.accepted_at.to_i
     assert_equal coverage_start, @pending_enrollment.effective_on
+    assert_equal "VD", @pending_enrollment.metadata.dig("vitable_remote_benefit", "product_code")
     assert_equal 4500, @pending_enrollment.metadata.fetch("vitable_employee_deduction_cents")
     assert_equal 4500, @pending_deduction.amount_cents
     assert_equal "ready", @pending_deduction.status
     assert_not_includes @pending_enrollment.metadata.to_json, "vit_at_enrollment_detail_secret"
+    assert_equal 1, snapshot.dig("counts", "enrollment_plan_updated_count")
+    assert_equal 0, snapshot.dig("counts", "enrollment_plan_conflict_count")
 
     dto = Vitable::ConnectionDetailQuery.new.call(@connection.id).api_snapshot
     assert_equal 1, dto.retrieved_remote_enrollment_count
     assert_equal 0, dto.errored_remote_enrollment_detail_count
+    assert_equal 1, dto.enrollment_plan_updated_count
   ensure
     ENV[@connection.api_key_reference] = previous_key
   end

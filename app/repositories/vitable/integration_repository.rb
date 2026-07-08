@@ -1055,6 +1055,7 @@ module Vitable
       plan_reconciliation = snapshot.fetch("plan_reconciliation", [])
       employee_reconciliation = snapshot.fetch("employee_reconciliation", {}).to_h
       enrollment_reconciliation = snapshot.fetch("enrollment_reconciliation", {}).to_h
+      enrollment_plan_sync = enrollment_reconciliation.fetch("plan_sync", {}).to_h
       employee_deduction_sync = employee_reconciliation.fetch("deduction_sync", {}).to_h
       employee_lifecycle = employee_reconciliation.fetch("lifecycle_reconciliation", {}).to_h
       deduction_sync = enrollment_reconciliation.fetch("deduction_sync", {}).to_h
@@ -1120,6 +1121,9 @@ module Vitable
         "created_enrollment_count" => enrollment_reconciliation.fetch("created_count", 0),
         "updated_enrollment_count" => enrollment_reconciliation.fetch("updated_count", 0),
         "enrollment_missing_plan_count" => enrollment_reconciliation.fetch("missing_plan_count", 0),
+        "enrollment_plan_updated_count" => enrollment_plan_sync.fetch("updated_count", 0),
+        "enrollment_plan_unchanged_count" => enrollment_plan_sync.fetch("unchanged_count", 0),
+        "enrollment_plan_conflict_count" => enrollment_plan_sync.fetch("conflict_count", 0),
         "enrollment_deduction_changed_count" => deduction_sync.fetch("created_count", 0) + deduction_sync.fetch("updated_count", 0),
         "imported_webhook_event_count" => webhook_ingestion.fetch("created_count", 0),
         "existing_webhook_event_count" => webhook_ingestion.fetch("existing_count", 0)

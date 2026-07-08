@@ -41,22 +41,27 @@ module Vitable
 
       enrollment ||= employee.enrollments.build(benefit_plan: plan)
       was_new = enrollment.new_record?
+      plan_match_strategy = plan_match_strategy(enrollment, dto)
       assign_enrollment_attributes(enrollment, dto, source:, refreshed_at:)
 
       if was_new
         enrollment.save!
+        plan_sync = sync_benefit_plan(enrollment, dto, source:, refreshed_at:, match_strategy: plan_match_strategy)
         return result.increment(
           matched_count: 1,
           created_count: 1,
+          plan_sync:,
           deduction_sync: sync_payroll_deduction(enrollment, dto, source:, refreshed_at:)
         )
       end
 
       if enrollment.has_changes_to_save?
         enrollment.save!
+        plan_sync = sync_benefit_plan(enrollment, dto, source:, refreshed_at:, match_strategy: plan_match_strategy)
         return result.increment(
           matched_count: 1,
           updated_count: 1,
+          plan_sync:,
           deduction_sync: sync_payroll_deduction(enrollment, dto, source:, refreshed_at:)
         )
       end
@@ -64,6 +69,7 @@ module Vitable
       result.increment(
         matched_count: 1,
         unchanged_count: 1,
+        plan_sync: sync_benefit_plan(enrollment, dto, source:, refreshed_at:, match_strategy: plan_match_strategy),
         deduction_sync: sync_payroll_deduction(enrollment, dto, source:, refreshed_at:)
       )
     end
@@ -127,14 +133,32 @@ module Vitable
     end
 
     def plan_for(employer, dto)
-      if dto.remote_plan_id.present?
-        plan = employer.benefit_plans.find_by(vitable_id: dto.remote_plan_id)
-        return plan if plan
+      benefit_plan_snapshot_repository.find_for_remote_enrollment(employer:, dto:).first
+    end
+
+    def plan_match_strategy(enrollment, dto)
+      if enrollment.persisted?
+        return "remote_plan_id" if dto.remote_plan_id.present? && enrollment.benefit_plan.vitable_id == dto.remote_plan_id
+        return "benefit_name" if dto.benefit_name.present? && enrollment.benefit_plan.name.casecmp?(dto.benefit_name.to_s)
+
+        return "existing_enrollment"
       end
 
-      return if dto.benefit_name.blank?
+      benefit_plan_snapshot_repository.find_for_remote_enrollment(employer: enrollment.employee.employer, dto:).last
+    end
 
-      employer.benefit_plans.detect { |plan| plan.name.casecmp?(dto.benefit_name.to_s) }
+    def sync_benefit_plan(enrollment, dto, source:, refreshed_at:, match_strategy:)
+      benefit_plan_snapshot_repository.sync_from_remote_enrollment(
+        enrollment:,
+        dto:,
+        source:,
+        refreshed_at:,
+        match_strategy:
+      )
+    end
+
+    def benefit_plan_snapshot_repository
+      @benefit_plan_snapshot_repository ||= BenefitPlanSnapshotRepository.new
     end
 
     def validate_remote_enrollment_identity!(dto)

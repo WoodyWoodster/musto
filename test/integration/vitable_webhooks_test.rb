@@ -1542,8 +1542,8 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
     plan = employer.benefit_plans.create!(
       name: "Vitable Care",
       category: "direct_primary_care",
-      carrier: "Vitable",
-      vitable_id: "bprd_remote_care"
+      carrier: nil,
+      vitable_id: nil
     )
     enrollment = employee.enrollments.create!(benefit_plan: plan, status: "pending")
     payroll_run = employer.payroll_runs.create!(
@@ -1605,6 +1605,11 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
     assert_equal "empl_remote_casey", enrollment.metadata.fetch("vitable_remote_employee_id")
     assert_equal "bprd_remote_care", enrollment.metadata.fetch("vitable_remote_plan_id")
     assert_equal "VPC", enrollment.metadata.dig("vitable_remote_benefit", "product_code")
+    assert_equal "bprd_remote_care", plan.reload.vitable_id
+    assert_equal "Vitable", plan.carrier
+    assert_equal "VPC", plan.metadata.dig("vitable_remote_benefit", "product_code")
+    assert_equal "employee_id+benefit_name", plan.metadata.dig("vitable_plan_mapping", "last_enrollment_match_strategy")
+    assert_includes reconciliation.fetch("applied_changes"), "benefit_plans.#{plan.id}"
     assert_equal 7900, enrollment.metadata.fetch("vitable_employee_deduction_cents")
     assert_equal 2000, enrollment.metadata.fetch("vitable_employer_contribution_cents")
     assert_equal 7900, deduction.reload.amount_cents
@@ -1612,7 +1617,7 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
     assert_equal "matched", reconciliation.fetch("status")
     assert_equal "Enrollment", reconciliation.fetch("local_record_type")
     assert_equal enrollment.id, reconciliation.fetch("local_record_id")
-    assert_equal "employee_id+plan_id", reconciliation.fetch("matched_by")
+    assert_equal "employee_id+benefit_name", reconciliation.fetch("matched_by")
   ensure
     ENV.delete("VITABLE_CONNECT_API_KEY")
   end

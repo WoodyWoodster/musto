@@ -7,6 +7,7 @@ module Vitable
     :unchanged_count,
     :unmatched_count,
     :missing_plan_count,
+    :plan_sync,
     :deduction_sync
   ) do
     def self.empty
@@ -18,11 +19,12 @@ module Vitable
         unchanged_count: 0,
         unmatched_count: 0,
         missing_plan_count: 0,
+        plan_sync: BenefitPlanSnapshotSyncResultDto.empty,
         deduction_sync: PayrollDeductionSyncResultDto.empty
       )
     end
 
-    def increment(processed_count: 0, matched_count: 0, created_count: 0, updated_count: 0, unchanged_count: 0, unmatched_count: 0, missing_plan_count: 0, deduction_sync: PayrollDeductionSyncResultDto.empty)
+    def increment(processed_count: 0, matched_count: 0, created_count: 0, updated_count: 0, unchanged_count: 0, unmatched_count: 0, missing_plan_count: 0, plan_sync: BenefitPlanSnapshotSyncResultDto.empty, deduction_sync: PayrollDeductionSyncResultDto.empty)
       self.class.new(
         processed_count: self.processed_count + processed_count,
         matched_count: self.matched_count + matched_count,
@@ -31,6 +33,7 @@ module Vitable
         unchanged_count: self.unchanged_count + unchanged_count,
         unmatched_count: self.unmatched_count + unmatched_count,
         missing_plan_count: self.missing_plan_count + missing_plan_count,
+        plan_sync: self.plan_sync.merge(plan_sync),
         deduction_sync: self.deduction_sync.merge(deduction_sync)
       )
     end
@@ -44,6 +47,7 @@ module Vitable
         "unchanged_count" => unchanged_count,
         "unmatched_count" => unmatched_count,
         "missing_plan_count" => missing_plan_count,
+        "plan_sync" => plan_sync.to_metadata,
         "deduction_sync" => deduction_sync.to_metadata
       }
     end

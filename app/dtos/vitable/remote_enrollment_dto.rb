@@ -4,6 +4,8 @@ module Vitable
     :remote_employee_id,
     :remote_plan_id,
     :benefit_name,
+    :remote_benefit_category,
+    :remote_product_code,
     :status,
     :local_status,
     :answered_at,
@@ -24,6 +26,8 @@ module Vitable
         remote_employee_id: attributes.fetch("employee_id", nil).presence || attributes.fetch("member_id", nil).presence || attributes.dig("employee", "id").presence,
         remote_plan_id: attributes.fetch("plan_id", nil).presence || attributes.fetch("product_id", nil).presence || benefit.fetch("id", nil).presence || plan.fetch("id", nil).presence,
         benefit_name: attributes.fetch("benefit_name", nil).presence || benefit.fetch("name", nil).presence || plan.fetch("name", nil).presence || attributes.fetch("name", nil).presence,
+        remote_benefit_category: attributes.fetch("benefit_category", nil).presence || benefit.fetch("category", nil).presence || plan.fetch("category", nil).presence,
+        remote_product_code: attributes.fetch("product_code", nil).presence || benefit.fetch("product_code", nil).presence || plan.fetch("product_code", nil).presence,
         status: attributes.fetch("status", nil),
         local_status: local_status_for(attributes.fetch("status", nil)),
         answered_at: parse_time(attributes.fetch("answered_at", nil)),
@@ -65,6 +69,7 @@ module Vitable
         "vitable_remote_employee_id" => remote_employee_id,
         "vitable_remote_plan_id" => remote_plan_id,
         "vitable_remote_benefit_name" => benefit_name,
+        "vitable_remote_benefit" => benefit_snapshot,
         "vitable_remote_answered_at" => answered_at&.iso8601,
         "vitable_remote_coverage_start" => coverage_start_on&.iso8601,
         "vitable_remote_coverage_end" => coverage_end_on&.iso8601,
@@ -72,6 +77,15 @@ module Vitable
         "vitable_employee_deduction_cents" => employee_deduction_cents,
         "vitable_employer_contribution_cents" => employer_contribution_cents,
         "vitable_last_resource_snapshot" => raw_payload.slice("id", "status", "employee_id", "plan_id", "product_id", "coverage_start", "coverage_end", "employee_deduction_in_cents", "employer_contribution_in_cents")
+      }.compact
+    end
+
+    def benefit_snapshot
+      {
+        "id" => remote_plan_id,
+        "name" => benefit_name,
+        "category" => remote_benefit_category,
+        "product_code" => remote_product_code
       }.compact
     end
 

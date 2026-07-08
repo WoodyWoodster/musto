@@ -142,6 +142,14 @@ module Vitable
       update_attributes[:metadata] = enrollment.metadata.to_h.stringify_keys.merge(metadata_updates)
       applied_changes.concat(metadata_updates.keys.map { |key| "metadata.#{key}" })
       enrollment.update!(update_attributes)
+      plan_sync = benefit_plan_snapshot_repository.sync_from_remote_enrollment(
+        enrollment:,
+        dto: RemoteEnrollmentDto.from_hash(remote_resource),
+        source: "vitable_webhook",
+        refreshed_at: timestamp,
+        match_strategy: matched_by
+      )
+      applied_changes.concat(plan_sync.applied_changes)
       applied_changes.concat(apply_enrollment_payroll_deductions(enrollment, local_status, remote_resource, timestamp))
 
       reconciliation_result(status: "matched", remote_resource:, local_record: enrollment, matched_by:, applied_changes:)
@@ -337,10 +345,15 @@ module Vitable
       return [ enrollment, "reference_id" ] if enrollment
 
       employee = employee_by_remote_id(remote_employee_id(remote_resource))
+      dto = RemoteEnrollmentDto.from_hash(remote_resource)
       plan = plan_by_remote_id(remote_plan_id(remote_resource))
+      plan_matched_by = plan ? "plan_id" : nil
+      if employee && !plan
+        plan, plan_matched_by = benefit_plan_snapshot_repository.find_for_remote_enrollment(employer: employee.employer, dto:)
+      end
       if employee && plan
         enrollment = employee.enrollments.find_by(benefit_plan: plan)
-        return [ enrollment, "employee_id+plan_id" ] if enrollment
+        return [ enrollment, "employee_id+#{plan_matched_by}" ] if enrollment
       end
 
       [ nil, nil ]
@@ -526,6 +539,10 @@ module Vitable
       return unless benefit.respond_to?(:to_h)
 
       benefit.to_h.stringify_keys.slice("id", "name", "category", "product_code").compact
+    end
+
+    def benefit_plan_snapshot_repository
+      @benefit_plan_snapshot_repository ||= BenefitPlanSnapshotRepository.new
     end
 
     def remote_date(remote_resource, key)
