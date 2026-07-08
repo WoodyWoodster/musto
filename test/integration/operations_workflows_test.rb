@@ -5802,7 +5802,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     ENV[@connection.api_key_reference] = previous_key
   end
 
-  test "remote roster refresh fails when roster response omits data array" do
+  test "remote roster refresh accepts employees collection envelopes" do
     @employer.update!(vitable_id: "empr_ops_123")
     response_class = Data.define(:employees)
     gateway_class = Class.new do
@@ -5817,12 +5817,15 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       gateway_class:
     ).call
 
-    assert result.failure?
-    assert_nil @employer.reload.settings.to_h.fetch("vitable_remote_roster", nil)
+    assert result.success?
+    remote_roster = @employer.reload.settings.to_h.fetch("vitable_remote_roster")
+    assert_equal 0, remote_roster.fetch("remote_employee_count")
+    assert_equal 0, remote_roster.fetch("matched_employee_count")
+    assert_equal 0, remote_roster.fetch("unmatched_employee_count")
     sync = @connection.sync_runs.where(operation: "remote_roster_refresh").recent_first.first
-    assert_equal "failed", sync.status
-    assert_match "remote roster response", sync.error_message
-    assert_match "data array", result.errors.to_sentence
+    assert_equal "succeeded", sync.status
+    assert_equal 0, sync.stats.fetch("remote_employee_count")
+    assert_equal [], sync.stats.dig("remote_response", "employees")
   ensure
     ENV[@connection.api_key_reference] = previous_key
   end
