@@ -1418,6 +1418,56 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
     ENV.delete("VITABLE_CONNECT_API_KEY")
   end
 
+  test "direct webhook event fetches import nested remote event envelopes" do
+    ENV["VITABLE_CONNECT_API_KEY"] = "vit_apk_test_value"
+    occurred_at = Time.current.change(usec: 0)
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:fetch_resource) do |_resource_type, resource_id|
+        {
+          data: {
+            webhook_event: {
+              id: resource_id,
+              organization: {
+                id: "org_webhook_test"
+              },
+              type: "group.updated",
+              resource: {
+                type: "group",
+                id: "grp_nested_remote_imported"
+              },
+              timestamp: occurred_at.iso8601
+            }
+          }
+        }
+      end
+    end
+
+    assert_difference "WebhookEvent.count", 1 do
+      result = Vitable::FetchResourceCommand.new(
+        dto: Vitable::FetchResourceDto.new(connection_id: @connection.id, resource_type: "webhook_event", resource_id: "wevt_nested_remote_imported"),
+        gateway_class:
+      ).call
+
+      assert result.success?
+    end
+
+    event = WebhookEvent.find_by!(event_id: "wevt_nested_remote_imported")
+    sync_run = @connection.sync_runs.where(operation: "fetch", resource_type: "webhook_event").recent_first.first
+
+    assert_equal @connection.id, event.integration_connection_id
+    assert_equal "group.updated", event.event_name
+    assert_equal "group", event.resource_type
+    assert_equal "grp_nested_remote_imported", event.resource_id
+    assert_equal @organization.external_id, event.organization_external_id
+    assert_equal occurred_at.to_i, event.occurred_at.to_i
+    assert_equal "received", event.status
+    assert_equal "matched", sync_run.stats.dig("resource_reconciliation", "status")
+    assert_equal "created_from_event_id", sync_run.stats.dig("resource_reconciliation", "matched_by")
+  ensure
+    ENV.delete("VITABLE_CONNECT_API_KEY")
+  end
+
   test "direct webhook event fetch accepts organization external id" do
     ENV["VITABLE_CONNECT_API_KEY"] = "vit_apk_test_value"
     occurred_at = Time.current.change(usec: 0)
