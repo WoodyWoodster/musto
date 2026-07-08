@@ -277,7 +277,7 @@ module Vitable
     def client
       @client ||= VitableConnect::Client.new(
         api_key: @connection.api_key,
-        environment: @connection.environment,
+        environment: @connection.sdk_environment,
         base_url: @connection.effective_api_base_url,
         max_retries: 2,
         timeout: 15

@@ -292,6 +292,7 @@ module Vitable
       client = ClientGateway.new(connection).send(:client)
 
       assert_equal "https://api.demo.vitablehealth.com", client.base_url.to_s
+      assert_nil connection.sdk_environment
     ensure
       ENV.delete("VITABLE_TEST_API_KEY")
     end

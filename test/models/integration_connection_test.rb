@@ -7,6 +7,15 @@ class IntegrationConnectionTest < ActiveSupport::TestCase
 
     assert_equal "demo", connection.environment
     assert_equal "https://api.demo.vitablehealth.com", connection.effective_api_base_url
+    assert_nil connection.sdk_environment
+  end
+
+  test "passes production through to the SDK when no base URL override is present" do
+    organization = Organization.create!(name: "Integration Production Org", external_id: "integration_production_org")
+    connection = organization.integration_connections.create!(provider: "vitable", environment: "production")
+
+    assert_nil connection.effective_api_base_url
+    assert_equal "production", connection.sdk_environment
   end
 
   test "reports webhook secret presence without exposing the value in DTOs" do

@@ -32,6 +32,12 @@ class IntegrationConnection < ApplicationRecord
     configured_api_base_url.presence || (environment == "demo" ? DEMO_BASE_URL : nil)
   end
 
+  def sdk_environment
+    return nil if effective_api_base_url.present?
+
+    environment
+  end
+
   private
 
   def configured_api_base_url
