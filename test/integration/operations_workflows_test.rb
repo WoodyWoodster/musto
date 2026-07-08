@@ -4203,6 +4203,21 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_empty batch.fetch("api_payload").fetch("employees")
   end
 
+  test "Vitable census manifest applies batch limit to ready payload rows" do
+    holdback_employee = create_census_holdback_employee
+    repository = Vitable::CensusSyncRepository.new(employer: @employer)
+    repository.define_singleton_method(:max_employees) { 1 }
+
+    batch = repository.generate_manifest(requested_by: "ops_test")
+
+    assert_equal 1, batch.fetch("limits").fetch("max_employees")
+    assert_equal 1, batch.fetch("totals").fetch("ready_count")
+    assert_equal [ @employee.id ], batch.fetch("employees").map { |line| line.fetch("employee_id") }
+    assert_equal holdback_employee.id, batch.fetch("holdbacks").first.fetch("employee_id")
+    assert_equal "missing_required_fields", batch.fetch("holdbacks").first.fetch("reason_code")
+    assert_empty batch.fetch("holdbacks").select { |holdback| holdback.fetch("reason_code") == "batch_limit" }
+  end
+
   test "census manifest omits approved offboarding employees for Vitable deactivation" do
     @employer.update!(vitable_id: "empr_ops_123")
     @employee.update!(vitable_id: "empl_ops_casey")
@@ -5305,6 +5320,23 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_select "h2", "Sync attempts"
     assert_select "h2", "API activity"
     assert_select "button", "Refresh member sync"
+  end
+
+  test "Vitable care member manifest applies batch limit to ready payload rows" do
+    prepare_care_group_profile(remote_group_id: "grp_ops_123")
+    holdback_employee = create_care_member_holdback_employee
+    holdback_employee.update!(last_name: "Ahead")
+    repository = Vitable::CareGroupRepository.new(employer: @employer)
+    repository.define_singleton_method(:max_members) { 1 }
+
+    manifest = repository.generate_member_manifest(requested_by: "ops_test")
+
+    assert_equal 1, manifest.fetch("limits").fetch("max_members")
+    assert_equal 1, manifest.fetch("totals").fetch("ready_count")
+    assert_equal [ @employee.id ], manifest.fetch("members").map { |member| member.fetch("employee_id") }
+    assert_equal holdback_employee.id, manifest.fetch("holdbacks").first.fetch("employee_id")
+    assert_equal "missing_remote_plan_id", manifest.fetch("holdbacks").first.fetch("reason_code")
+    assert_empty manifest.fetch("holdbacks").select { |holdback| holdback.fetch("reason_code") == "batch_limit" }
   end
 
   test "generates a Vitable care group packet through command action" do

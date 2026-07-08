@@ -73,12 +73,7 @@ module Vitable
       members = []
       holdbacks = []
 
-      roster.each_with_index do |employee, index|
-        if index >= MAX_MEMBERS
-          holdbacks << member_holdback_for(employee, nil, "batch_limit", "Vitable group member sync accepts up to #{MAX_MEMBERS} members per request.")
-          next
-        end
-
+      roster.each do |employee|
         enrollment = care_enrollment_for(employee)
         payload = member_payload_for(employee, enrollment)
         missing_fields = missing_member_fields(payload)
@@ -100,6 +95,11 @@ module Vitable
           next
         end
 
+        if members.count >= max_members
+          holdbacks << member_holdback_for(employee, enrollment, "batch_limit", "Vitable group member sync accepts up to #{max_members} members per request.")
+          next
+        end
+
         members << member_line_for(employee, enrollment, payload)
       end
 
@@ -112,7 +112,7 @@ module Vitable
         "endpoint" => "/v1/groups/:group_id/members/sync",
         "status" => member_manifest_status(members, holdbacks),
         "limits" => {
-          "max_members" => MAX_MEMBERS,
+          "max_members" => max_members,
           "requested_member_count" => roster.count
         },
         "totals" => {
@@ -323,6 +323,10 @@ module Vitable
     end
 
     private
+
+    def max_members
+      MAX_MEMBERS
+    end
 
     def build_group_packet(requested_by:)
       payload = {

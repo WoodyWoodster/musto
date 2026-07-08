@@ -60,13 +60,8 @@ module Vitable
       lines = []
       holdbacks = []
 
-      roster.each_with_index do |employee, index|
+      roster.each do |employee|
         next if omitted_employee_ids.include?(employee.id)
-
-        if index >= MAX_EMPLOYEES
-          holdbacks << holdback_for(employee, "batch_limit", "Vitable census sync accepts up to #{MAX_EMPLOYEES} employees per request.")
-          next
-        end
 
         missing_fields = missing_required_fields(employee)
         if missing_fields.any?
@@ -78,6 +73,11 @@ module Vitable
         invalid_fields = invalid_payload_fields(line.fetch("api_payload"))
         if invalid_fields.any?
           holdbacks << holdback_for(employee, "invalid_api_contract_fields", "Invalid #{invalid_fields.to_sentence} for Vitable census sync.")
+          next
+        end
+
+        if lines.count >= max_employees
+          holdbacks << holdback_for(employee, "batch_limit", "Vitable census sync accepts up to #{max_employees} employees per request.")
           next
         end
 
@@ -93,7 +93,7 @@ module Vitable
         "endpoint" => "/v1/employers/:employer_id/census-sync",
         "status" => manifest_status(lines, holdbacks, offboarding_omissions),
         "limits" => {
-          "max_employees" => MAX_EMPLOYEES,
+          "max_employees" => max_employees,
           "requested_employee_count" => roster.count
         },
         "totals" => {
@@ -292,6 +292,10 @@ module Vitable
     end
 
     private
+
+    def max_employees
+      MAX_EMPLOYEES
+    end
 
     def manifest_status(lines, holdbacks, offboarding_omissions)
       return "blocked" if lines.count < MIN_EMPLOYEES
