@@ -2779,7 +2779,8 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
               webhook_event_id: event_id,
               subscription_id: "wsub_ops_123",
               status: "Delivered",
-              created_at: Time.current
+              created_at: Time.current,
+              api_key: "vit_apk_should_not_persist"
             }
           ]
         )
@@ -2798,6 +2799,9 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     sync = @connection.sync_runs.where(operation: "webhook_delivery_refresh").recent_first.first
     assert_equal "failed", sync.status
     assert_match "remote delivery ID", sync.error_message
+    assert_equal "ArgumentError", sync.stats.fetch("error_class")
+    assert_equal "wsub_ops_123", sync.stats.dig("remote_response", "data", 0, "subscription_id")
+    assert_equal "[FILTERED]", sync.stats.dig("remote_response", "data", 0, "api_key")
     assert_match "remote delivery ID", result.errors.to_sentence
   ensure
     ENV[@connection.api_key_reference] = previous_key
@@ -2834,6 +2838,8 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     sync = @connection.sync_runs.where(operation: "webhook_delivery_refresh").recent_first.first
     assert_equal "failed", sync.status
     assert_match "expected #{@webhook_event.event_id}", sync.error_message
+    assert_equal "ArgumentError", sync.stats.fetch("error_class")
+    assert_equal "wevt_other", sync.stats.dig("remote_response", "data", 0, "webhook_event_id")
     assert_match "expected #{@webhook_event.event_id}", result.errors.to_sentence
   ensure
     ENV[@connection.api_key_reference] = previous_key

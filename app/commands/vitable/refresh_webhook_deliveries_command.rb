@@ -7,6 +7,7 @@ module Vitable
     end
 
     def call
+      response = nil
       event = @repository.find_webhook_event(@dto.webhook_event_id)
       return failure(record: event, errors: "No Vitable connection is associated with this webhook event") unless event.integration_connection
 
@@ -24,7 +25,7 @@ module Vitable
       @repository.fail_webhook_delivery_run(sync_run, e)
       failure(record: sync_run, errors: "#{e.class}: #{e.message}")
     rescue ArgumentError => e
-      @repository.fail_webhook_delivery_run(sync_run, e)
+      @repository.fail_webhook_delivery_run(sync_run, e, response:)
       failure(record: sync_run, errors: e.message)
     rescue ActiveRecord::RecordInvalid => e
       failure(record: e.record, errors: e.record.errors.full_messages)
