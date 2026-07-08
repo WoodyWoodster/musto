@@ -216,6 +216,8 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
   test "reconciles fetched employee resources into the local directory" do
     employer = @organization.employers.create!(name: "Webhook Employer", status: "active")
     employee = employer.employees.create!(first_name: "Casey", last_name: "Nguyen", email: "casey@example.com")
+    remote_hire_date = Date.new(2026, 2, 3)
+    remote_birth_date = Date.new(1991, 4, 12)
     ENV["VITABLE_CONNECT_API_KEY"] = "vit_apk_test_value"
     gateway_class = Class.new do
       define_method(:initialize) { |_connection| }
@@ -226,7 +228,21 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
             reference_id: "musto_employee_#{Employee.find_by!(email: "casey@example.com").id}",
             email: "casey@example.com",
             status: "active",
-            member_id: "mem_remote_casey"
+            member_id: "mem_remote_casey",
+            first_name: "Casey",
+            last_name: "Nguyen",
+            date_of_birth: remote_birth_date.iso8601,
+            employee_class: "Full Time",
+            hire_date: remote_hire_date.iso8601,
+            termination_date: nil,
+            phone: "4155551234",
+            address: {
+              address_line_1: "456 Oak Avenue",
+              address_line_2: "Apt 2B",
+              city: "San Francisco",
+              state: "CA",
+              zipcode: "94102"
+            }
           }
         }
       end
@@ -248,13 +264,22 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
     reconciliation = event.metadata.fetch("resource_reconciliation")
 
     assert_equal "empl_remote_casey", employee.vitable_id
+    assert_equal remote_hire_date, employee.start_on
     assert_equal "active", employee.metadata.fetch("vitable_remote_status")
     assert_equal "mem_remote_casey", employee.metadata.fetch("vitable_member_id")
+    assert_equal "Full Time", employee.metadata.fetch("vitable_remote_employee_class")
+    assert_equal remote_hire_date.iso8601, employee.metadata.fetch("vitable_remote_hire_date")
+    assert_equal remote_birth_date.iso8601, employee.metadata.fetch("vitable_remote_date_of_birth")
+    assert_equal "4155551234", employee.metadata.fetch("vitable_remote_phone")
+    assert_equal "San Francisco", employee.metadata.dig("vitable_remote_address", "city")
+    assert_equal "Full Time", employee.metadata.dig("vitable_last_resource_snapshot", "employee_class")
     assert_equal "granted", employee.metadata.fetch("vitable_eligibility_status")
     assert_equal "matched", reconciliation.fetch("status")
     assert_equal "Employee", reconciliation.fetch("local_record_type")
     assert_equal employee.id, reconciliation.fetch("local_record_id")
     assert_equal "reference_id", reconciliation.fetch("matched_by")
+    assert_includes reconciliation.fetch("applied_changes"), "start_on"
+    assert_includes reconciliation.fetch("applied_changes"), "metadata.vitable_remote_hire_date"
   ensure
     ENV.delete("VITABLE_CONNECT_API_KEY")
   end
@@ -970,6 +995,7 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
       amount_cents: 9900,
       status: "ready"
     )
+    termination_date = Date.current
     ENV["VITABLE_CONNECT_API_KEY"] = "vit_apk_test_value"
     gateway_class = Class.new do
       define_method(:initialize) { |_connection| }
@@ -980,7 +1006,9 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
             reference_id: "musto_employee_#{Employee.find_by!(email: "dana.inactive@example.com").id}",
             email: "dana.inactive@example.com",
             status: "inactive",
-            member_id: "mem_deactivated_dana"
+            member_id: "mem_deactivated_dana",
+            employee_class: "Full Time",
+            termination_date: termination_date.iso8601
           }
         }
       end
@@ -1003,6 +1031,8 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
     assert_equal "empl_deactivated_dana", employee.vitable_id
     assert_equal "terminated", employee.employment_status
     assert_equal "inactive", employee.metadata.fetch("vitable_remote_status")
+    assert_equal termination_date.iso8601, employee.metadata.fetch("vitable_remote_termination_date")
+    assert_equal "Full Time", employee.metadata.fetch("vitable_remote_employee_class")
     assert_equal "deactivated", employee.metadata.fetch("vitable_lifecycle_status")
     assert_equal "inactive", enrollment.reload.status
     assert_nil enrollment.accepted_at

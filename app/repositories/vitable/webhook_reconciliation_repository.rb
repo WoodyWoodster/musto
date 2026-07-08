@@ -56,14 +56,28 @@ module Vitable
         update_attributes[:employment_status] = local_employment_status
         applied_changes << "employment_status"
       end
+      remote_hire_date = remote_employee_hire_date(remote_resource)
+      if remote_hire_date.present? && employee.start_on != remote_hire_date
+        update_attributes[:start_on] = remote_hire_date
+        applied_changes << "start_on"
+      end
 
       metadata_updates = {
         "vitable_remote_status" => remote_resource.fetch("status", nil),
         "vitable_member_id" => remote_resource.fetch("member_id", nil),
+        "vitable_remote_employee_class" => remote_resource.fetch("employee_class", nil),
+        "vitable_remote_hire_date" => remote_hire_date&.iso8601,
+        "vitable_remote_termination_date" => remote_employee_termination_date(remote_resource)&.iso8601,
+        "vitable_remote_date_of_birth" => remote_date(remote_resource, "date_of_birth")&.iso8601,
+        "vitable_remote_phone" => remote_resource.fetch("phone", nil),
+        "vitable_remote_address" => remote_employee_address(remote_resource),
         "vitable_last_refreshed_at" => timestamp,
         "vitable_last_webhook_event_id" => @event.event_id,
         "vitable_last_webhook_event_name" => @event.event_name,
-        "vitable_last_resource_snapshot" => remote_resource_summary(remote_resource, %w[id reference_id email status member_id])
+        "vitable_last_resource_snapshot" => remote_resource_summary(
+          remote_resource,
+          %w[id reference_id email first_name last_name status member_id employee_class hire_date termination_date date_of_birth phone]
+        )
       }.merge(employee_event_metadata(remote_resource, timestamp)).compact
 
       update_attributes[:metadata] = employee.metadata.to_h.stringify_keys.merge(metadata_updates)
@@ -533,6 +547,21 @@ module Vitable
       Time.iso8601(value.to_s)
     rescue ArgumentError
       nil
+    end
+
+    def remote_employee_hire_date(remote_resource)
+      remote_date(remote_resource, "hire_date") || remote_date(remote_resource, "start_date")
+    end
+
+    def remote_employee_termination_date(remote_resource)
+      remote_date(remote_resource, "termination_date") || remote_date(remote_resource, "terminated_on")
+    end
+
+    def remote_employee_address(remote_resource)
+      address = remote_resource.fetch("address", nil)
+      return unless address.respond_to?(:to_h)
+
+      address.to_h.stringify_keys.slice("address_line_1", "address_line_2", "city", "state", "zipcode").compact
     end
 
     def apply_enrollment_payroll_deductions(enrollment, local_status, remote_resource, timestamp)
