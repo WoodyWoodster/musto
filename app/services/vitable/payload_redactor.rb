@@ -91,7 +91,7 @@ module Vitable
     end
 
     def redact_text(value)
-      value.to_s.gsub(/\bvit_(?:apk|at)_[A-Za-z0-9_-]+\b/, FILTERED)
+      value.to_s.gsub(/\bvit_[a-z0-9]+_[A-Za-z0-9_-]+\b/i, FILTERED)
     end
 
     def sensitive_key?(key)
