@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_04_011000) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_07_090000) do
   create_table "api_request_logs", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.integer "duration_ms"
@@ -554,7 +554,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_04_011000) do
   create_table "integration_connections", force: :cascade do |t|
     t.string "api_key_reference", default: "VITABLE_CONNECT_API_KEY", null: false
     t.datetime "created_at", null: false
-    t.string "environment", default: "production", null: false
+    t.string "environment", default: "demo", null: false
     t.datetime "last_synced_at"
     t.json "metadata", default: {}, null: false
     t.integer "organization_id", null: false
