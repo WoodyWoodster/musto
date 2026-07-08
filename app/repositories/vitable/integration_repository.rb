@@ -95,6 +95,21 @@ module Vitable
       )
     end
 
+    def snapshot_only_webhook_reconciliation(event)
+      WebhookResourceReconciliationDto.new(
+        status: "skipped",
+        resource_type: event.resource_type,
+        resource_id: event.resource_id,
+        local_record_type: nil,
+        local_record_id: nil,
+        matched_by: nil,
+        applied_changes: [],
+        warnings: [
+          "Vitable SDK does not expose a retrieve endpoint for #{event.resource_type}; event was stored from the webhook payload only."
+        ]
+      )
+    end
+
     def reconcile_webhook_resource(event, response)
       response_hash = serialize_response(response)
       WebhookReconciliationRepository.new(event:, response_hash:).call

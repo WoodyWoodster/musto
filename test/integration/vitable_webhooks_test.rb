@@ -138,6 +138,45 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
     ENV.delete("VITABLE_CONNECT_API_KEY")
   end
 
+  test "stores unsupported Vitable webhook resource types as payload-only snapshots" do
+    ENV["VITABLE_CONNECT_API_KEY"] = "vit_apk_test_value"
+    gateway_class = Class.new do
+      def self.retrievable_resource_type?(_resource_type)
+        false
+      end
+
+      define_method(:initialize) { |_connection| }
+      define_method(:fetch_resource) { |_resource_type, _resource_id| raise "gateway should not fetch payload-only resources" }
+    end
+
+    assert_no_difference -> { @connection.sync_runs.count } do
+      result = Vitable::ProcessWebhookCommand.new(
+        payload: webhook_payload.merge(
+          event_id: "wevt_test_payroll_deduction_snapshot_only",
+          event_name: "employee.deduction_created",
+          resource_type: "payroll_deduction",
+          resource_id: "pded_remote_snapshot_only"
+        ),
+        gateway_class:
+      ).call
+
+      assert result.success?
+      assert_equal "snapshot_only", result.value
+    end
+
+    event = WebhookEvent.find_by!(event_id: "wevt_test_payroll_deduction_snapshot_only")
+    reconciliation = event.metadata.fetch("resource_reconciliation")
+
+    assert_equal "processed", event.status
+    assert_not_nil event.processed_at
+    assert_equal "skipped", reconciliation.fetch("status")
+    assert_equal "payroll_deduction", reconciliation.fetch("resource_type")
+    assert_match "does not expose a retrieve endpoint", reconciliation.fetch("warnings").join(" ")
+    assert_nil event.metadata.fetch("resource_snapshot", nil)
+  ensure
+    ENV.delete("VITABLE_CONNECT_API_KEY")
+  end
+
   test "direct resource fetches reconcile fetched employee state" do
     employer = @organization.employers.create!(name: "Direct Fetch Employer", status: "active")
     employee = employer.employees.create!(first_name: "Drew", last_name: "Miller", email: "drew.fetch@example.com", employment_status: "terminated")

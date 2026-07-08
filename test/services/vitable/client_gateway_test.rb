@@ -221,10 +221,12 @@ module Vitable
       gateway.define_singleton_method(:retrieve_group) { |id| calls << [ "group", id ]; "group_response" }
 
       assert_equal "employee_response", gateway.fetch_resource("employee", "empl_123")
+      assert ClientGateway.retrievable_resource_type?("employee")
       assert_equal "employer_response", gateway.fetch_resource("employer", "empr_123")
       assert_equal "enrollment_response", gateway.fetch_resource("enrollment", "enrl_123")
       assert_equal "webhook_response", gateway.fetch_resource("webhook_event", "wevt_123")
       assert_equal "group_response", gateway.fetch_resource("group", "grp_123")
+      assert_not ClientGateway.retrievable_resource_type?("payroll_deduction")
       assert_equal [
         [ "employee", "empl_123" ],
         [ "employer", "empr_123" ],

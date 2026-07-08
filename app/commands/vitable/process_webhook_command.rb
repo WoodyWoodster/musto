@@ -24,6 +24,12 @@ module Vitable
         return success(record: event, value: "queued_without_credentials")
       end
 
+      unless retrievable_resource_type?(event.resource_type)
+        reconciliation = @repository.snapshot_only_webhook_reconciliation(event)
+        @repository.mark_processed(event, reconciliation:)
+        return success(record: event, value: "snapshot_only")
+      end
+
       fetch_dto = FetchResourceDto.from_event(connection:, event:)
       fetch_result = FetchResourceCommand.new(dto: fetch_dto, repository: @repository, gateway_class: @gateway_class, reconcile: false).call
       if fetch_result.success?
@@ -37,6 +43,14 @@ module Vitable
       end
     rescue KeyError, ArgumentError => e
       failure(errors: "Invalid Vitable webhook payload: #{e.message}")
+    end
+
+    private
+
+    def retrievable_resource_type?(resource_type)
+      return true unless @gateway_class.respond_to?(:retrievable_resource_type?)
+
+      @gateway_class.retrievable_resource_type?(resource_type)
     end
   end
 end

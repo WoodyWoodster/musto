@@ -2,6 +2,12 @@ require "vitable_connect"
 
 module Vitable
   class ClientGateway
+    RETRIEVABLE_RESOURCE_TYPES = %w[employee employer enrollment webhook_event group].freeze
+
+    def self.retrievable_resource_type?(resource_type)
+      RETRIEVABLE_RESOURCE_TYPES.include?(resource_type.to_s)
+    end
+
     def initialize(connection, repository: IntegrationRepository.new)
       @connection = connection
       @repository = repository
