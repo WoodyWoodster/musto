@@ -66,10 +66,11 @@ module Vitable
     end
 
     def valid_signature?(raw_body, secret, signature_value, timestamp)
-      expected = [
-        self.class.sign(raw_body:, secret:),
-        timestamp.present? ? self.class.sign(raw_body:, secret:, timestamp:) : nil
-      ].compact
+      expected = if timestamp.present?
+        [ self.class.sign(raw_body:, secret:, timestamp:) ]
+      else
+        [ self.class.sign(raw_body:, secret:) ]
+      end
 
       signature_candidates(signature_value).any? do |candidate|
         expected.any? { |value| secure_compare(candidate, value) }

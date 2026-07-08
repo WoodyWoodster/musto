@@ -1408,6 +1408,28 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
     ENV.delete("VITABLE_WEBHOOK_SECRET")
   end
 
+  test "rejects raw-body signatures when timestamp header is present" do
+    @connection.update!(webhook_secret_reference: "VITABLE_WEBHOOK_SECRET")
+    ENV["VITABLE_WEBHOOK_SECRET"] = "whsec_test_value"
+    payload = webhook_payload.merge(event_id: "wevt_test_timestamp_binding")
+    raw_body = payload.to_json
+    timestamp = Time.current.iso8601
+    signature = Vitable::WebhookSignatureVerifier.sign(raw_body:, secret: ENV.fetch("VITABLE_WEBHOOK_SECRET"))
+
+    assert_no_difference "WebhookEvent.count" do
+      post api_v1_webhooks_vitable_path,
+        params: payload,
+        headers: signed_headers(timestamp:, signature:),
+        as: :json
+    end
+
+    assert_response :unauthorized
+    response_payload = JSON.parse(response.body)
+    assert_equal "signature_invalid", response_payload.fetch("signature")
+  ensure
+    ENV.delete("VITABLE_WEBHOOK_SECRET")
+  end
+
   test "rejects invalid signatures when webhook secret is configured" do
     @connection.update!(webhook_secret_reference: "VITABLE_WEBHOOK_SECRET")
     ENV["VITABLE_WEBHOOK_SECRET"] = "whsec_test_value"
