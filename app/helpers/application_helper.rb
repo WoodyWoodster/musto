@@ -21,7 +21,7 @@ module ApplicationHelper
       "bg-cyan-50 text-cyan-700 ring-cyan-200"
     when "needs_credentials", "waiting_on_enrollment", "needs_review", "renewal_due", "draft", "not_synced", "waived", "unmatched_organization", "missing", "pending_verification", "variance", "missing_deduction", "not_sent", "not_requested", "paper_required", "due_soon", "paused", "skipped", "empty", "submitted", "not_configured", "not_recorded", "lost_time", "medium", "not_issued"
       "bg-amber-50 text-amber-800 ring-amber-200"
-    when "failed", "expired", "denied", "critical", "high", "blocked", "overdue", "escalated", "rejected", "withdrawn", "at_risk", "missed", "correction_needed", "coverage_gap", "missing_signature", "signature_invalid", "secret_missing", "timestamp_invalid", "timestamp_out_of_tolerance", "serious"
+    when "failed", "expired", "denied", "critical", "high", "blocked", "overdue", "escalated", "rejected", "withdrawn", "at_risk", "missed", "correction_needed", "coverage_gap", "missing_signature", "missing_timestamp", "signature_invalid", "secret_missing", "timestamp_invalid", "timestamp_out_of_tolerance", "serious"
       "bg-rose-50 text-rose-700 ring-rose-200"
     else
       "bg-slate-100 text-slate-700 ring-slate-200"

@@ -7,7 +7,7 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
     @organization = Organization.create!(name: "Webhook Org", external_id: "org_webhook_test")
     @connection = @organization.integration_connections.create!(
       provider: "vitable",
-      environment: "production",
+      environment: "demo",
       api_key_reference: "VITABLE_CONNECT_API_KEY",
       status: "needs_credentials"
     )
@@ -2130,6 +2130,30 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
     ENV.delete("VITABLE_WEBHOOK_SECRET")
   end
 
+  test "accepts a signed Vitable webhook with documented unix timestamp header" do
+    @connection.update!(webhook_secret_reference: "VITABLE_WEBHOOK_SECRET")
+    ENV["VITABLE_WEBHOOK_SECRET"] = "whsec_test_value"
+    payload = webhook_payload.merge(event_id: "wevt_test_signed_unix_timestamp")
+    raw_body = payload.to_json
+    timestamp = Time.current.to_i.to_s
+    signature = Vitable::WebhookSignatureVerifier.sign(raw_body:, secret: ENV.fetch("VITABLE_WEBHOOK_SECRET"), timestamp:)
+
+    assert_difference "WebhookEvent.count", 1 do
+      post api_v1_webhooks_vitable_path,
+        params: payload,
+        headers: signed_headers(timestamp:, signature:),
+        as: :json
+    end
+
+    assert_response :accepted
+    response_payload = JSON.parse(response.body)
+    assert_equal "verified", response_payload.fetch("signature")
+    event = WebhookEvent.find_by!(event_id: payload.fetch(:event_id))
+    assert_equal timestamp, event.metadata.dig("signature_verification", "timestamp")
+  ensure
+    ENV.delete("VITABLE_WEBHOOK_SECRET")
+  end
+
   test "accepts a signed Vitable webhook that uses organization_external_id" do
     @connection.update!(webhook_secret_reference: "VITABLE_WEBHOOK_SECRET")
     ENV["VITABLE_WEBHOOK_SECRET"] = "whsec_test_value"
@@ -2155,6 +2179,30 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
     assert_equal @connection, event.integration_connection
     assert_equal @organization.external_id, event.organization_external_id
     assert_equal "verified", event.metadata.dig("signature_verification", "status")
+  ensure
+    ENV.delete("VITABLE_WEBHOOK_SECRET")
+  end
+
+  test "rejects signed webhooks without timestamp headers" do
+    @connection.update!(webhook_secret_reference: "VITABLE_WEBHOOK_SECRET")
+    ENV["VITABLE_WEBHOOK_SECRET"] = "whsec_test_value"
+    payload = webhook_payload.merge(event_id: "wevt_test_missing_signature_timestamp")
+    raw_body = payload.to_json
+    signature = Vitable::WebhookSignatureVerifier.sign(raw_body:, secret: ENV.fetch("VITABLE_WEBHOOK_SECRET"))
+
+    assert_no_difference "WebhookEvent.count" do
+      post api_v1_webhooks_vitable_path,
+        params: payload,
+        headers: {
+          "CONTENT_TYPE" => "application/json",
+          "X-Vitable-Signature" => "sha512=#{signature}"
+        },
+        as: :json
+    end
+
+    assert_response :unauthorized
+    response_payload = JSON.parse(response.body)
+    assert_equal "missing_timestamp", response_payload.fetch("signature")
   ensure
     ENV.delete("VITABLE_WEBHOOK_SECRET")
   end

@@ -36,6 +36,7 @@ module Vitable
       return result("missing_signature", "Webhook signature header is missing.", connection:) if signature_value.blank?
 
       timestamp = timestamp_header(request)
+      return result("missing_timestamp", "Webhook timestamp header is missing.", connection:, header_name: signature_header) if timestamp.blank?
       return result("timestamp_invalid", "Webhook timestamp header could not be parsed.", connection:, header_name: signature_header, timestamp:) if invalid_timestamp?(timestamp)
       return result("timestamp_out_of_tolerance", "Webhook timestamp is outside the 5 minute replay window.", connection:, header_name: signature_header, timestamp:) unless timestamp_in_tolerance?(timestamp)
       return verified(connection:, header_name: signature_header, timestamp:) if valid_signature?(request.raw_body, secret, signature_value, timestamp)
