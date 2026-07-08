@@ -68,13 +68,13 @@
       <div class="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
         <div>
           <h2 class="text-base font-semibold text-slate-950">Remote API snapshot</h2>
-          <p class="text-sm text-slate-500">Latest read mirror from Vitable employers, rosters, groups, plans, webhook events, and employee enrollments.</p>
+          <p class="text-sm text-slate-500">Latest read mirror from Vitable employers, rosters, groups, plans, eligibility policies, webhook events, and employee enrollments.</p>
         </div>
         <%= status_pill(@connection.api_snapshot.present? ? "ready" : "pending") %>
       </div>
     </div>
     <% if @connection.api_snapshot.present? %>
-      <div class="grid gap-0 divide-y divide-slate-100 md:grid-cols-7 md:divide-x md:divide-y-0">
+      <div class="grid gap-0 divide-y divide-slate-100 md:grid-cols-4 md:divide-x md:divide-y-0 xl:grid-cols-8">
         <div class="p-5">
           <p class="text-xs font-semibold uppercase text-slate-400">Refreshed</p>
           <p class="mt-2 text-sm font-semibold text-slate-950"><%= time_ago_in_words(@connection.api_snapshot.refreshed_at) %> ago</p>
@@ -101,6 +101,14 @@
           <p class="mt-1 text-xs text-slate-500"><%= compact_number(@connection.api_snapshot.mapped_plan_count) %> mapped</p>
           <% if @connection.api_snapshot.unmatched_remote_plan_count.positive? || @connection.api_snapshot.unmatched_local_plan_count.positive? || @connection.api_snapshot.ambiguous_remote_plan_count.positive? %>
             <p class="mt-1 text-xs font-semibold text-amber-700"><%= compact_number(@connection.api_snapshot.unmatched_remote_plan_count) %> remote - <%= compact_number(@connection.api_snapshot.unmatched_local_plan_count) %> local - <%= compact_number(@connection.api_snapshot.ambiguous_remote_plan_count) %> ambiguous</p>
+          <% end %>
+        </div>
+        <div class="p-5">
+          <p class="text-xs font-semibold uppercase text-slate-400">Eligibility</p>
+          <p class="mt-2 text-2xl font-semibold text-slate-950"><%= compact_number(@connection.api_snapshot.remote_eligibility_policy_count) %></p>
+          <p class="mt-1 text-xs text-slate-500"><%= compact_number(@connection.api_snapshot.matched_eligibility_policy_count) %> matched</p>
+          <% if @connection.api_snapshot.errored_eligibility_policy_count.positive? %>
+            <p class="mt-1 text-xs font-semibold text-amber-700"><%= compact_number(@connection.api_snapshot.errored_eligibility_policy_count) %> read errors</p>
           <% end %>
         </div>
         <div class="p-5">

@@ -2922,7 +2922,8 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       "auth tokens",
       "employers",
       "employer settings",
-      "eligibility policies",
+      "eligibility policy creation",
+      "eligibility policy retrieval",
       "census sync",
       "remote roster",
       "employees",
@@ -3052,6 +3053,15 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
   end
 
   test "successful Vitable API snapshot refresh stores remote read counts" do
+    @employer.update!(
+      settings: @employer.settings.to_h.merge(
+        "vitable_eligibility_policy" => {
+          "remote_employer_id" => "empr_ops_123",
+          "remote_policy_id" => "elig_policy_snapshot_123",
+          "source" => "remote_api"
+        }
+      )
+    )
     @employee.update!(vitable_id: "empl_remote_casey")
     existing_event = @connection.webhook_events.create!(
       event_id: "wevt_existing_remote",
@@ -3116,6 +3126,17 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       define_method(:list_all_employers) { response_class.new(data: [ { id: "empr_ops_123", name: "Atlas Global Services" } ]) }
       define_method(:list_all_groups) { response_class.new(data: [ { id: "grp_ops_123", name: "Atlas Care Group" } ]) }
       define_method(:list_all_plans) { response_class.new(data: [ { id: "plan_dpc", name: "Direct Primary Care" }, { id: "plan_mec", name: "MEC" } ]) }
+      define_method(:retrieve_eligibility_policy) do |policy_id|
+        response_class.new(
+          data: {
+            id: policy_id,
+            employer_id: "empr_ops_123",
+            classification: "All",
+            waiting_period: "1st of the following month",
+            access_token: "vit_at_snapshot_policy_secret"
+          }
+        )
+      end
       define_method(:list_all_webhook_events) { |**_filters| response_class.new(data: remote_webhook_events) }
       define_method(:list_all_employee_enrollments) do |employee_id|
         response_class.new(
@@ -3154,6 +3175,9 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal 1, snapshot.dig("counts", "remote_employer_count")
     assert_equal 1, snapshot.dig("counts", "remote_group_count")
     assert_equal 2, snapshot.dig("counts", "remote_plan_count")
+    assert_equal 1, snapshot.dig("counts", "remote_eligibility_policy_count")
+    assert_equal 1, snapshot.dig("counts", "matched_eligibility_policy_count")
+    assert_equal 0, snapshot.dig("counts", "errored_eligibility_policy_count")
     assert_equal 6, snapshot.dig("counts", "remote_webhook_event_count")
     assert_equal 2, snapshot.dig("counts", "imported_webhook_event_count")
     assert_equal 1, snapshot.dig("counts", "existing_webhook_event_count")
@@ -3163,6 +3187,13 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal 0, snapshot.dig("counts", "skipped_webhook_recovery_count")
     assert_equal 1, snapshot.dig("counts", "remote_employee_enrollment_count")
     assert_equal @employee.id, snapshot.fetch("employee_enrollments").first.fetch("local_employee_id")
+    assert_equal "elig_policy_snapshot_123", snapshot.fetch("eligibility_policies").first.fetch("remote_policy_id")
+    assert_equal "[FILTERED]", snapshot.fetch("eligibility_policies").first.dig("policy", "data", "access_token")
+    assert_equal "vitable_api_snapshot", @employer.reload.settings.dig("vitable_eligibility_policy", "source")
+    assert_equal "remote_current", @employer.settings.dig("vitable_eligibility_policy", "status")
+    assert_equal "elig_policy_snapshot_123", @employer.settings.dig("vitable_eligibility_policy", "remote_policy_id")
+    assert_equal "[FILTERED]", @employer.settings.dig("vitable_eligibility_policy", "remote_snapshot", "data", "access_token")
+    assert_not_includes @employer.settings.to_json, "vit_at_snapshot_policy_secret"
     assert_equal 3, snapshot.dig("webhook_event_ingestion", "skipped_count")
     assert_includes snapshot.dig("webhook_event_ingestion", "skipped_event_ids"), "wevt_incomplete_remote"
     assert_includes snapshot.dig("webhook_event_ingestion", "skipped_event_ids"), "wevt_missing_org"
@@ -3208,6 +3239,8 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal 2, detail.api_snapshot.imported_webhook_event_count
     assert_equal 1, detail.api_snapshot.existing_webhook_event_count
     assert_equal 2, detail.api_snapshot.recovered_webhook_event_count
+    assert_equal 1, detail.api_snapshot.remote_eligibility_policy_count
+    assert_equal 1, detail.api_snapshot.matched_eligibility_policy_count
   ensure
     ENV[@connection.api_key_reference] = previous_key
   end

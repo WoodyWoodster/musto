@@ -60,6 +60,12 @@ module Vitable
         refreshed_at:
       )
       plan_reconciliation = plan_reconciliation_snapshots(connection, plans, refreshed_at:)
+      eligibility_policies = eligibility_policy_snapshots(gateway, connection, trace:)
+      eligibility_policy_reconciliation = EligibilityPolicySnapshotRepository.new(connection:).reconcile_snapshot(
+        snapshot_entries: eligibility_policies,
+        source: "vitable_api_snapshot",
+        refreshed_at:
+      )
       remote_employee_rosters = remote_employee_rosters(gateway, connection, trace:)
       employee_reconciliation = RemoteEmployeeSnapshotRepository.new(connection:).reconcile_snapshot(
         snapshot_entries: remote_employee_rosters,
@@ -88,6 +94,8 @@ module Vitable
         "group_reconciliation" => group_reconciliation.to_metadata,
         "plans" => plans,
         "plan_reconciliation" => plan_reconciliation,
+        "eligibility_policies" => eligibility_policies,
+        "eligibility_policy_reconciliation" => eligibility_policy_reconciliation.to_metadata,
         "webhook_event_query" => webhook_event_query_metadata(webhook_event_query),
         "webhook_events" => webhook_events,
         "remote_employee_rosters" => remote_employee_rosters,
@@ -212,6 +220,41 @@ module Vitable
       end
     end
 
+    def eligibility_policy_snapshots(gateway, connection, trace:)
+      local_employers(connection).filter_map do |employer|
+        policy_id = eligibility_policy_id_for(employer)
+        next if policy_id.blank?
+
+        remote_employer_id = eligibility_policy_remote_employer_id_for(employer)
+        response_hash = retrieve_snapshot_resource(
+          trace,
+          step: "eligibility_policy",
+          response_label: "Vitable eligibility policy response",
+          resource_id: policy_id
+        ) { gateway.retrieve_eligibility_policy(policy_id) }
+        RemoteEligibilityPolicyResponseDto
+          .from_hash(response_hash)
+          .validate!(expected_employer_id: remote_employer_id)
+
+        {
+          "local_employer_id" => employer.id,
+          "remote_employer_id" => remote_employer_id,
+          "remote_policy_id" => policy_id,
+          "employer_name" => employer.name,
+          "policy" => response_hash
+        }.compact
+      rescue VitableConnect::Errors::NotFoundError => e
+        {
+          "local_employer_id" => employer.id,
+          "remote_employer_id" => remote_employer_id,
+          "remote_policy_id" => policy_id,
+          "employer_name" => employer.name,
+          "error_class" => e.class.name,
+          "error_message" => PayloadRedactor.error_message(e)
+        }.compact
+      end
+    end
+
     def employee_enrollment_snapshot(gateway, connection, trace:)
       local_remote_employees(connection).map do |employee|
         {
@@ -275,6 +318,18 @@ module Vitable
       nil
     end
 
+    def eligibility_policy_id_for(employer)
+      profile = employer.settings.to_h.fetch("vitable_eligibility_policy", {}).to_h.stringify_keys
+      profile.fetch("remote_policy_id", nil).presence ||
+        RemoteEligibilityPolicyResponseDto.from_hash(profile.fetch("remote_response", {})).remote_policy_id
+    end
+
+    def eligibility_policy_remote_employer_id_for(employer)
+      profile = employer.settings.to_h.fetch("vitable_eligibility_policy", {}).to_h.stringify_keys
+
+      profile.fetch("remote_employer_id", nil).presence || employer.vitable_id.presence
+    end
+
     def webhook_event_query_metadata(query)
       query.transform_values do |value|
         value.respond_to?(:iso8601) ? value.iso8601 : value.to_s
@@ -296,6 +351,26 @@ module Vitable
       RemoteCollectionResponseDto
         .from_response(response_hash, response_label:)
         .records
+    end
+
+    def retrieve_snapshot_resource(trace, step:, response_label:, resource_id:)
+      response = yield
+      response_hash = serialize_response(response)
+      trace.replace(
+        {
+          "last_step" => step,
+          "last_resource_id" => resource_id,
+          "last_response" => response_hash,
+          "last_fetched_at" => Time.current.iso8601
+        }.compact
+      )
+
+      RemoteResourceResponseDto
+        .from_response(response_hash, resource_type: step, resource_id:)
+        .validate!
+      response_hash
+    rescue ArgumentError
+      raise ArgumentError, "#{response_label} for #{resource_id} did not include resource attributes"
     end
 
     def page_data(response, response_label:)

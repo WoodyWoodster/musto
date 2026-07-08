@@ -60,6 +60,7 @@ module Vitable
         method: "GET",
         fetch_path: "/v1/benefit-eligibility-policies/:id",
         operations: %w[eligibility_policy.retrieve],
+        sync_operations: %w[api_snapshot_refresh],
         resource_fetch_fragments: %w[/benefit-eligibility-policies/],
         fetch_resource_types: %w[eligibility_policy benefit_eligibility_policy]
       },

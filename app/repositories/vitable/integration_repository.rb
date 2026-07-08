@@ -499,7 +499,14 @@ module Vitable
         stats: {
           "requested_by" => requested_by,
           "resource_id" => "connection_#{connection.id}",
-          "endpoints" => %w[/v1/employers /v1/groups /v1/plans /v1/webhook-events /v1/employees/:id/enrollments]
+          "endpoints" => %w[
+            /v1/employers
+            /v1/groups
+            /v1/plans
+            /v1/benefit-eligibility-policies/:id
+            /v1/webhook-events
+            /v1/employees/:id/enrollments
+          ]
         }
       )
     end
@@ -1102,6 +1109,9 @@ module Vitable
         "unmatched_remote_plan_count" => plan_reconciliation.sum { |entry| entry.to_h.fetch("unmatched_remote_count", 0) },
         "unmatched_local_plan_count" => plan_reconciliation.sum { |entry| entry.to_h.fetch("unmatched_local_count", 0) },
         "ambiguous_remote_plan_count" => plan_reconciliation.sum { |entry| entry.to_h.fetch("ambiguous_remote_count", 0) },
+        "remote_eligibility_policy_count" => snapshot.fetch("eligibility_policies", []).count { |entry| entry.to_h.fetch("policy", nil).present? },
+        "matched_eligibility_policy_count" => snapshot.fetch("eligibility_policy_reconciliation", {}).to_h.fetch("matched_count", 0),
+        "errored_eligibility_policy_count" => snapshot.fetch("eligibility_policy_reconciliation", {}).to_h.fetch("error_count", 0),
         "remote_webhook_event_count" => snapshot.fetch("webhook_events", []).count,
         "recovered_webhook_event_count" => snapshot.fetch("webhook_event_recovery", {}).to_h.fetch("processed_count", 0),
         "failed_webhook_recovery_count" => snapshot.fetch("webhook_event_recovery", {}).to_h.fetch("failed_count", 0),
