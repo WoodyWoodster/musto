@@ -192,9 +192,7 @@ module Vitable
     end
 
     def token_summary(response)
-      attributes = response.to_h.deep_stringify_keys
-      attributes["access_token"] = "[FILTERED]" if attributes.key?("access_token")
-      attributes
+      PayloadRedactor.redact(response.to_h.deep_stringify_keys)
     end
 
     def serialize_response(response)

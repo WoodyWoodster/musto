@@ -3692,7 +3692,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
 
   test "successful embedded session command redacts token response" do
     @employee.update!(vitable_id: "empl_ops_casey")
-    response_class = Data.define(:access_token, :expires_in, :token_type, :bound_entity)
+    response_class = Data.define(:access_token, :expires_in, :token_type, :bound_entity, :nested)
     gateway_class = Class.new do
       define_method(:initialize) { |_connection| }
       define_method(:issue_employee_access_token) do |employee_id|
@@ -3700,7 +3700,12 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
           access_token: "vit_at_secret_value",
           expires_in: 3_600,
           token_type: "Bearer",
-          bound_entity: { id: employee_id, type: "employee" }
+          bound_entity: { id: employee_id, type: "employee" },
+          nested: {
+            refresh_token: "vit_rt_nested_secret",
+            launch_token: "launch_nested_secret",
+            token_type: "Bearer"
+          }
         )
       end
     end
@@ -3716,11 +3721,16 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     sync = @connection.sync_runs.where(operation: "embedded_enrollment_token").recent_first.first
     assert_equal "succeeded", sync.status
     assert_equal "[FILTERED]", sync.stats.dig("token_response", "access_token")
+    assert_equal "[FILTERED]", sync.stats.dig("token_response", "nested", "refresh_token")
+    assert_equal "[FILTERED]", sync.stats.dig("token_response", "nested", "launch_token")
+    assert_equal "Bearer", sync.stats.dig("token_response", "nested", "token_type")
     assert_equal 3_600, sync.stats.dig("token_response", "expires_in")
     assert_equal "issued", sync.stats.dig("issuance", "status")
     assert_equal @employee.vitable_id, sync.stats.dig("issuance", "bound_entity", "id")
     assert_equal true, sync.stats.dig("issuance", "token_present")
     assert_not_includes sync.stats.to_json, "vit_at_secret_value"
+    assert_not_includes sync.stats.to_json, "vit_rt_nested_secret"
+    assert_not_includes sync.stats.to_json, "launch_nested_secret"
 
     @employee.reload
     assert_equal "issued", @employee.metadata.dig("vitable_embedded_session", "status")
@@ -3811,7 +3821,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
 
   test "successful employer admin session command redacts token response" do
     prepare_provisioning_profile(remote_id: "empr_ops_123")
-    response_class = Data.define(:access_token, :expires_in, :token_type, :bound_entity)
+    response_class = Data.define(:access_token, :expires_in, :token_type, :bound_entity, :nested)
     gateway_class = Class.new do
       define_method(:initialize) { |_connection| }
       define_method(:issue_employer_access_token) do |employer_id|
@@ -3819,7 +3829,12 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
           access_token: "vit_at_secret_value",
           expires_in: 3_600,
           token_type: "Bearer",
-          bound_entity: { id: employer_id, type: "employer" }
+          bound_entity: { id: employer_id, type: "employer" },
+          nested: {
+            refresh_token: "vit_rt_nested_secret",
+            launch_token: "launch_nested_secret",
+            token_type: "Bearer"
+          }
         )
       end
     end
@@ -3835,8 +3850,13 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     sync = @connection.sync_runs.where(operation: "embedded_admin_token").recent_first.first
     assert_equal "succeeded", sync.status
     assert_equal "[FILTERED]", sync.stats.dig("token_response", "access_token")
+    assert_equal "[FILTERED]", sync.stats.dig("token_response", "nested", "refresh_token")
+    assert_equal "[FILTERED]", sync.stats.dig("token_response", "nested", "launch_token")
+    assert_equal "Bearer", sync.stats.dig("token_response", "nested", "token_type")
     assert_equal true, sync.stats.dig("issuance", "token_present")
     assert_not_includes sync.stats.to_json, "vit_at_secret_value"
+    assert_not_includes sync.stats.to_json, "vit_rt_nested_secret"
+    assert_not_includes sync.stats.to_json, "launch_nested_secret"
 
     @employer.reload
     assert_equal "issued", @employer.settings.dig("vitable_admin_session", "status")
