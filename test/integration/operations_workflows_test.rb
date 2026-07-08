@@ -4382,7 +4382,8 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
           data: {
             employer_id: "empr_ops_wrong",
             accepted_at: Time.current,
-            employee_count: employees.count
+            employee_count: employees.count,
+            refresh_token: "vit_rt_wrong_census_response"
           }
         )
       end
@@ -4403,7 +4404,11 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     sync = @connection.sync_runs.where(operation: "census_sync").recent_first.first
     assert_equal "failed", sync.status
     assert_match "expected empr_ops_123", sync.error_message
+    assert_equal "ArgumentError", sync.stats.fetch("error_class")
+    assert_equal "empr_ops_wrong", sync.stats.dig("remote_response", "data", "employer_id")
+    assert_equal "[FILTERED]", sync.stats.dig("remote_response", "data", "refresh_token")
     assert_match "expected empr_ops_123", result.errors.to_sentence
+    assert_not_includes sync.stats.to_json, "vit_rt_wrong_census_response"
   ensure
     ENV[@connection.api_key_reference] = previous_key
   end
@@ -4540,7 +4545,8 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
               member_id: "mem_remote_casey_missing_employee_id",
               email: "casey@example.com",
               reference_id: "musto_employee_#{Employee.find_by!(email: "casey@example.com").id}",
-              status: "active"
+              status: "active",
+              access_token: "vit_at_bad_roster_response"
             }
           ]
         )
@@ -4561,7 +4567,11 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     sync = @connection.sync_runs.where(operation: "remote_roster_refresh").recent_first.first
     assert_equal "failed", sync.status
     assert_match "remote employee ID", sync.error_message
+    assert_equal "ArgumentError", sync.stats.fetch("error_class")
+    assert_equal "mem_remote_casey_missing_employee_id", sync.stats.dig("remote_response", "data", 0, "member_id")
+    assert_equal "[FILTERED]", sync.stats.dig("remote_response", "data", 0, "access_token")
     assert_match "remote employee ID", result.errors.to_sentence
+    assert_not_includes sync.stats.to_json, "vit_at_bad_roster_response"
   ensure
     ENV[@connection.api_key_reference] = previous_key
   end
