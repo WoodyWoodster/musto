@@ -201,7 +201,7 @@ module Vitable
 
     def mark_remote_roster_succeeded(sync_run, response)
       response_hash = serialize_response(response)
-      remote_employees = page_data(response_hash)
+      remote_employees = page_data(response_hash, response_label: "Vitable remote roster response")
       mapping = apply_remote_employee_ids(remote_employees)
       manifest = reconcile_manifest_from_remote_roster(remote_employees)
       manifest_lines = manifest.to_h.fetch("employees", [])
@@ -419,8 +419,10 @@ module Vitable
       PayloadRedactor.redact(serialized.deep_stringify_keys)
     end
 
-    def page_data(response_hash)
-      response_hash.fetch("data", []).map { |entry| entry.to_h.stringify_keys }
+    def page_data(response_hash, response_label:)
+      RemoteCollectionResponseDto
+        .from_response(response_hash, response_label:)
+        .records
     end
 
     def apply_remote_employee_ids(remote_employees)

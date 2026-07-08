@@ -3295,6 +3295,30 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     ENV[@connection.api_key_reference] = previous_key
   end
 
+  test "Vitable API snapshot refresh fails when list response omits data array" do
+    response_class = Data.define(:items)
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:list_all_employers) { response_class.new(items: []) }
+    end
+    previous_key = ENV[@connection.api_key_reference]
+    ENV[@connection.api_key_reference] = "vit_apk_test_value"
+
+    result = Vitable::RefreshApiSnapshotCommand.new(
+      dto: Vitable::RefreshApiSnapshotDto.new(connection_id: @connection.id, requested_by: "integration_admin"),
+      gateway_class:
+    ).call
+
+    assert result.failure?
+    assert_nil @connection.reload.metadata.fetch("api_snapshot", nil)
+    sync = @connection.sync_runs.where(operation: "api_snapshot_refresh").recent_first.first
+    assert_equal "failed", sync.status
+    assert_match "employer list response", sync.error_message
+    assert_match "data array", result.errors.to_sentence
+  ensure
+    ENV[@connection.api_key_reference] = previous_key
+  end
+
   test "Vitable API snapshot refresh maps remote roster employees before enrollment reads" do
     @employee.update!(employment_status: "terminated")
     response_class = Data.define(:data)
@@ -4440,6 +4464,31 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal "failed", sync.status
     assert_match "remote employee ID", sync.error_message
     assert_match "remote employee ID", result.errors.to_sentence
+  ensure
+    ENV[@connection.api_key_reference] = previous_key
+  end
+
+  test "remote roster refresh fails when roster response omits data array" do
+    @employer.update!(vitable_id: "empr_ops_123")
+    response_class = Data.define(:employees)
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:list_all_employer_employees) { |_employer_id| response_class.new(employees: []) }
+    end
+    previous_key = ENV[@connection.api_key_reference]
+    ENV[@connection.api_key_reference] = "vit_apk_test_value"
+
+    result = Vitable::RefreshRemoteRosterCommand.new(
+      dto: Vitable::RefreshRemoteRosterDto.new(requested_by: "integration_admin"),
+      gateway_class:
+    ).call
+
+    assert result.failure?
+    assert_nil @employer.reload.settings.to_h.fetch("vitable_remote_roster", nil)
+    sync = @connection.sync_runs.where(operation: "remote_roster_refresh").recent_first.first
+    assert_equal "failed", sync.status
+    assert_match "remote roster response", sync.error_message
+    assert_match "data array", result.errors.to_sentence
   ensure
     ENV[@connection.api_key_reference] = previous_key
   end
