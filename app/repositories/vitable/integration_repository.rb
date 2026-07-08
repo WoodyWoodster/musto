@@ -590,16 +590,27 @@ module Vitable
     def ingest_remote_webhook_events(connection, remote_events, refreshed_at:)
       created_event_ids = []
       existing_event_ids = []
-      skipped_event_ids = []
+      skipped_events = []
+      expected_organization_id = connection.organization.external_id.presence
 
       remote_events.each do |remote_event|
         dto = RemoteWebhookEventDto.from_remote_event(
           remote_event,
-          default_organization_id: connection.organization.external_id
+          default_organization_id: expected_organization_id
         )
 
         if dto.blank?
-          skipped_event_ids << RemoteWebhookEventDto.remote_event_id(remote_event)
+          skipped_events << skipped_remote_webhook_event(remote_event, reason: "incomplete_event")
+          next
+        end
+
+        if remote_webhook_event_organization_mismatch?(dto, expected_organization_id)
+          skipped_events << skipped_remote_webhook_event(
+            remote_event,
+            reason: "organization_mismatch",
+            organization_id: dto.organization_id,
+            expected_organization_id:
+          )
           next
         end
 
@@ -619,12 +630,26 @@ module Vitable
         "source" => "vitable_webhook_events_api",
         "created_count" => created_event_ids.count,
         "existing_count" => existing_event_ids.count,
-        "skipped_count" => skipped_event_ids.count,
+        "skipped_count" => skipped_events.count,
         "created_event_ids" => created_event_ids,
         "existing_event_ids" => existing_event_ids,
-        "skipped_event_ids" => skipped_event_ids,
+        "skipped_event_ids" => skipped_events.map { |event| event.fetch("event_id") },
+        "skipped_events" => skipped_events,
         "refreshed_at" => refreshed_at.iso8601
       }
+    end
+
+    def remote_webhook_event_organization_mismatch?(dto, expected_organization_id)
+      expected_organization_id.present? && dto.organization_id.present? && dto.organization_id != expected_organization_id
+    end
+
+    def skipped_remote_webhook_event(remote_event, reason:, organization_id: nil, expected_organization_id: nil)
+      {
+        "event_id" => RemoteWebhookEventDto.remote_event_id(remote_event),
+        "reason" => reason,
+        "organization_id" => organization_id,
+        "expected_organization_id" => expected_organization_id
+      }.compact
     end
 
     def remote_webhook_event_attributes(dto, connection, refreshed_at:, existing_event:)
