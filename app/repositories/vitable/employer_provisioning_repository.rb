@@ -76,7 +76,7 @@ module Vitable
       response_hash = serialize_response(response)
       remote_employer_id = extract_remote_employer_id(response_hash)
       synced_at = Time.current.iso8601
-      settings = @employer.settings.to_h.merge(
+      settings_update = {
         "vitable_employer_provisioned_at" => synced_at,
         "vitable_employer_provisioning_last_sync" => {
           "synced_at" => synced_at,
@@ -86,8 +86,11 @@ module Vitable
           "remote_employer_id" => remote_employer_id.presence || @employer.vitable_id
         },
         "vitable_pay_frequency" => packet.fetch("settings_payload", {}).fetch("pay_frequency", nil),
+        "vitable_remote_employer" => remote_employer_profile(response_hash),
+        "vitable_remote_settings" => remote_settings_profile(response_hash),
         "vitable_eligibility_policy" => eligibility_policy_profile(packet, response_hash, synced_at)
-      )
+      }.compact
+      settings = @employer.settings.to_h.merge(settings_update)
       @employer.update!(vitable_id: remote_employer_id) if remote_employer_id.present? && @employer.vitable_id.blank?
       @employer.update!(settings:)
 
@@ -410,6 +413,38 @@ module Vitable
           "webhook_event_name" => "employer.eligibility_policy_created"
         )
       ).compact
+    end
+
+    def remote_employer_profile(response_hash)
+      data = response_hash.dig("employer_response", "data")
+      return unless data.respond_to?(:to_h)
+
+      attributes = data.to_h.stringify_keys
+      attributes = attributes.fetch("employer", attributes).to_h.stringify_keys if attributes.fetch("employer", nil).respond_to?(:to_h)
+      address = attributes.fetch("address", nil)
+
+      attributes.slice(
+        "id",
+        "organization_id",
+        "name",
+        "legal_name",
+        "ein",
+        "reference_id",
+        "email",
+        "phone_number",
+        "active",
+        "created_at",
+        "updated_at"
+      ).merge(
+        "address" => address.respond_to?(:to_h) ? address.to_h.stringify_keys.slice("address_line_1", "address_line_2", "city", "state", "zipcode").compact : nil
+      ).compact.presence
+    end
+
+    def remote_settings_profile(response_hash)
+      data = response_hash.dig("settings_response", "data")
+      return unless data.respond_to?(:to_h)
+
+      data.to_h.stringify_keys.slice("pay_frequency").compact.presence
     end
 
     def endpoint_sequence_for(mode, eligibility_policy_endpoint)

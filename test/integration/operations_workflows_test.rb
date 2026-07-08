@@ -3894,8 +3894,17 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
         response_class.new(
           data: {
             id: "empr_created_123",
+            organization_id: "org_remote_123",
             name: payload.fetch("name"),
+            legal_name: payload.fetch("legal_name"),
+            ein: "XX-XXX6789",
             reference_id: payload.fetch("reference_id"),
+            email: payload.fetch("email"),
+            phone_number: payload.fetch("phone_number"),
+            active: true,
+            address: payload.fetch("address"),
+            created_at: "2026-07-08T10:00:00Z",
+            updated_at: "2026-07-08T10:00:00Z",
             access_token: "vit_at_employer_snapshot_secret"
           }
         )
@@ -3931,6 +3940,13 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal "remote_submitted", @employer.settings.dig("vitable_eligibility_policy", "status")
     assert_equal "All", @employer.settings.dig("vitable_eligibility_policy", "classification")
     assert_equal "elig_policy_123", @employer.settings.dig("vitable_eligibility_policy", "remote_response", "data", "id")
+    assert_equal "empr_created_123", @employer.settings.dig("vitable_remote_employer", "id")
+    assert_equal "org_remote_123", @employer.settings.dig("vitable_remote_employer", "organization_id")
+    assert_equal "Ops Employer LLC", @employer.settings.dig("vitable_remote_employer", "legal_name")
+    assert_equal "XX-XXX6789", @employer.settings.dig("vitable_remote_employer", "ein")
+    assert_equal true, @employer.settings.dig("vitable_remote_employer", "active")
+    assert_equal "214 Market Street", @employer.settings.dig("vitable_remote_employer", "address", "address_line_1")
+    assert_equal "bi_weekly", @employer.settings.dig("vitable_remote_settings", "pay_frequency")
     sync = @connection.sync_runs.where(operation: "employer_create").recent_first.first
     assert_equal "succeeded", sync.status
     assert_equal "empr_created_123", sync.stats.fetch("remote_employer_id")
@@ -3942,6 +3958,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal "[FILTERED]", sync.stats.dig("remote_response", "eligibility_policy_submission", "remote_response", "data", "refresh_token")
     assert_not_includes sync.stats.to_json, "vit_at_employer_snapshot_secret"
     assert_not_includes sync.stats.to_json, "vit_client_secret_snapshot"
+    assert_not_includes @employer.settings.to_json, "vit_at_employer_snapshot_secret"
     assert_not_includes @employer.settings.to_json, "vit_rt_policy_snapshot_secret"
     detail = Vitable::EmployerProvisioningQuery.new.call
     assert_not detail.submittable?
