@@ -3302,6 +3302,8 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_select "h2", "Session holdbacks"
     assert_select "h2", "Token attempts"
     assert_select "h2", "Session issuance activity"
+    assert_select "[data-controller='vitable-drops'][data-vitable-drops-widget-value='employee-dashboard']", 1
+    assert_select "button", "Open widget"
   end
 
   test "generates a Vitable embedded enrollment session packet" do
@@ -3328,6 +3330,10 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal @employer.id, verification.claims.employer_id
     assert_equal @employee.id, verification.claims.employee_id
     assert_equal "X-Musto-Widget-Launch", launch_authorization.fetch("header")
+
+    detail = Vitable::EmbeddedSessionsQuery.new.call
+    assert_equal "https://app.vitablehealth.com", detail.widget_base_url
+    assert detail.employees.first.launch_token.present?
   end
 
   test "issues embedded enrollment session as missing credentials sync run without API key" do
@@ -3418,6 +3424,8 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_select "h2", "Launch preflight"
     assert_select "h2", "Embedded admin widgets"
     assert_select "h2", "Token attempts"
+    assert_select "[data-controller='vitable-drops'][data-vitable-drops-widget-value='employer-benefits']", 1
+    assert_select "[data-controller='vitable-drops'][data-vitable-drops-widget-value='employer-billing']", 1
   end
 
   test "generates a Vitable employer admin session packet" do
@@ -3442,6 +3450,10 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert verification.success?
     assert_equal @employer.id, verification.claims.employer_id
     assert_equal "employer", verification.claims.scope
+
+    detail = Vitable::AdminSessionsQuery.new.call
+    assert_equal "https://app.vitablehealth.com", detail.widget_base_url
+    assert detail.latest_packet.launch_token.present?
   end
 
   test "issues employer admin session as missing credentials sync run without API key" do

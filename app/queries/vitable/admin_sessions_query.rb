@@ -32,7 +32,8 @@ module Vitable
         request_logs: @repository.request_logs.map { |log| Operations::ApiRequestLogDto.from_record(log) },
         docs_url: "https://developer.vitablehealth.com/",
         ruby_docs_url: "https://developer.vitablehealth.com/api/ruby",
-        administration_docs_url: "https://developer.vitablehealth.com/embedded_benefits/guides/benefits-administration/"
+        administration_docs_url: "https://developer.vitablehealth.com/embedded_benefits/guides/benefits-administration/",
+        widget_base_url: ENV.fetch("VITABLE_WIDGET_BASE_URL", "https://app.vitablehealth.com")
       )
     end
 

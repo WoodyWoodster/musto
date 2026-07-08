@@ -26,7 +26,8 @@ module Vitable
         token_runs: @repository.token_runs.map { |sync| Operations::SyncRunDto.from_record(sync) },
         request_logs: @repository.request_logs.map { |log| Operations::ApiRequestLogDto.from_record(log) },
         docs_url: "https://developer.vitablehealth.com/",
-        ruby_docs_url: "https://developer.vitablehealth.com/api/ruby"
+        ruby_docs_url: "https://developer.vitablehealth.com/api/ruby",
+        widget_base_url: ENV.fetch("VITABLE_WIDGET_BASE_URL", "https://app.vitablehealth.com")
       )
     end
 

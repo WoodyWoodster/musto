@@ -163,7 +163,20 @@
                 <% end %>
               </td>
               <td class="px-5 py-4">
-                <%= button_to "Issue session", issue_vitable_embedded_session_path(employee.employee_id), method: :post, params: { requested_by: "Musto Operations" }, class: "rounded-md bg-slate-950 px-3 py-2 text-xs font-semibold text-white shadow-sm hover:bg-slate-800" %>
+                <div class="flex flex-col gap-2"
+                     data-controller="vitable-drops"
+                     data-vitable-drops-widget-value="employee-dashboard"
+                     data-vitable-drops-token-url-value="/api/v1/vitable/widget-tokens/employees/<%= employee.employee_id %>"
+                     data-vitable-drops-launch-token-value="<%= employee.launch_token %>"
+                     data-vitable-drops-widget-url-value="<%= @sessions.widget_base_url %>"
+                     data-vitable-drops-context-key-value="<%= employee.remote_employee_id %>">
+                  <div class="flex flex-wrap gap-2">
+                    <button type="button" data-action="vitable-drops#launch" class="rounded-md bg-slate-950 px-3 py-2 text-xs font-semibold text-white shadow-sm hover:bg-slate-800">Open widget</button>
+                    <%= button_to "Issue session", issue_vitable_embedded_session_path(employee.employee_id), method: :post, params: { requested_by: "Musto Operations" }, class: "rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
+                  </div>
+                  <p class="text-xs text-slate-500" data-vitable-drops-target="status">Ready to launch</p>
+                  <div class="hidden min-w-[320px] max-w-4xl" data-vitable-drops-target="container"></div>
+                </div>
               </td>
             </tr>
           <% end %>

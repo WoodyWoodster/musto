@@ -13,7 +13,8 @@ module Vitable
     :token_runs,
     :request_logs,
     :docs_url,
-    :ruby_docs_url
+    :ruby_docs_url,
+    :widget_base_url
   ) do
     def generated?
       latest_packet.present?

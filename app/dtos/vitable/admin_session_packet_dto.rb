@@ -10,6 +10,7 @@ module Vitable
     :holdback_count,
     :endpoint,
     :authorization_header,
+    :launch_token,
     :launch_token_present,
     :launch_token_expires_at
   ) do
@@ -30,6 +31,7 @@ module Vitable
         holdback_count: totals.fetch("holdback_count", 0),
         endpoint: token_request.fetch("endpoint", "/v1/auth/access-tokens"),
         authorization_header: token_request.fetch("authorization_header", "X-Musto-Widget-Launch"),
+        launch_token: launch_authorization.fetch("token", nil),
         launch_token_present: launch_authorization.fetch("token", nil).present?,
         launch_token_expires_at: parse_time(launch_authorization.fetch("expires_at", nil))
       )
