@@ -136,6 +136,8 @@ module Vitable
       issued_at = Time.current
       response_hash = serialize_response(response)
       issuance = EmbeddedSessionIssuanceDto.from_response(response_hash, issued_at:, sync_run_id: sync_run.id)
+      raise ArgumentError, "Vitable embedded session token response did not include an access token" unless issuance.token_present
+
       persist_issuance(employee, issuance)
 
       sync_run.update!(

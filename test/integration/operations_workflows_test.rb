@@ -4269,6 +4269,33 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     ENV[@connection.api_key_reference] = previous_key
   end
 
+  test "embedded session command fails when token response omits access token" do
+    @employee.update!(vitable_id: "empl_ops_casey")
+    response_class = Data.define(:expires_in, :token_type, :bound_entity)
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:issue_employee_access_token) do |employee_id|
+        response_class.new(expires_in: 3_600, token_type: "Bearer", bound_entity: { id: employee_id, type: "employee" })
+      end
+    end
+    previous_key = ENV[@connection.api_key_reference]
+    ENV[@connection.api_key_reference] = "vit_apk_test_value"
+
+    result = Vitable::IssueEmbeddedSessionCommand.new(
+      dto: Vitable::IssueEmbeddedSessionDto.new(employee_id: @employee.id, requested_by: "integration_admin"),
+      gateway_class:
+    ).call
+
+    assert result.failure?
+    assert_nil @employee.reload.metadata.to_h.fetch("vitable_embedded_session", nil)
+    sync = @connection.sync_runs.where(operation: "embedded_enrollment_token").recent_first.first
+    assert_equal "failed", sync.status
+    assert_match "access token", sync.error_message
+    assert_match "access token", result.errors.to_sentence
+  ensure
+    ENV[@connection.api_key_reference] = previous_key
+  end
+
   test "vitable employer admin sessions workspace exposes token readiness DTOs" do
     prepare_provisioning_profile(remote_id: "empr_ops_123")
     Vitable::GenerateAdminSessionsCommand.new(dto: Vitable::GenerateAdminSessionsDto.new(requested_by: "ops_test")).call
@@ -4390,6 +4417,33 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
 
     detail = Vitable::AdminSessionsQuery.new.call
     assert detail.latest_issuance.active?
+  ensure
+    ENV[@connection.api_key_reference] = previous_key
+  end
+
+  test "employer admin session command fails when token response omits access token" do
+    prepare_provisioning_profile(remote_id: "empr_ops_123")
+    response_class = Data.define(:expires_in, :token_type, :bound_entity)
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:issue_employer_access_token) do |employer_id|
+        response_class.new(expires_in: 3_600, token_type: "Bearer", bound_entity: { id: employer_id, type: "employer" })
+      end
+    end
+    previous_key = ENV[@connection.api_key_reference]
+    ENV[@connection.api_key_reference] = "vit_apk_test_value"
+
+    result = Vitable::IssueAdminSessionCommand.new(
+      dto: Vitable::IssueAdminSessionDto.new(requested_by: "integration_admin"),
+      gateway_class:
+    ).call
+
+    assert result.failure?
+    assert_nil @employer.reload.settings.to_h.fetch("vitable_admin_session", nil)
+    sync = @connection.sync_runs.where(operation: "embedded_admin_token").recent_first.first
+    assert_equal "failed", sync.status
+    assert_match "access token", sync.error_message
+    assert_match "access token", result.errors.to_sentence
   ensure
     ENV[@connection.api_key_reference] = previous_key
   end
