@@ -285,6 +285,17 @@ module Vitable
       sync_run
     end
 
+    def mark_sync_run_needs_credentials(sync_run)
+      message = "#{sync_run.integration_connection.api_key_reference} is not configured"
+      sync_run.update!(
+        status: "needs_credentials",
+        completed_at: Time.current,
+        error_message: message,
+        stats: sync_run.stats.to_h.merge("blocked_reason" => message)
+      )
+      sync_run
+    end
+
     def fail_sync_run(sync_run, error)
       sync_run&.update!(status: "failed", completed_at: Time.current, error_message: error.message)
       sync_run

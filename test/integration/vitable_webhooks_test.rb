@@ -37,6 +37,24 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
     assert_response :accepted
   end
 
+  test "direct resource fetches record missing credentials before gateway calls" do
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:fetch_resource) { |_resource_type, _resource_id| raise "gateway should not be called without credentials" }
+    end
+
+    result = Vitable::FetchResourceCommand.new(
+      dto: Vitable::FetchResourceDto.new(connection_id: @connection.id, resource_type: "employee", resource_id: "empl_missing_key"),
+      gateway_class:
+    ).call
+
+    assert result.failure?
+    sync_run = @connection.sync_runs.where(operation: "fetch", resource_type: "employee").recent_first.first
+    assert_equal "needs_credentials", sync_run.status
+    assert_match "VITABLE_CONNECT_API_KEY", sync_run.error_message
+    assert_equal "VITABLE_CONNECT_API_KEY is not configured", sync_run.stats.fetch("blocked_reason")
+  end
+
   test "fetches and stores current resource snapshot when credentials are present" do
     ENV["VITABLE_CONNECT_API_KEY"] = "vit_apk_test_value"
     gateway_class = Class.new do

@@ -15,6 +15,11 @@ module Vitable
         resource_id: @dto.resource_id
       )
 
+      unless connection.credentials_present?
+        sync_run = @repository.mark_sync_run_needs_credentials(sync_run)
+        return failure(record: sync_run, errors: sync_run.error_message)
+      end
+
       response = @gateway_class.new(connection).fetch_resource(@dto.resource_type, @dto.resource_id)
       reconciliation = reconcile_resource(connection, response)
       @repository.succeed_sync_run(sync_run, response)
