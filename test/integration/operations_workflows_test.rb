@@ -3094,6 +3094,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
               member_id: "mem_remote_casey",
               deductions: [
                 {
+                  id: "ded_remote_casey_primary",
                   benefit_name: "Primary Care",
                   deduction_amount_in_cents: 9900,
                   deduction_category: nil,
@@ -3127,6 +3128,14 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal "active", @employee.metadata.fetch("vitable_remote_status")
     assert_equal "mem_remote_casey", @employee.metadata.fetch("vitable_member_id")
     assert_equal 1, @employee.metadata.fetch("vitable_remote_deductions").count
+    remote_deduction = @payroll_run.payroll_deductions.find_by!(vitable_id: "ded_remote_casey_primary")
+    assert_equal @employee.id, remote_deduction.employee_id
+    assert_equal @enrollment.id, remote_deduction.enrollment_id
+    assert_equal "VITABLE_PRIMARY_CARE", remote_deduction.code
+    assert_equal 9900, remote_deduction.amount_cents
+    assert_equal "ready", remote_deduction.status
+    assert_equal "vitable_remote_roster", remote_deduction.metadata.fetch("source")
+    assert_equal "bi_weekly", remote_deduction.metadata.fetch("frequency")
     manifest_line = @employer.reload.settings.fetch("vitable_census_sync_batch").fetch("employees").first
     assert_equal "synced", manifest_line.fetch("status")
     assert_equal "empl_remote_casey", manifest_line.fetch("remote_employee_id")
@@ -3137,6 +3146,9 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal 1, sync.stats.fetch("remote_employee_count")
     assert_equal 1, sync.stats.fetch("matched_employee_count")
     assert_equal 1, sync.stats.fetch("manifest_synced_count")
+    assert_equal 1, sync.stats.fetch("deduction_created_count")
+    assert_equal 0, sync.stats.fetch("deduction_updated_count")
+    assert_equal 1, @employer.reload.settings.dig("vitable_remote_roster", "deduction_sync", "created_count")
     assert_equal "verified", sync.stats.fetch("verification_status")
     verification = @employer.reload.settings.fetch("vitable_census_roster_verification")
     assert_equal "verified", verification.fetch("status")

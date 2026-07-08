@@ -198,7 +198,8 @@ module Vitable
           "matched_employee_ids" => mapping.fetch("matched_employee_ids"),
           "matched_remote_ids" => mapping.fetch("matched_remote_ids"),
           "unmatched_remote_ids" => mapping.fetch("unmatched_remote_ids"),
-          "verification_status" => verification.fetch("status")
+          "verification_status" => verification.fetch("status"),
+          "deduction_sync" => mapping.fetch("deduction_sync")
         }
       }
       settings_update[VERIFICATION_KEY] = verification if latest_submission.present?
@@ -222,7 +223,10 @@ module Vitable
           "verification_status" => verification.fetch("status"),
           "submitted_employee_count" => verification.fetch("submitted_count"),
           "matched_submitted_count" => verification.fetch("matched_submitted_count"),
-          "missing_submitted_count" => verification.fetch("missing_submitted_count")
+          "missing_submitted_count" => verification.fetch("missing_submitted_count"),
+          "deduction_created_count" => mapping.dig("deduction_sync", "created_count"),
+          "deduction_updated_count" => mapping.dig("deduction_sync", "updated_count"),
+          "deduction_unchanged_count" => mapping.dig("deduction_sync", "unchanged_count")
         )
       )
       sync_run
@@ -359,11 +363,13 @@ module Vitable
       matched = []
       unmatched = []
       matched_employee_ids = []
+      deduction_sync = PayrollDeductionSyncResultDto.empty
 
       remote_employees.each do |remote_employee|
         employee = employee_for_remote(remote_employee)
         if employee
           remote_employee_id = remote_employee.fetch("id", employee.vitable_id)
+          refreshed_at = Time.current.iso8601
           employee.update!(
             vitable_id: remote_employee_id,
             metadata: employee.metadata.to_h.stringify_keys.merge(
@@ -372,8 +378,16 @@ module Vitable
               "vitable_member_id" => remote_employee.fetch("member_id", nil),
               "vitable_remote_reference_id" => remote_employee.fetch("reference_id", nil),
               "vitable_remote_deductions" => remote_employee.fetch("deductions", []),
-              "vitable_last_refreshed_at" => Time.current.iso8601
+              "vitable_last_refreshed_at" => refreshed_at
             ).compact
+          )
+          deduction_sync = deduction_sync.merge(
+            PayrollDeductionRepository.new.sync_employee_deductions(
+              employee:,
+              remote_deductions: remote_employee.fetch("deductions", []),
+              source: "vitable_remote_roster",
+              reconciled_at: refreshed_at
+            )
           )
           matched << remote_employee_id
           matched_employee_ids << employee.id
@@ -387,7 +401,8 @@ module Vitable
         "unmatched_employee_count" => unmatched.compact.count,
         "matched_employee_ids" => matched_employee_ids.compact,
         "matched_remote_ids" => matched.compact,
-        "unmatched_remote_ids" => unmatched.compact
+        "unmatched_remote_ids" => unmatched.compact,
+        "deduction_sync" => deduction_sync.to_metadata
       }
     end
 
