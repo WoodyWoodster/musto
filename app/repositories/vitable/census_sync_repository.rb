@@ -149,18 +149,13 @@ module Vitable
 
     def mark_sync_succeeded(sync_run, response)
       response_hash = serialize_response(response)
-      data = response_hash.fetch("data", response_hash)
-      accepted_at = data.fetch("accepted_at", nil)
-      raise ArgumentError, "Vitable census sync response did not include accepted_at" if accepted_at.blank?
-
-      remote_employer_id = data.fetch("employer_id", nil)
-      raise ArgumentError, "Vitable census sync response did not include a remote employer ID" if remote_employer_id.blank?
+      dto = RemoteCensusSyncResponseDto.from_hash(response_hash).validate!(expected_employer_id: @employer.vitable_id)
 
       submitted_at = Time.current.iso8601
       submission = census_submission_payload(
         manifest: latest_manifest,
-        accepted_at:,
-        remote_employer_id:,
+        accepted_at: dto.accepted_at,
+        remote_employer_id: dto.remote_employer_id,
         submitted_at:
       )
       mark_manifest_submitted(submission)
@@ -171,8 +166,8 @@ module Vitable
         error_message: nil,
         stats: sync_run.stats.to_h.merge(
           "remote_response" => response_hash,
-          "remote_accepted_at" => accepted_at,
-          "remote_employer_id" => remote_employer_id,
+          "remote_accepted_at" => dto.accepted_at,
+          "remote_employer_id" => dto.remote_employer_id,
           "submitted_employee_count" => submission.fetch("ready_count", 0),
           "offboarding_omission_count" => submission.fetch("offboarding_omission_count", 0)
         )
