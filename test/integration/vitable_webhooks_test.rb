@@ -325,7 +325,15 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
             id: resource_id,
             email: "riley.casematch@example.com",
             status: "active",
-            member_id: "mem_remote_riley_case"
+            member: { id: "mem_remote_riley_case" },
+            start_date: "2026-02-01",
+            phone_number: "4155556767",
+            address: {
+              line1: "88 Mission St",
+              city: "San Francisco",
+              state: "CA",
+              postal_code: "94105"
+            }
           }
         }
       end
@@ -351,6 +359,10 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
     assert_equal employee.id, reconciliation.fetch("local_record_id")
     assert_equal "empl_remote_riley_case", employee.reload.vitable_id
     assert_equal "mem_remote_riley_case", employee.metadata.fetch("vitable_member_id")
+    assert_equal Date.new(2026, 2, 1), employee.start_on
+    assert_equal "4155556767", employee.metadata.fetch("vitable_remote_phone")
+    assert_equal "88 Mission St", employee.metadata.dig("vitable_remote_address", "address_line_1")
+    assert_equal "94105", employee.metadata.dig("vitable_remote_address", "zipcode")
   ensure
     ENV.delete("VITABLE_CONNECT_API_KEY")
   end

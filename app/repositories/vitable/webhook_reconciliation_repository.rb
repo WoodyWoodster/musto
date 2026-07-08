@@ -37,10 +37,11 @@ module Vitable
     private
 
     def reconcile_employee_resource(remote_resource)
+      dto = RemoteEmployeeDto.from_hash(remote_resource)
       employee, matched_by = employee_match_for(remote_resource)
       return reconciliation_result(status: "unmatched", remote_resource:, warnings: [ "No local employee matched this Vitable resource." ]) unless employee
 
-      remote_id = remote_resource_id(remote_resource)
+      remote_id = dto.remote_employee_id.presence || remote_resource_id(remote_resource)
       return remote_id_conflict_result(remote_resource, employee, matched_by) if remote_id_conflict?(employee, remote_id)
 
       timestamp = Time.current.iso8601
@@ -51,40 +52,30 @@ module Vitable
         update_attributes[:vitable_id] = remote_id
         applied_changes << "vitable_id"
       end
-      local_employment_status = employee_employment_status_for(remote_resource)
+      local_employment_status = employee_employment_status_for(dto)
       if local_employment_status.present? && employee.employment_status != local_employment_status
         update_attributes[:employment_status] = local_employment_status
         applied_changes << "employment_status"
       end
-      remote_hire_date = remote_employee_hire_date(remote_resource)
-      if remote_hire_date.present? && employee.start_on != remote_hire_date
-        update_attributes[:start_on] = remote_hire_date
+      if dto.hire_date.present? && employee.start_on != dto.hire_date
+        update_attributes[:start_on] = dto.hire_date
         applied_changes << "start_on"
       end
 
-      metadata_updates = {
-        "vitable_remote_status" => remote_resource.fetch("status", nil),
-        "vitable_member_id" => remote_resource.fetch("member_id", nil),
-        "vitable_remote_employee_class" => remote_resource.fetch("employee_class", nil),
-        "vitable_remote_hire_date" => remote_hire_date&.iso8601,
-        "vitable_remote_termination_date" => remote_employee_termination_date(remote_resource)&.iso8601,
-        "vitable_remote_date_of_birth" => remote_date(remote_resource, "date_of_birth")&.iso8601,
-        "vitable_remote_phone" => remote_resource.fetch("phone", nil),
-        "vitable_remote_address" => remote_employee_address(remote_resource),
+      metadata_updates = dto.metadata(
+        source: "vitable_webhook_resource",
+        refreshed_at: timestamp
+      ).merge(
         "vitable_last_refreshed_at" => timestamp,
         "vitable_last_webhook_event_id" => @event.event_id,
-        "vitable_last_webhook_event_name" => @event.event_name,
-        "vitable_last_resource_snapshot" => remote_resource_summary(
-          remote_resource,
-          %w[id reference_id email first_name last_name status member_id employee_class hire_date termination_date date_of_birth phone]
-        )
-      }.merge(employee_event_metadata(remote_resource, timestamp)).compact
+        "vitable_last_webhook_event_name" => @event.event_name
+      ).merge(employee_event_metadata(remote_resource, timestamp)).compact
 
       update_attributes[:metadata] = employee.metadata.to_h.stringify_keys.merge(metadata_updates)
       applied_changes.concat(metadata_updates.keys.map { |key| "metadata.#{key}" })
       employee.update!(update_attributes)
-      applied_changes.concat(apply_employee_payroll_deductions(employee, remote_resource, timestamp))
-      applied_changes.concat(deactivate_employee_benefits(employee, remote_resource, timestamp).applied_changes)
+      applied_changes.concat(apply_employee_payroll_deductions(employee, dto, timestamp))
+      applied_changes.concat(deactivate_employee_benefits(employee, dto, timestamp).applied_changes)
 
       reconciliation_result(status: "matched", remote_resource:, local_record: employee, matched_by:, applied_changes:)
     end
@@ -504,7 +495,7 @@ module Vitable
 
       case @event.resource_type
       when "employee"
-        raise ArgumentError, "Vitable employee resource #{reference} did not include a remote member ID" if remote_resource.fetch("member_id", nil).blank?
+        raise ArgumentError, "Vitable employee resource #{reference} did not include a remote member ID" if RemoteEmployeeDto.from_hash(remote_resource).member_id.blank?
       when "enrollment"
         raise ArgumentError, "Vitable enrollment resource #{reference} did not include a remote employee ID" if remote_resource.fetch("employee_id", nil).blank?
         raise ArgumentError, "Vitable enrollment resource #{reference} did not include a remote benefit ID" if remote_resource.dig("benefit", "id").blank?
@@ -566,21 +557,6 @@ module Vitable
       nil
     end
 
-    def remote_employee_hire_date(remote_resource)
-      remote_date(remote_resource, "hire_date") || remote_date(remote_resource, "start_date")
-    end
-
-    def remote_employee_termination_date(remote_resource)
-      remote_date(remote_resource, "termination_date") || remote_date(remote_resource, "terminated_on")
-    end
-
-    def remote_employee_address(remote_resource)
-      address = remote_resource.fetch("address", nil)
-      return unless address.respond_to?(:to_h)
-
-      address.to_h.stringify_keys.slice("address_line_1", "address_line_2", "city", "state", "zipcode").compact
-    end
-
     def apply_enrollment_payroll_deductions(enrollment, local_status, remote_resource, timestamp)
       return [] unless local_status.present?
 
@@ -631,10 +607,9 @@ module Vitable
       end
     end
 
-    def employee_employment_status_for(remote_resource)
-      normalized = remote_resource.fetch("status", nil).to_s.downcase
-      return "terminated" if normalized.in?(%w[inactive deactivated terminated])
-      return "active" if normalized.in?(%w[active reactivated])
+    def employee_employment_status_for(dto)
+      local_status = dto.local_employment_status
+      return local_status if local_status.present?
       return "terminated" if @event.event_name == "employee.deactivated"
 
       nil
@@ -657,10 +632,10 @@ module Vitable
       remote_resource.slice(*keys).compact
     end
 
-    def apply_employee_payroll_deductions(employee, remote_resource, timestamp)
+    def apply_employee_payroll_deductions(employee, dto, timestamp)
       result = PayrollDeductionRepository.new.sync_employee_deductions(
         employee:,
-        remote_deductions: remote_resource.fetch("deductions", []),
+        remote_deductions: dto.deductions,
         source: "vitable_webhook_resource",
         source_event: @event,
         reconciled_at: timestamp
@@ -668,8 +643,8 @@ module Vitable
       result.changed_ids.map { |id| "payroll_deductions.#{id}" }
     end
 
-    def deactivate_employee_benefits(employee, remote_resource, timestamp)
-      return EmployeeLifecycleReconciliationDto.empty unless deactivate_employee_benefits?(remote_resource)
+    def deactivate_employee_benefits(employee, dto, timestamp)
+      return EmployeeLifecycleReconciliationDto.empty unless deactivate_employee_benefits?(dto)
 
       EmployeeEligibilityRepository.new.deactivate_benefits!(
         employee:,
@@ -679,8 +654,8 @@ module Vitable
       )
     end
 
-    def deactivate_employee_benefits?(remote_resource)
-      employee_employment_status_for(remote_resource) == "terminated" ||
+    def deactivate_employee_benefits?(dto)
+      employee_employment_status_for(dto) == "terminated" ||
         @event.event_name == "employee.eligibility_terminated"
     end
 
