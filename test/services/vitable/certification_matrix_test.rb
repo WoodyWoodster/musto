@@ -10,6 +10,14 @@ module Vitable
       end
     end
 
+    test "api scope excludes webhook certification rows" do
+      api_operations = CertificationMatrix.cases(scope: "api").map { |entry| entry.fetch(:operation) }
+
+      assert_not_empty api_operations
+      assert_empty api_operations.select { |operation| operation.start_with?("webhook") }
+      assert_operator CertificationMatrix.cases(scope: "api").count, :<, CertificationMatrix.cases.count
+    end
+
     test "maps every installed SDK method covered by the gateway" do
       certified_pairs = CertificationMatrix.sdk_method_pairs
       expected_pairs = ClientGateway::SDK_METHOD_COVERAGE.flat_map do |entry|

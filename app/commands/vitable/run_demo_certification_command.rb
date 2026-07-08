@@ -1,6 +1,7 @@
 require "fileutils"
 require "json"
 require "securerandom"
+require "set"
 require "uri"
 require "vitable_connect"
 
@@ -33,6 +34,8 @@ module Vitable
       @sleeper = sleeper
       @rows = []
       @context = {}
+      @matrix_cases = CertificationMatrix.cases(scope: @dto.scope)
+      @matrix_keys = @matrix_cases.map { |entry| entry.fetch(:key) }.to_set
     end
 
     def call
@@ -40,7 +43,8 @@ module Vitable
       @sync_run = @repository.create_demo_certification_run(
         connection: @connection,
         requested_by: @dto.requested_by,
-        matrix: CertificationMatrix.cases
+        matrix: @matrix_cases,
+        scope: @dto.scope
       )
 
       unless @connection.credentials_present?
@@ -100,32 +104,38 @@ module Vitable
     end
 
     def run_certification_cases
-      certify_auth_token
-      certify_employer_list
-      certify_employer_create
-      certify_employer_retrieve
-      certify_employer_settings
-      certify_employer_bound_token
-      certify_eligibility_policy_create
-      certify_eligibility_policy_retrieve
-      certify_plan_list
-      certify_census_sync
-      certify_employer_employees
-      certify_employee_retrieve
-      certify_employee_bound_token
-      certify_employee_enrollments
-      certify_enrollment_retrieve
-      certify_group_list
-      certify_group_create
-      certify_group_retrieve
-      certify_group_update
-      certify_group_member_sync_submit
-      certify_group_member_sync_retrieve
-      certify_webhook_event_list
-      certify_webhook_event_retrieve
-      certify_webhook_event_deliveries
-      certify_remote_webhook_delivery
-      certify_local_signed_webhook_fixtures
+      run_selected("auth.issue_access_token") { certify_auth_token }
+      run_selected("employer.list") { certify_employer_list }
+      run_selected("employer.create") { certify_employer_create }
+      run_selected("employer.retrieve") { certify_employer_retrieve }
+      run_selected("employer.update_settings") { certify_employer_settings }
+      run_selected("auth.issue_employer_access_token") { certify_employer_bound_token }
+      run_selected("employer.eligibility_policy.create") { certify_eligibility_policy_create }
+      run_selected("eligibility_policy.retrieve") { certify_eligibility_policy_retrieve }
+      run_selected("plan.list") { certify_plan_list }
+      run_selected("employer.census_sync") { certify_census_sync }
+      run_selected("employer.list_employees") { certify_employer_employees }
+      run_selected("employee.retrieve") { certify_employee_retrieve }
+      run_selected("auth.issue_employee_access_token") { certify_employee_bound_token }
+      run_selected("employee.list_enrollments") { certify_employee_enrollments }
+      run_selected("enrollment.retrieve") { certify_enrollment_retrieve }
+      run_selected("group.list") { certify_group_list }
+      run_selected("group.create") { certify_group_create }
+      run_selected("group.retrieve") { certify_group_retrieve }
+      run_selected("group.update") { certify_group_update }
+      run_selected("group.member_sync.submit") { certify_group_member_sync_submit }
+      run_selected("group.member_sync.retrieve") { certify_group_member_sync_retrieve }
+      run_selected("webhook_event.list") { certify_webhook_event_list }
+      run_selected("webhook_event.retrieve") { certify_webhook_event_retrieve }
+      run_selected("webhook_event.list_deliveries") { certify_webhook_event_deliveries }
+      run_selected("webhook.remote_delivery") { certify_remote_webhook_delivery }
+      run_selected("webhook.local_signed_fixtures") { certify_local_signed_webhook_fixtures }
+    end
+
+    def run_selected(key)
+      return unless @matrix_keys.include?(key)
+
+      yield
     end
 
     def certify_auth_token
@@ -473,10 +483,10 @@ module Vitable
       remote_ids = @context.fetch(:remote_ids, {})
       failed_count = @rows.count { |entry| entry.fetch("status") != "passed" }
       counts = {
-        "case_count" => CertificationMatrix.cases.count,
+        "case_count" => @matrix_cases.count,
         "passed_count" => @rows.count { |entry| entry.fetch("status") == "passed" },
         "failed_count" => failed_count,
-        "missing_case_count" => CertificationMatrix.cases.count - @rows.count,
+        "missing_case_count" => @matrix_cases.count - @rows.count,
         "write_case_count" => @rows.count { |entry| entry.fetch("method").in?(%w[POST PUT PATCH]) && entry.fetch("status") == "passed" },
         "get_case_count" => @rows.count { |entry| entry.fetch("method") == "GET" && entry.fetch("status") == "passed" }
       }
@@ -488,6 +498,7 @@ module Vitable
         base_url: @connection&.sdk_base_url || Configuration::PRODUCTION_API_BASE_URL,
         checked_at:,
         sdk_version: VitableConnect::VERSION,
+        scope: @dto.scope,
         public_webhook_url: @dto.public_webhook_url,
         cases: @rows,
         counts:,

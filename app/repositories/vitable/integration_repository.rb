@@ -646,15 +646,16 @@ module Vitable
       sync_run
     end
 
-    def create_demo_certification_run(connection:, requested_by:, matrix:)
+    def create_demo_certification_run(connection:, requested_by:, matrix:, scope: "full")
       connection.sync_runs.create!(
         resource_type: "connection",
-        operation: "demo_certification",
+        operation: scope.to_s == "api" ? "demo_api_certification" : "demo_certification",
         status: "running",
         started_at: Time.current,
         stats: {
           "requested_by" => requested_by,
           "resource_id" => "connection_#{connection.id}",
+          "scope" => scope,
           "environment" => connection.environment,
           "base_url" => connection.sdk_base_url,
           "case_count" => matrix.count,

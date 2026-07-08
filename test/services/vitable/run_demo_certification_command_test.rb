@@ -33,6 +33,7 @@ module Vitable
       assert_equal "succeeded", sync_run.status
       assert_equal "demo_certification", sync_run.operation
       assert report.certified?
+      assert_equal "full", report.scope
       assert_equal CertificationMatrix.cases.count, report.counts.fetch("passed_count")
       assert_equal 0, report.counts.fetch("failed_count")
       assert_equal "certified", snapshot.fetch("status")
@@ -42,6 +43,28 @@ module Vitable
       assert_not_empty @connection.api_request_logs
       assert_not_includes File.read(report.artifact_paths.fetch("json")), "vit_at_secret"
       assert_includes File.read(report.artifact_paths.fetch("markdown")), "Vitable Demo Certification"
+    end
+
+    test "certifies API scope without webhook proof inputs" do
+      set_vitable_env(Vitable::Configuration::DEFAULT_API_KEY_REFERENCE => "vit_apk_test_value")
+
+      result = command(
+        gateway_class: successful_gateway_class,
+        scope: "api",
+        public_webhook_url: nil,
+        webhook_secret_reference: nil
+      ).call
+
+      assert result.success?
+      report = result.value
+
+      assert report.certified?
+      assert_equal "api", report.scope
+      assert_equal "demo_api_certification", result.record.operation
+      assert_nil report.public_webhook_url
+      assert_equal CertificationMatrix.cases(scope: "api").count, report.counts.fetch("case_count")
+      assert_equal CertificationMatrix.cases(scope: "api").count, report.counts.fetch("passed_count")
+      assert_empty report.cases.select { |entry| entry.fetch("operation").start_with?("webhook") }
     end
 
     test "records needs credentials when the configured API key is unavailable" do
@@ -85,17 +108,18 @@ module Vitable
 
     private
 
-    def command(gateway_class:)
+    def command(gateway_class:, scope: "full", public_webhook_url: PUBLIC_WEBHOOK_URL, webhook_secret_reference: Vitable::Configuration::DEFAULT_WEBHOOK_SECRET_REFERENCE)
       RunDemoCertificationCommand.new(
         dto: RunDemoCertificationDto.new(
           connection_id: @connection.id,
           environment: "demo",
           api_key_reference: Vitable::Configuration::DEFAULT_API_KEY_REFERENCE,
-          webhook_secret_reference: Vitable::Configuration::DEFAULT_WEBHOOK_SECRET_REFERENCE,
-          public_webhook_url: PUBLIC_WEBHOOK_URL,
+          webhook_secret_reference:,
+          public_webhook_url:,
           requested_by: "test",
           artifact_dir: @artifact_dir.to_s,
-          webhook_wait_seconds: 0
+          webhook_wait_seconds: 0,
+          scope:
         ),
         gateway_class:
       )

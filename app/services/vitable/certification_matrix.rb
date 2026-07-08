@@ -1,5 +1,7 @@
 module Vitable
   module CertificationMatrix
+    SUPPORTED_SCOPES = %w[full api].freeze
+
     CASES = [
       {
         key: "auth.issue_access_token",
@@ -267,8 +269,15 @@ module Vitable
       }
     ].freeze
 
-    def self.cases
-      CASES.map(&:dup)
+    def self.cases(scope: "full")
+      selected_cases = case normalized_scope(scope)
+      when "full"
+        CASES
+      when "api"
+        CASES.reject { |entry| webhook_case?(entry) }
+      end
+
+      selected_cases.map(&:dup)
     end
 
     def self.keys
@@ -285,6 +294,17 @@ module Vitable
 
         [ entry.fetch(:sdk_resource_class), entry.fetch(:sdk_method).to_s ]
       end.uniq
+    end
+
+    def self.normalized_scope(scope)
+      normalized = scope.to_s.presence || "full"
+      return normalized if SUPPORTED_SCOPES.include?(normalized)
+
+      raise ArgumentError, "unknown Vitable certification scope #{scope.inspect}"
+    end
+
+    def self.webhook_case?(entry)
+      entry.fetch(:key).start_with?("webhook")
     end
   end
 end

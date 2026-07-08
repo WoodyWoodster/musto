@@ -5,6 +5,7 @@ module Vitable
     :checked_at,
     :sdk_version,
     :certification_id,
+    :scope,
     :public_webhook_url,
     :cases,
     :counts,
@@ -12,12 +13,13 @@ module Vitable
     :artifact_paths
   ) do
     def certified?
-      cases.all? { |entry| entry.fetch("status") == "passed" }
+      counts.fetch("failed_count", 0).zero? && counts.fetch("missing_case_count", 0).zero?
     end
 
     def to_h
       {
         "certification_id" => certification_id,
+        "scope" => scope,
         "environment" => environment,
         "base_url" => base_url,
         "checked_at" => checked_at.iso8601,
@@ -36,6 +38,7 @@ module Vitable
         "# Vitable Demo Certification",
         "",
         "- Certification ID: `#{certification_id}`",
+        "- Scope: `#{scope}`",
         "- Environment: `#{environment}`",
         "- Base URL: `#{base_url}`",
         "- Checked at: `#{checked_at.iso8601}`",
