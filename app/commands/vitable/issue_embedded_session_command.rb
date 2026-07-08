@@ -24,7 +24,7 @@ module Vitable
       end
 
       response = @gateway_class.new(@repository.connection).issue_employee_access_token(employee.vitable_id)
-      sync_run = @repository.mark_token_succeeded(sync_run, response)
+      sync_run = @repository.mark_token_succeeded(sync_run, response, employee:)
       success(record: sync_run, value: response)
     rescue VitableConnect::Errors::APIError => e
       @repository.mark_token_failed(sync_run, e)

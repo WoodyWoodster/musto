@@ -3311,7 +3311,25 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal "succeeded", sync.status
     assert_equal "[FILTERED]", sync.stats.dig("token_response", "access_token")
     assert_equal 3_600, sync.stats.dig("token_response", "expires_in")
+    assert_equal "issued", sync.stats.dig("issuance", "status")
+    assert_equal @employee.vitable_id, sync.stats.dig("issuance", "bound_entity", "id")
+    assert_equal true, sync.stats.dig("issuance", "token_present")
     assert_not_includes sync.stats.to_json, "vit_at_secret_value"
+
+    @employee.reload
+    assert_equal "issued", @employee.metadata.dig("vitable_embedded_session", "status")
+    assert_equal sync.id, @employee.metadata.dig("vitable_embedded_session", "sync_run_id")
+    assert_not_includes @employee.metadata.to_json, "vit_at_secret_value"
+
+    packet_line = @employer.reload.settings.fetch("vitable_embedded_sessions_packet").fetch("employees").first
+    assert_equal "session_issued", packet_line.fetch("status")
+    assert_equal "issued", packet_line.dig("latest_session", "status")
+    assert_equal @employee.vitable_id, packet_line.dig("latest_session", "bound_entity", "id")
+
+    detail = Vitable::EmbeddedSessionsQuery.new.call
+    employee_line = detail.employees.first
+    assert_equal "issued", employee_line.session_status
+    assert employee_line.session_active?
   ensure
     ENV[@connection.api_key_reference] = previous_key
   end

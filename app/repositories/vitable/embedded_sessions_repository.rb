@@ -124,12 +124,20 @@ module Vitable
       sync_run
     end
 
-    def mark_token_succeeded(sync_run, response)
+    def mark_token_succeeded(sync_run, response, employee:)
+      issued_at = Time.current
+      response_hash = serialize_response(response)
+      issuance = EmbeddedSessionIssuanceDto.from_response(response_hash, issued_at:, sync_run_id: sync_run.id)
+      persist_issuance(employee, issuance)
+
       sync_run.update!(
         status: "succeeded",
-        completed_at: Time.current,
+        completed_at: issued_at,
         error_message: nil,
-        stats: sync_run.stats.to_h.merge("token_response" => token_summary(response))
+        stats: sync_run.stats.to_h.merge(
+          "token_response" => token_summary(response_hash),
+          "issuance" => issuance.to_metadata
+        )
       )
       sync_run
     end
@@ -209,8 +217,33 @@ module Vitable
       "ready"
     end
 
+    def persist_issuance(employee, issuance)
+      session_metadata = issuance.to_metadata
+      employee.update!(
+        metadata: employee.metadata.to_h.stringify_keys.merge(
+          "vitable_embedded_session" => session_metadata
+        )
+      )
+
+      packet = latest_packet.to_h.deep_dup
+      return if packet.blank?
+
+      packet["employees"] = packet.fetch("employees", []).map do |line|
+        attributes = line.to_h.stringify_keys
+        next attributes unless attributes.fetch("employee_id", nil).to_i == employee.id
+
+        attributes.merge(
+          "status" => "session_issued",
+          "latest_session" => session_metadata,
+          "readiness_reason" => "Employee-bound Vitable access token issued; token value was not persisted."
+        )
+      end
+
+      @employer.update!(settings: @employer.settings.to_h.merge("vitable_embedded_sessions_packet" => packet))
+    end
+
     def token_summary(response)
-      attributes = serialize_response(response)
+      attributes = response.to_h.deep_stringify_keys
       attributes["access_token"] = "[FILTERED]" if attributes.key?("access_token")
       attributes
     end

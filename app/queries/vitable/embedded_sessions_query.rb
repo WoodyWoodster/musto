@@ -37,6 +37,7 @@ module Vitable
 
       [
         EmbeddedSessionMetricDto.new(label: "Session-ready", value: employees.count, hint: "employees with remote Vitable IDs", status: employees.any? ? "ready" : "needs_review", accent: "bg-cyan-500", format: "number"),
+        EmbeddedSessionMetricDto.new(label: "Active sessions", value: employees.count(&:session_active?), hint: "employee-bound tokens still inside expiry", status: employees.any?(&:session_active?) ? "ready" : "pending", accent: "bg-emerald-500", format: "number"),
         EmbeddedSessionMetricDto.new(label: "Pending elections", value: latest_packet&.pending_election_count || 0, hint: "can open embedded enrollment", status: latest_packet&.pending_election_count.to_i.positive? ? "ready" : "pending", accent: "bg-indigo-500", format: "number"),
         EmbeddedSessionMetricDto.new(label: "Holdbacks", value: holdbacks.count, hint: "remote IDs or election data missing", status: holdbacks.any? ? "blocked" : "ready", accent: "bg-rose-500", format: "number"),
         EmbeddedSessionMetricDto.new(label: "Last token", value: last_token_run&.status&.humanize || "Not issued", hint: connection ? "employee-bound access token audit" : "no Vitable connection", status: last_token_run&.status || "pending", accent: "bg-emerald-500", format: "text")
