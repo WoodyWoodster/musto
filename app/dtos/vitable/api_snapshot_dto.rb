@@ -18,6 +18,11 @@ module Vitable
     :matched_eligibility_policy_count,
     :errored_eligibility_policy_count,
     :remote_webhook_event_count,
+    :webhook_event_resource_counts,
+    :payload_only_webhook_event_count,
+    :dependent_webhook_event_count,
+    :payroll_deduction_webhook_event_count,
+    :plan_year_webhook_event_count,
     :imported_webhook_event_count,
     :existing_webhook_event_count,
     :webhook_recovery_candidate_count,
@@ -42,6 +47,7 @@ module Vitable
       counts = payload.fetch("counts", {}).to_h
       employee_enrollments = payload.fetch("employee_enrollments", [])
       remote_employee_rosters = payload.fetch("remote_employee_rosters", [])
+      webhook_resource_counts = counts.fetch("webhook_event_resource_counts", {}).to_h
 
       new(
         refreshed_at: payload["refreshed_at"].present? ? Time.iso8601(payload.fetch("refreshed_at")) : nil,
@@ -62,6 +68,11 @@ module Vitable
         matched_eligibility_policy_count: counts.fetch("matched_eligibility_policy_count", 0),
         errored_eligibility_policy_count: counts.fetch("errored_eligibility_policy_count", 0),
         remote_webhook_event_count: counts.fetch("remote_webhook_event_count", 0),
+        webhook_event_resource_counts: webhook_resource_counts,
+        payload_only_webhook_event_count: counts.fetch("payload_only_webhook_event_count", 0),
+        dependent_webhook_event_count: counts.fetch("dependent_webhook_event_count", webhook_resource_counts.fetch("dependent", 0)),
+        payroll_deduction_webhook_event_count: counts.fetch("payroll_deduction_webhook_event_count", webhook_resource_counts.fetch("payroll_deduction", 0)),
+        plan_year_webhook_event_count: counts.fetch("plan_year_webhook_event_count", webhook_resource_counts.fetch("plan_year", 0)),
         imported_webhook_event_count: counts.fetch("imported_webhook_event_count", 0),
         existing_webhook_event_count: counts.fetch("existing_webhook_event_count", 0),
         webhook_recovery_candidate_count: counts.fetch("webhook_recovery_candidate_count", 0),

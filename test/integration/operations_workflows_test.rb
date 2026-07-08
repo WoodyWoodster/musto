@@ -3213,6 +3213,12 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       )
     )
     @employee.update!(vitable_id: "empl_remote_casey")
+    plan_year = Date.current.year + 1
+    @plan.update!(
+      plan_year:,
+      effective_on: Date.new(plan_year, 1, 1),
+      expires_on: Date.new(plan_year, 12, 31)
+    )
     existing_event = @connection.webhook_events.create!(
       event_id: "wevt_existing_remote",
       organization_external_id: @organization.external_id,
@@ -3241,6 +3247,58 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
         resource_type: "employee",
         resource_id: "empl_remote_casey",
         created_at: 90.seconds.ago.iso8601
+      },
+      {
+        id: "wevt_remote_dependent_payload",
+        organization_id: @organization.external_id,
+        event_name: "dependent.updated",
+        resource_type: "dependent",
+        resource_id: "dep_remote_harper",
+        created_at: 75.seconds.ago.iso8601,
+        data: {
+          id: "dep_remote_harper",
+          employee_id: "empl_remote_casey",
+          first_name: @dependent.first_name,
+          last_name: @dependent.last_name,
+          relationship: @dependent.relationship,
+          date_of_birth: @dependent.date_of_birth.iso8601,
+          status: "active"
+        }
+      },
+      {
+        id: "wevt_remote_deduction_payload",
+        organization_id: @organization.external_id,
+        event_name: "employee.deduction_created",
+        resource_type: "payroll_deduction",
+        resource_id: "pded_remote_primary",
+        created_at: 70.seconds.ago.iso8601,
+        data: {
+          id: "pded_remote_primary",
+          employee_id: "empl_remote_casey",
+          benefit_name: "Benefits",
+          amount_cents: 9_900,
+          period_start_on: @payroll_run.period_start_on.iso8601,
+          period_end_on: @payroll_run.period_end_on.iso8601,
+          status: "active"
+        }
+      },
+      {
+        id: "wevt_remote_plan_year_payload",
+        organization_id: @organization.external_id,
+        event_name: "plan_year.updated",
+        resource_type: "plan_year",
+        resource_id: "pyear_remote_#{plan_year}",
+        created_at: 65.seconds.ago.iso8601,
+        data: {
+          id: "pyear_remote_#{plan_year}",
+          employer_id: "empr_ops_123",
+          plan_year:,
+          starts_on: Date.new(plan_year, 1, 1).iso8601,
+          ends_on: Date.new(plan_year, 12, 31).iso8601,
+          open_enrollment_starts_on: @open_enrollment_campaign.starts_on.iso8601,
+          open_enrollment_ends_on: @open_enrollment_campaign.ends_on.iso8601,
+          status: "active"
+        }
       },
       {
         id: existing_event.event_id,
@@ -3272,6 +3330,10 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     ]
     response_class = Data.define(:data)
     gateway_class = Class.new do
+      define_singleton_method(:retrievable_resource_type?) { |resource_type| Vitable::ClientGateway.retrievable_resource_type?(resource_type) }
+      define_singleton_method(:webhook_resource_type?) { |resource_type| Vitable::ClientGateway.webhook_resource_type?(resource_type) }
+      define_singleton_method(:payload_only_webhook_resource_type?) { |resource_type| Vitable::ClientGateway.payload_only_webhook_resource_type?(resource_type) }
+
       define_method(:initialize) { |_connection| }
       define_method(:list_all_employers) { response_class.new(data: [ { id: "empr_ops_123", name: "Atlas Global Services" } ]) }
       define_method(:list_all_groups) { response_class.new(data: [ { id: "grp_ops_123", name: "Atlas Care Group" } ]) }
@@ -3312,7 +3374,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     previous_key = ENV[@connection.api_key_reference]
     ENV[@connection.api_key_reference] = "vit_apk_test_value"
 
-    assert_difference -> { WebhookEvent.count }, 2 do
+    assert_difference -> { WebhookEvent.count }, 5 do
       result = Vitable::RefreshApiSnapshotCommand.new(
         dto: Vitable::RefreshApiSnapshotDto.new(connection_id: @connection.id, requested_by: "integration_admin"),
         gateway_class:
@@ -3328,11 +3390,19 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal 1, snapshot.dig("counts", "remote_eligibility_policy_count")
     assert_equal 1, snapshot.dig("counts", "matched_eligibility_policy_count")
     assert_equal 0, snapshot.dig("counts", "errored_eligibility_policy_count")
-    assert_equal 6, snapshot.dig("counts", "remote_webhook_event_count")
-    assert_equal 2, snapshot.dig("counts", "imported_webhook_event_count")
+    assert_equal 9, snapshot.dig("counts", "remote_webhook_event_count")
+    assert_equal 3, snapshot.dig("counts", "payload_only_webhook_event_count")
+    assert_equal 1, snapshot.dig("counts", "dependent_webhook_event_count")
+    assert_equal 1, snapshot.dig("counts", "payroll_deduction_webhook_event_count")
+    assert_equal 1, snapshot.dig("counts", "plan_year_webhook_event_count")
+    assert_equal 3, snapshot.dig("counts", "webhook_event_resource_counts", "employee")
+    assert_equal 1, snapshot.dig("counts", "webhook_event_resource_counts", "dependent")
+    assert_equal 1, snapshot.dig("counts", "webhook_event_resource_counts", "payroll_deduction")
+    assert_equal 1, snapshot.dig("counts", "webhook_event_resource_counts", "plan_year")
+    assert_equal 5, snapshot.dig("counts", "imported_webhook_event_count")
     assert_equal 1, snapshot.dig("counts", "existing_webhook_event_count")
-    assert_equal 2, snapshot.dig("counts", "webhook_recovery_candidate_count")
-    assert_equal 2, snapshot.dig("counts", "recovered_webhook_event_count")
+    assert_equal 5, snapshot.dig("counts", "webhook_recovery_candidate_count")
+    assert_equal 5, snapshot.dig("counts", "recovered_webhook_event_count")
     assert_equal 0, snapshot.dig("counts", "failed_webhook_recovery_count")
     assert_equal 0, snapshot.dig("counts", "skipped_webhook_recovery_count")
     assert_equal 1, snapshot.dig("counts", "remote_employee_enrollment_count")
@@ -3372,23 +3442,49 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal "processed", external_org_event.status
     assert_equal "vitable_webhook_events_api", external_org_event.metadata.dig("remote_webhook_event_snapshot", "source")
 
+    dependent_payload_event = WebhookEvent.find_by!(event_id: "wevt_remote_dependent_payload")
+    assert_equal "processed", dependent_payload_event.status
+    assert_equal "matched", dependent_payload_event.metadata.dig("resource_reconciliation", "status")
+    assert_equal "dep_remote_harper", @dependent.reload.vitable_id
+    assert_equal "wevt_remote_dependent_payload", @dependent.metadata.fetch("vitable_last_webhook_event_id")
+
+    deduction_payload_event = WebhookEvent.find_by!(event_id: "wevt_remote_deduction_payload")
+    assert_equal "processed", deduction_payload_event.status
+    assert_equal "matched", deduction_payload_event.metadata.dig("resource_reconciliation", "status")
+    synced_deduction = @payroll_run.payroll_deductions.find_by!(code: "VITABLE_BENEFITS")
+    assert_equal "pded_remote_primary", synced_deduction.vitable_id
+    assert_equal "wevt_remote_deduction_payload", synced_deduction.metadata.fetch("last_webhook_event_id")
+
+    plan_year_payload_event = WebhookEvent.find_by!(event_id: "wevt_remote_plan_year_payload")
+    assert_equal "processed", plan_year_payload_event.status
+    assert_equal "matched", plan_year_payload_event.metadata.dig("resource_reconciliation", "status")
+    assert_equal "pyear_remote_#{plan_year}", @plan.reload.metadata.fetch("vitable_plan_year_id")
+    assert_equal "wevt_remote_plan_year_payload", @open_enrollment_campaign.reload.metadata.fetch("vitable_plan_year_last_webhook_event_id")
+
     assert_equal "processed", existing_event.reload.status
     assert existing_event.processed_at.present?
     assert_equal "vitable_webhook_events_api", existing_event.metadata.dig("remote_webhook_event_snapshot", "source")
     assert_nil WebhookEvent.find_by(event_id: "wevt_other_org")
 
     sync = @connection.sync_runs.where(operation: "api_snapshot_refresh").recent_first.first
-    assert_equal 2, sync.stats.dig("webhook_event_ingestion", "created_count")
+    assert_equal 5, sync.stats.dig("webhook_event_ingestion", "created_count")
     assert_equal 1, sync.stats.dig("webhook_event_ingestion", "existing_count")
     assert_equal 3, sync.stats.dig("webhook_event_ingestion", "skipped_count")
-    assert_equal 2, sync.stats.dig("webhook_event_recovery", "processed_count")
+    assert_equal 5, sync.stats.dig("webhook_event_recovery", "processed_count")
     assert_includes sync.stats.dig("webhook_event_recovery", "processed_event_ids"), "wevt_remote_123"
     assert_includes sync.stats.dig("webhook_event_recovery", "processed_event_ids"), "wevt_remote_external_org"
+    assert_includes sync.stats.dig("webhook_event_recovery", "processed_event_ids"), "wevt_remote_dependent_payload"
+    assert_includes sync.stats.dig("webhook_event_recovery", "processed_event_ids"), "wevt_remote_deduction_payload"
+    assert_includes sync.stats.dig("webhook_event_recovery", "processed_event_ids"), "wevt_remote_plan_year_payload"
 
     detail = Vitable::ConnectionDetailQuery.new.call(@connection.id)
-    assert_equal 2, detail.api_snapshot.imported_webhook_event_count
+    assert_equal 5, detail.api_snapshot.imported_webhook_event_count
     assert_equal 1, detail.api_snapshot.existing_webhook_event_count
-    assert_equal 2, detail.api_snapshot.recovered_webhook_event_count
+    assert_equal 5, detail.api_snapshot.recovered_webhook_event_count
+    assert_equal 3, detail.api_snapshot.payload_only_webhook_event_count
+    assert_equal 1, detail.api_snapshot.dependent_webhook_event_count
+    assert_equal 1, detail.api_snapshot.payroll_deduction_webhook_event_count
+    assert_equal 1, detail.api_snapshot.plan_year_webhook_event_count
     assert_equal 1, detail.api_snapshot.remote_eligibility_policy_count
     assert_equal 1, detail.api_snapshot.matched_eligibility_policy_count
   ensure

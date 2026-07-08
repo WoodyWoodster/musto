@@ -1051,6 +1051,7 @@ module Vitable
       employee_deduction_sync = employee_reconciliation.fetch("deduction_sync", {}).to_h
       employee_lifecycle = employee_reconciliation.fetch("lifecycle_reconciliation", {}).to_h
       deduction_sync = enrollment_reconciliation.fetch("deduction_sync", {}).to_h
+      webhook_resource_counts = webhook_event_resource_counts(snapshot.fetch("webhook_events", []))
 
       {
         "remote_employer_count" => snapshot.fetch("employers", []).count,
@@ -1070,6 +1071,11 @@ module Vitable
         "matched_eligibility_policy_count" => snapshot.fetch("eligibility_policy_reconciliation", {}).to_h.fetch("matched_count", 0),
         "errored_eligibility_policy_count" => snapshot.fetch("eligibility_policy_reconciliation", {}).to_h.fetch("error_count", 0),
         "remote_webhook_event_count" => snapshot.fetch("webhook_events", []).count,
+        "webhook_event_resource_counts" => webhook_resource_counts,
+        "payload_only_webhook_event_count" => ClientGateway::WEBHOOK_PAYLOAD_ONLY_RESOURCE_TYPES.sum { |resource_type| webhook_resource_counts.fetch(resource_type, 0) },
+        "dependent_webhook_event_count" => webhook_resource_counts.fetch("dependent", 0),
+        "payroll_deduction_webhook_event_count" => webhook_resource_counts.fetch("payroll_deduction", 0),
+        "plan_year_webhook_event_count" => webhook_resource_counts.fetch("plan_year", 0),
         "recovered_webhook_event_count" => snapshot.fetch("webhook_event_recovery", {}).to_h.fetch("processed_count", 0),
         "failed_webhook_recovery_count" => snapshot.fetch("webhook_event_recovery", {}).to_h.fetch("failed_count", 0),
         "skipped_webhook_recovery_count" => snapshot.fetch("webhook_event_recovery", {}).to_h.fetch("skipped_count", 0),
@@ -1088,6 +1094,20 @@ module Vitable
         "imported_webhook_event_count" => webhook_ingestion.fetch("created_count", 0),
         "existing_webhook_event_count" => webhook_ingestion.fetch("existing_count", 0)
       }
+    end
+
+    def webhook_event_resource_counts(remote_events)
+      remote_events.each_with_object(Hash.new(0)) do |remote_event, counts|
+        resource_type = remote_webhook_event_resource_type(remote_event)
+        next if resource_type.blank?
+
+        counts[resource_type] += 1
+      end.to_h
+    end
+
+    def remote_webhook_event_resource_type(remote_event)
+      attributes = remote_event.to_h.stringify_keys
+      attributes.fetch("resource_type", nil).presence
     end
 
     def webhook_recovery_counts(recovery)
