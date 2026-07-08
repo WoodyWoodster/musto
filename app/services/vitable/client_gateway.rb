@@ -60,6 +60,8 @@ module Vitable
         path: "/v1/employers/:id/benefit-eligibility-policies"
       }
     ].freeze
+    WEBHOOK_EVENT_NAMES = VitableConnect::WebhookEventListParams::EventName.values.map(&:to_s).freeze
+    WEBHOOK_RESOURCE_TYPES = VitableConnect::WebhookEventListParams::ResourceType.values.map(&:to_s).freeze
 
     def self.retrievable_resource_type?(resource_type)
       RETRIEVABLE_RESOURCE_TYPES.include?(resource_type.to_s)
@@ -445,16 +447,28 @@ module Vitable
         limit:,
         created_after:,
         created_before:,
-        event_name: webhook_event_enum_value(event_name),
+        event_name: webhook_event_name_value(event_name),
         resource_id: resource_id.presence,
-        resource_type: webhook_event_enum_value(resource_type)
+        resource_type: webhook_resource_type_value(resource_type)
       }.compact
     end
 
-    def webhook_event_enum_value(value)
-      return if value.blank?
+    def webhook_event_name_value(value)
+      webhook_filter_value(value, supported_values: WEBHOOK_EVENT_NAMES, filter_name: "event_name")
+    end
 
-      value.is_a?(String) ? value.to_sym : value
+    def webhook_resource_type_value(value)
+      webhook_filter_value(value, supported_values: WEBHOOK_RESOURCE_TYPES, filter_name: "resource_type")
+    end
+
+    def webhook_filter_value(value, supported_values:, filter_name:)
+      normalized = value.to_s.presence
+      return if normalized.blank?
+      unless supported_values.include?(normalized)
+        raise ArgumentError, "Vitable webhook #{filter_name} filter #{normalized} is not supported by the installed SDK"
+      end
+
+      normalized.to_sym
     end
 
     def group_member_payload(member)

@@ -283,6 +283,21 @@ module Vitable
       assert_equal "webhook_event.list", log.operation
       assert_equal "/v1/webhook-events", log.path
       assert_equal "employee.deduction_created", log.request_body.fetch("event_name")
+      assert_equal "employee", log.request_body.fetch("resource_type")
+    end
+
+    test "rejects unsupported webhook list filters before SDK calls" do
+      organization = Organization.create!(name: "Gateway Webhook Filter Guard Test", external_id: "org_gateway_webhook_filter_guard_test")
+      connection = organization.integration_connections.create!(provider: "vitable", environment: "production")
+      gateway = ClientGateway.new(connection)
+
+      assert_raises(ArgumentError, match: /event_name filter group.updated/) do
+        gateway.list_webhook_events(event_name: "group.updated")
+      end
+      assert_raises(ArgumentError, match: /resource_type filter group/) do
+        gateway.list_webhook_events(resource_type: "group")
+      end
+      assert_empty connection.api_request_logs
     end
 
     test "dispatches generic resource fetches to typed SDK retrieve methods" do
