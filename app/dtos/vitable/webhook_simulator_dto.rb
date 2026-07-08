@@ -1,26 +1,12 @@
 module Vitable
   WebhookSimulatorDto = Data.define(:event_options, :resource_options, :default_event_name, :default_resource_type, :default_resource_id) do
-    EVENT_DEFINITIONS = [
-      { label: "Enrollment accepted", event_name: "enrollment.accepted", resource_type: "enrollment" },
-      { label: "Enrollment terminated", event_name: "enrollment.terminated", resource_type: "enrollment" },
-      { label: "Enrollment elected", event_name: "enrollment.elected", resource_type: "enrollment" },
-      { label: "Enrollment granted", event_name: "enrollment.granted", resource_type: "enrollment" },
-      { label: "Enrollment waived", event_name: "enrollment.waived", resource_type: "enrollment" },
-      { label: "Enrollment started", event_name: "enrollment.started", resource_type: "enrollment" },
-      { label: "Employee eligibility granted", event_name: "employee.eligibility_granted", resource_type: "employee" },
-      { label: "Employee eligibility terminated", event_name: "employee.eligibility_terminated", resource_type: "employee" },
-      { label: "Employee deactivated", event_name: "employee.deactivated", resource_type: "employee" },
-      { label: "Employee deduction created", event_name: "employee.deduction_created", resource_type: "employee" },
-      { label: "Employer eligibility policy created", event_name: "employer.eligibility_policy_created", resource_type: "employer" }
-    ].freeze
-
     def self.default
       from_resource_ids({})
     end
 
     def self.from_resource_ids(resource_ids)
       resources = resource_ids.to_h.stringify_keys
-      options = EVENT_DEFINITIONS.map do |definition|
+      options = WebhookSimulatorDto::EVENT_DEFINITIONS.map do |definition|
         WebhookSimulationEventOptionDto.new(
           label: definition.fetch(:label),
           event_name: definition.fetch(:event_name),
@@ -39,4 +25,21 @@ module Vitable
       )
     end
   end
+
+  WebhookSimulatorDto::EVENT_DEFINITIONS = [
+    { label: "Enrollment accepted", event_name: "enrollment.accepted", resource_type: "enrollment" },
+    { label: "Enrollment terminated", event_name: "enrollment.terminated", resource_type: "enrollment" },
+    { label: "Enrollment elected", event_name: "enrollment.elected", resource_type: "enrollment" },
+    { label: "Enrollment granted", event_name: "enrollment.granted", resource_type: "enrollment" },
+    { label: "Enrollment waived", event_name: "enrollment.waived", resource_type: "enrollment" },
+    { label: "Enrollment started", event_name: "enrollment.started", resource_type: "enrollment" },
+    { label: "Employee eligibility granted", event_name: "employee.eligibility_granted", resource_type: "employee" },
+    { label: "Employee eligibility terminated", event_name: "employee.eligibility_terminated", resource_type: "employee" },
+    { label: "Employee deactivated", event_name: "employee.deactivated", resource_type: "employee" },
+    { label: "Payroll deduction created", event_name: "employee.deduction_created", resource_type: "payroll_deduction" },
+    { label: "Dependent updated", event_name: "dependent.updated", resource_type: "dependent" },
+    { label: "Employer eligibility policy created", event_name: "employer.eligibility_policy_created", resource_type: "employer" },
+    { label: "Plan year updated", event_name: "plan_year.updated", resource_type: "plan_year" }
+  ].freeze
+  WebhookSimulatorDto::PAYLOAD_ONLY_SIMULATION_EVENT_NAMES = %w[dependent.updated plan_year.updated].freeze
 end

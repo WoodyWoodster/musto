@@ -17,7 +17,7 @@ module Vitable
       return failure(record: connection, errors: "#{missing.to_sentence} required") if missing.any?
 
       result = ProcessWebhookCommand.new(
-        payload: @dto.to_payload(connection.organization.external_id),
+        payload: @repository.webhook_simulator_payload(connection, @dto),
         repository: @repository
       ).call
 

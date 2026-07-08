@@ -315,29 +315,11 @@ module Vitable
     end
 
     def webhook_simulator_resource_ids(connection)
-      employers = Employer.where(organization_id: connection.organization_id)
-      employees = Employee.where(employer_id: employers.select(:id))
-      enrollments = Enrollment.joins(:employee).where(employees: { employer_id: employers.select(:id) })
-      snapshot_ids = webhook_simulator_snapshot_resource_ids(connection.metadata)
+      WebhookSimulatorRepository.new.resource_ids(connection)
+    end
 
-      {
-        "enrollment" => first_present_id(
-          enrollments.where.not(vitable_id: [ nil, "" ]).order(:id).pick(:vitable_id),
-          snapshot_ids["enrollment"]
-        ),
-        "employee" => first_present_id(
-          employees.where.not(vitable_id: [ nil, "" ]).order(:id).pick(:vitable_id),
-          snapshot_ids["employee"]
-        ),
-        "employer" => first_present_id(
-          employers.where.not(vitable_id: [ nil, "" ]).order(:id).pick(:vitable_id),
-          snapshot_ids["employer"]
-        ),
-        "group" => first_present_id(
-          employers.order(:id).filter_map { |employer| employer.settings.to_h.stringify_keys.fetch(CareGroupRepository::GROUP_ID_KEY, nil).presence }.first,
-          snapshot_ids["group"]
-        )
-      }.compact
+    def webhook_simulator_payload(connection, dto)
+      WebhookSimulatorRepository.new.payload(connection:, dto:)
     end
 
     def create_sync_run(connection:, resource_type:, resource_id:)
@@ -693,31 +675,6 @@ module Vitable
       stats["result"] = serialize_response(result.value) if result
       stats["errors"] = Array(errors) if Array(errors).any?
       stats
-    end
-
-    def webhook_simulator_snapshot_resource_ids(metadata)
-      snapshot = metadata.to_h.stringify_keys.fetch("api_snapshot", {}).to_h
-
-      {
-        "enrollment" => first_nested_remote_id(snapshot.fetch("employee_enrollments", []), "enrollments"),
-        "employee" => first_nested_remote_id(snapshot.fetch("remote_employee_rosters", []), "employees"),
-        "employer" => first_remote_id(snapshot.fetch("employers", [])),
-        "group" => first_remote_id(snapshot.fetch("groups", []))
-      }.compact
-    end
-
-    def first_nested_remote_id(entries, collection_key)
-      Array(entries).filter_map do |entry|
-        first_remote_id(entry.to_h.stringify_keys.fetch(collection_key, []))
-      end.first
-    end
-
-    def first_remote_id(records)
-      Array(records).filter_map { |record| record.to_h.stringify_keys.fetch("id", nil).presence }.first
-    end
-
-    def first_present_id(*values)
-      values.flatten.compact_blank.first
     end
 
     def bootstrap_demo_smoke_connection(environment:, api_key_reference:)

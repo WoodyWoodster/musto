@@ -2890,12 +2890,29 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
   end
 
   test "integration connection workspace exposes credential and coverage DTOs" do
+    plan_year = Date.current.year + 1
     @employer.update!(
       vitable_id: "empr_ops_123",
-      settings: @employer.settings.to_h.merge(Vitable::CareGroupRepository::GROUP_ID_KEY => "grp_ops_123")
+      settings: @employer.settings.to_h.merge(
+        Vitable::CareGroupRepository::GROUP_ID_KEY => "grp_ops_123",
+        Vitable::PlanYearWebhookReconciliationRepository::SNAPSHOT_KEY => {
+          "pyear_ops_#{plan_year}" => {
+            "id" => "pyear_ops_#{plan_year}",
+            "plan_year" => plan_year
+          }
+        }
+      )
     )
     @employee.update!(vitable_id: "empl_ops_casey")
+    @dependent.update!(vitable_id: "dep_ops_harper")
+    @plan.update!(
+      vitable_id: "plan_ops_primary",
+      plan_year:,
+      effective_on: Date.new(plan_year, 1, 1),
+      expires_on: Date.new(plan_year, 12, 31)
+    )
     @enrollment.update!(vitable_id: "enrl_ops_primary_care")
+    @payroll_run.payroll_deductions.find_by!(code: "VITABLE_BENEFITS").update!(vitable_id: "pded_ops_primary")
 
     detail = Vitable::ConnectionDetailQuery.new.call(@connection.id)
 
@@ -2907,17 +2924,23 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_instance_of Vitable::ApiSnapshotDto, detail.api_snapshot
     assert_instance_of Vitable::WebhookSimulatorDto, detail.simulator
     assert_instance_of Vitable::WebhookSimulationEventOptionDto, detail.simulator.event_options.first
-    assert_equal 11, detail.simulator.event_options.count
-    assert_equal %w[enrollment employee employer], detail.simulator.resource_options
+    assert_equal 13, detail.simulator.event_options.count
+    assert_equal %w[enrollment employee payroll_deduction dependent employer plan_year], detail.simulator.resource_options
     event_names = detail.simulator.event_options.map(&:event_name)
     assert_includes event_names, "employee.deduction_created"
+    assert_includes event_names, "dependent.updated"
     assert_includes event_names, "employer.eligibility_policy_created"
+    assert_includes event_names, "plan_year.updated"
     assert_not_includes event_names, "group.updated"
     assert_not_includes event_names, "benefit_plan.updated"
-    assert_empty event_names - Vitable::ClientGateway::WEBHOOK_EVENT_NAMES
+    assert_empty event_names - Vitable::ClientGateway::WEBHOOK_EVENT_NAMES - Vitable::WebhookSimulatorDto::PAYLOAD_ONLY_SIMULATION_EVENT_NAMES
+    assert_empty detail.simulator.resource_options - Vitable::ClientGateway::WEBHOOK_RESOURCE_TYPES
     assert_equal "enrl_ops_primary_care", detail.simulator.default_resource_id
     assert_equal "empl_ops_casey", detail.simulator.event_options.find { |option| option.resource_type == "employee" }.sample_resource_id
+    assert_equal "pded_ops_primary", detail.simulator.event_options.find { |option| option.resource_type == "payroll_deduction" }.sample_resource_id
+    assert_equal "dep_ops_harper", detail.simulator.event_options.find { |option| option.resource_type == "dependent" }.sample_resource_id
     assert_equal "empr_ops_123", detail.simulator.event_options.find { |option| option.resource_type == "employer" }.sample_resource_id
+    assert_equal "pyear_ops_#{plan_year}", detail.simulator.event_options.find { |option| option.resource_type == "plan_year" }.sample_resource_id
     assert_equal [
       "auth tokens",
       "employers",
@@ -3009,6 +3032,105 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_select "h2", "Connection timeline"
     assert_select "h2", "Webhook queue"
     assert_select "h2", "Connection activity"
+  end
+
+  test "webhook simulator builds payload-only event data from local records" do
+    plan_year = Date.current.year + 1
+    @employer.update!(
+      vitable_id: "empr_ops_123",
+      settings: @employer.settings.to_h.merge(
+        Vitable::PlanYearWebhookReconciliationRepository::SNAPSHOT_KEY => {
+          "pyear_ops_#{plan_year}" => {
+            "id" => "pyear_ops_#{plan_year}",
+            "plan_year" => plan_year
+          }
+        }
+      )
+    )
+    @employee.update!(vitable_id: "empl_ops_casey")
+    @dependent.update!(vitable_id: "dep_ops_harper")
+    @plan.update!(vitable_id: "plan_ops_primary", plan_year:)
+    @enrollment.update!(vitable_id: "enrl_ops_primary_care")
+    @payroll_run.payroll_deductions.find_by!(code: "VITABLE_BENEFITS").update!(vitable_id: "pded_ops_primary")
+    repository = Vitable::IntegrationRepository.new
+
+    dependent_payload = repository.webhook_simulator_payload(
+      @connection,
+      Vitable::SimulateWebhookEventDto.new(
+        connection_id: @connection.id,
+        event_id: "wevt_ops_sim_dependent_payload",
+        event_name: "dependent.updated",
+        resource_type: "dependent",
+        resource_id: "dep_ops_harper",
+        occurred_at: Time.current
+      )
+    )
+    payroll_payload = repository.webhook_simulator_payload(
+      @connection,
+      Vitable::SimulateWebhookEventDto.new(
+        connection_id: @connection.id,
+        event_id: "wevt_ops_sim_deduction_payload",
+        event_name: "employee.deduction_created",
+        resource_type: "payroll_deduction",
+        resource_id: "pded_ops_primary",
+        occurred_at: Time.current
+      )
+    )
+    plan_year_payload = repository.webhook_simulator_payload(
+      @connection,
+      Vitable::SimulateWebhookEventDto.new(
+        connection_id: @connection.id,
+        event_id: "wevt_ops_sim_plan_year_payload",
+        event_name: "plan_year.updated",
+        resource_type: "plan_year",
+        resource_id: "pyear_ops_#{plan_year}",
+        occurred_at: Time.current
+      )
+    )
+
+    assert_equal "dep_ops_harper", dependent_payload.dig(:data, :id)
+    assert_equal "musto_employee_#{@employee.id}", dependent_payload.dig(:data, :employee_reference_id)
+    assert_equal "pded_ops_primary", payroll_payload.dig(:data, :id)
+    assert_equal "plan_ops_primary", payroll_payload.dig(:data, :plan_id)
+    assert_equal "pyear_ops_#{plan_year}", plan_year_payload.dig(:data, :id)
+    assert_equal "empr_ops_123", plan_year_payload.dig(:data, :employer_id)
+  end
+
+  test "simulates payload-only Vitable dependent webhook from local sample data" do
+    previous_key = ENV[@connection.api_key_reference]
+    ENV[@connection.api_key_reference] = "vit_apk_test_value"
+    @employee.update!(vitable_id: "empl_ops_casey")
+    @dependent.update!(vitable_id: "dep_ops_harper")
+
+    assert_no_difference -> { @connection.sync_runs.count } do
+      result = Vitable::SimulateWebhookEventCommand.new(
+        dto: Vitable::SimulateWebhookEventDto.new(
+          connection_id: @connection.id,
+          event_id: "wevt_ops_sim_dependent_payload_only",
+          event_name: "dependent.updated",
+          resource_type: "dependent",
+          resource_id: "dep_ops_harper",
+          occurred_at: Time.current
+        )
+      ).call
+
+      assert result.success?
+      assert_equal "payload_only", result.value
+    end
+
+    event = WebhookEvent.find_by!(event_id: "wevt_ops_sim_dependent_payload_only")
+    reconciliation = event.metadata.fetch("resource_reconciliation")
+
+    assert_equal "processed", event.status
+    assert_equal "matched", reconciliation.fetch("status")
+    assert_equal "dependent", reconciliation.fetch("resource_type")
+    assert_equal "vitable_id", reconciliation.fetch("matched_by")
+    assert_equal @dependent.id, reconciliation.fetch("local_record_id")
+    assert_equal "dep_ops_harper", event.payload.dig("data", "id")
+    assert_equal "musto_employee_#{@employee.id}", event.payload.dig("data", "employee_reference_id")
+    assert_equal "wevt_ops_sim_dependent_payload_only", @dependent.reload.metadata.fetch("vitable_last_webhook_event_id")
+  ensure
+    ENV[@connection.api_key_reference] = previous_key
   end
 
   test "integration connection workspace uses API snapshot ids for webhook composer defaults" do
