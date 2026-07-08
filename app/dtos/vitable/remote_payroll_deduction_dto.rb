@@ -33,7 +33,8 @@ module Vitable
 
     def payroll_code
       base = benefit_name.presence || category.presence || remote_id.presence || "BENEFIT"
-      "VITABLE_#{base.to_s.upcase.gsub(/[^A-Z0-9]+/, "_").gsub(/\A_+|_+\z/, "")}"
+      normalized = base.to_s.upcase.gsub(/[^A-Z0-9]+/, "_").gsub(/\A_+|_+\z/, "").delete_prefix("VITABLE_").presence || "BENEFIT"
+      "VITABLE_#{normalized}"
     end
 
     def active?
@@ -41,6 +42,9 @@ module Vitable
     end
 
     def payroll_status
+      normalized_status = remote_status.to_s.downcase
+      return "waived" if normalized_status.in?(%w[waived declined])
+      return "waiting_on_enrollment" if normalized_status.in?(%w[pending started granted])
       active? && amount_cents.positive? ? "ready" : "inactive"
     end
 

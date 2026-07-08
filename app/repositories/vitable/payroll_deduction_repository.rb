@@ -9,8 +9,8 @@ module Vitable
 
       deductions.each do |payload|
         dto = RemotePayrollDeductionDto.from_hash(payload)
-        deduction = payroll_deduction_for(payroll_run, employee, dto)
         enrollment = enrollment_for_remote_deduction(employee, dto)
+        deduction = payroll_deduction_for(payroll_run, employee, dto, enrollment:)
         attributes = deduction_attributes(
           deduction:,
           employee:,
@@ -72,9 +72,14 @@ module Vitable
       }.compact
     end
 
-    def payroll_deduction_for(payroll_run, employee, dto)
+    def payroll_deduction_for(payroll_run, employee, dto, enrollment:)
       if dto.remote_id.present?
         deduction = payroll_run.payroll_deductions.find_by(vitable_id: dto.remote_id)
+        return deduction if deduction
+      end
+
+      if enrollment
+        deduction = payroll_run.payroll_deductions.find_by(employee:, enrollment:)
         return deduction if deduction
       end
 

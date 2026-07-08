@@ -125,7 +125,7 @@ module Vitable
       update_attributes[:metadata] = enrollment.metadata.to_h.stringify_keys.merge(metadata_updates)
       applied_changes.concat(metadata_updates.keys.map { |key| "metadata.#{key}" })
       enrollment.update!(update_attributes)
-      applied_changes.concat(apply_enrollment_payroll_deductions(enrollment, local_status, remote_resource))
+      applied_changes.concat(apply_enrollment_payroll_deductions(enrollment, local_status, remote_resource, timestamp))
 
       reconciliation_result(status: "matched", remote_resource:, local_record: enrollment, matched_by:, applied_changes:)
     end
@@ -483,27 +483,20 @@ module Vitable
       nil
     end
 
-    def apply_enrollment_payroll_deductions(enrollment, local_status, remote_resource)
+    def apply_enrollment_payroll_deductions(enrollment, local_status, remote_resource, timestamp)
       return [] unless local_status.present?
 
-      amount_cents = remote_resource.fetch("employee_deduction_in_cents", nil)
-      amount_cents = enrollment.benefit_plan.monthly_premium_cents if amount_cents.blank? && local_status == "accepted"
-      amount_cents = 0 if local_status != "accepted"
-      deduction_status = case local_status
-      when "accepted" then "ready"
-      when "waived" then "waived"
-      when "inactive" then "inactive"
-      else "waiting_on_enrollment"
-      end
+      dto = RemoteEnrollmentDto.from_hash(remote_resource)
+      return [] unless dto.active_deduction? || enrollment.payroll_deductions.exists?
 
-      changed = []
-      enrollment.payroll_deductions.find_each do |deduction|
-        next if deduction.amount_cents == amount_cents.to_i && deduction.status == deduction_status
-
-        deduction.update!(amount_cents: amount_cents.to_i, status: deduction_status)
-        changed << "payroll_deductions.#{deduction.id}"
-      end
-      changed
+      result = PayrollDeductionRepository.new.sync_employee_deductions(
+        employee: enrollment.employee,
+        remote_deductions: [ dto.deduction_payload(enrollment) ],
+        source: "vitable_webhook_resource",
+        source_event: @event,
+        reconciled_at: timestamp
+      )
+      result.changed_ids.map { |id| "payroll_deductions.#{id}" }
     end
 
     def employee_event_metadata(remote_resource, timestamp)

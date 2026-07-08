@@ -55,7 +55,7 @@ module Vitable
         "period_start_date" => raw_payload.fetch("period_start_date", nil).presence || coverage_start_on&.iso8601,
         "period_end_date" => raw_payload.fetch("period_end_date", nil).presence || coverage_end_on&.iso8601,
         "tax_classification" => raw_payload.fetch("tax_classification", nil).presence,
-        "status" => accepted? ? "active" : "inactive"
+        "status" => deduction_status
       }.compact
     end
 
@@ -115,6 +115,14 @@ module Vitable
       return enrollment.benefit_plan.monthly_premium_cents if accepted?
 
       0
+    end
+
+    def deduction_status
+      return "active" if accepted?
+      return "waived" if local_status == "waived"
+      return "pending" if local_status == "pending"
+
+      "inactive"
     end
 
     private_class_method :local_status_for, :parse_cents, :parse_date, :parse_time
