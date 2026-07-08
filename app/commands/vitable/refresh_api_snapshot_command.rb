@@ -49,8 +49,9 @@ module Vitable
       employers = list_snapshot_page(trace, step: "employers", response_label: "Vitable employer list response") { gateway.list_all_employers }
       groups = list_snapshot_page(trace, step: "groups", response_label: "Vitable group list response") { gateway.list_all_groups }
       plans = list_snapshot_page(trace, step: "plans", response_label: "Vitable plan list response") { gateway.list_all_plans }
+      employer_details = remote_employer_details(gateway, connection, trace:)
       employer_reconciliation = RemoteEmployerSnapshotRepository.new(connection:).reconcile_snapshot(
-        remote_employers: employers,
+        remote_employers: employer_reconciliation_snapshots(employers, employer_details),
         source: "vitable_api_snapshot",
         refreshed_at:
       )
@@ -89,6 +90,7 @@ module Vitable
         "requested_by" => @dto.requested_by,
         "refreshed_at" => refreshed_at,
         "employers" => employers,
+        "employer_details" => employer_details,
         "employer_reconciliation" => employer_reconciliation.to_metadata,
         "groups" => groups,
         "group_reconciliation" => group_reconciliation.to_metadata,
@@ -193,6 +195,66 @@ module Vitable
           "ambiguous_remote_count" => snapshot.fetch("ambiguous_remote_plans", []).count
         }
       end
+    end
+
+    def remote_employer_details(gateway, connection, trace:)
+      return [] unless gateway.respond_to?(:retrieve_employer)
+
+      local_remote_employers(connection).map do |employer|
+        response_hash = retrieve_snapshot_resource(
+          trace,
+          step: "employer",
+          response_label: "Vitable employer retrieve response",
+          resource_id: employer.vitable_id
+        ) { gateway.retrieve_employer(employer.vitable_id) }
+        dto = RemoteResourceResponseDto
+          .from_response(response_hash, resource_type: "employer", resource_id: employer.vitable_id)
+          .validate!
+        validate_retrieved_employer!(dto.attributes, expected_remote_id: employer.vitable_id)
+
+        {
+          "local_employer_id" => employer.id,
+          "remote_employer_id" => employer.vitable_id,
+          "employer_name" => employer.name,
+          "employer" => dto.attributes,
+          "response" => response_hash
+        }
+      rescue VitableConnect::Errors::NotFoundError => e
+        {
+          "local_employer_id" => employer.id,
+          "remote_employer_id" => employer.vitable_id,
+          "employer_name" => employer.name,
+          "error_class" => e.class.name,
+          "error_message" => PayloadRedactor.error_message(e)
+        }
+      end
+    end
+
+    def employer_reconciliation_snapshots(employers, employer_details)
+      detail_records_by_id = employer_details.each_with_object({}) do |entry, index|
+        employer = entry.to_h.fetch("employer", nil)
+        next unless employer.respond_to?(:to_h)
+
+        employer = employer.to_h.stringify_keys
+        remote_id = employer.fetch("id", nil).presence
+        index[remote_id] = employer if remote_id.present?
+      end
+
+      merged = employers.map do |employer|
+        employer = employer.to_h.stringify_keys
+        remote_id = employer.fetch("id", nil).presence
+        detail_records_by_id.delete(remote_id) || employer
+      end
+
+      merged + detail_records_by_id.values
+    end
+
+    def validate_retrieved_employer!(remote_employer, expected_remote_id:)
+      remote_id = remote_employer.to_h.stringify_keys.fetch("id", nil).presence
+      raise ArgumentError, "Vitable employer retrieve response did not include a remote employer ID" if remote_id.blank?
+      return if remote_id == expected_remote_id
+
+      raise ArgumentError, "Vitable employer retrieve response returned remote employer ID #{remote_id}, expected #{expected_remote_id}"
     end
 
     def remote_employee_rosters(gateway, connection, trace:)

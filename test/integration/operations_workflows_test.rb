@@ -3491,6 +3491,62 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     ENV[@connection.api_key_reference] = previous_key
   end
 
+  test "Vitable API snapshot refresh mirrors mapped employer detail responses" do
+    @employer.update!(vitable_id: "empr_ops_123")
+    response_class = Data.define(:data)
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:list_all_employers) { response_class.new(data: [ { id: "empr_ops_123", name: "Ops Employer" } ]) }
+      define_method(:retrieve_employer) do |employer_id|
+        response_class.new(
+          data: {
+            id: employer_id,
+            organization_id: "org_remote_123",
+            name: "Ops Employer",
+            legal_name: "Ops Employer LLC",
+            reference_id: "musto_employer_#{Employer.find_by!(name: "Ops Employer").id}",
+            email: "benefits@example.com",
+            phone_number: "4155550142",
+            active: true,
+            access_token: "vit_at_employer_detail_secret"
+          }
+        )
+      end
+      define_method(:list_all_groups) { response_class.new(data: []) }
+      define_method(:list_all_plans) { response_class.new(data: []) }
+      define_method(:list_all_webhook_events) { |**_filters| response_class.new(data: []) }
+      define_method(:list_all_employer_employees) { |_employer_id| response_class.new(data: []) }
+      define_method(:list_all_employee_enrollments) { |_employee_id| response_class.new(data: []) }
+    end
+    previous_key = ENV[@connection.api_key_reference]
+    ENV[@connection.api_key_reference] = "vit_apk_test_value"
+
+    result = Vitable::RefreshApiSnapshotCommand.new(
+      dto: Vitable::RefreshApiSnapshotDto.new(connection_id: @connection.id, requested_by: "integration_admin"),
+      gateway_class:
+    ).call
+
+    assert result.success?, result.errors.to_sentence
+    snapshot = @connection.reload.metadata.fetch("api_snapshot")
+    detail = snapshot.fetch("employer_details").sole
+
+    assert_equal 1, snapshot.dig("counts", "remote_employer_count")
+    assert_equal 1, snapshot.dig("counts", "retrieved_remote_employer_count")
+    assert_equal 0, snapshot.dig("counts", "errored_remote_employer_detail_count")
+    assert_equal 1, snapshot.dig("counts", "mapped_employer_count")
+    assert_equal "4155550142", detail.dig("employer", "phone_number")
+    assert_equal "[FILTERED]", detail.dig("response", "data", "access_token")
+    assert_equal "4155550142", @employer.reload.settings.dig("vitable_remote_employer", "phone_number")
+    assert_equal "org_remote_123", @employer.settings.fetch("vitable_remote_organization_id")
+    assert_not_includes @employer.settings.to_json, "vit_at_employer_detail_secret"
+
+    dto = Vitable::ConnectionDetailQuery.new.call(@connection.id).api_snapshot
+    assert_equal 1, dto.retrieved_remote_employer_count
+    assert_equal 0, dto.errored_remote_employer_detail_count
+  ensure
+    ENV[@connection.api_key_reference] = previous_key
+  end
+
   test "Vitable API snapshot refresh scopes webhook events to the previous snapshot window" do
     previous_refreshed_at = 3.hours.ago.change(usec: 0)
     @connection.update!(

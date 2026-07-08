@@ -1055,6 +1055,8 @@ module Vitable
 
       {
         "remote_employer_count" => snapshot.fetch("employers", []).count,
+        "retrieved_remote_employer_count" => snapshot.fetch("employer_details", []).count { |entry| entry.to_h.fetch("employer", nil).present? },
+        "errored_remote_employer_detail_count" => snapshot.fetch("employer_details", []).count { |entry| entry.to_h.fetch("error_class", nil).present? },
         "mapped_employer_count" => employer_reconciliation.fetch("matched_count", 0),
         "unmatched_remote_employer_count" => employer_reconciliation.fetch("unmatched_count", 0),
         "conflicting_remote_employer_count" => employer_reconciliation.fetch("conflict_count", 0),
