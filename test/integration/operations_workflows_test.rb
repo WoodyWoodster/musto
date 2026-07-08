@@ -383,6 +383,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     [
       root_path,
       company_setup_path,
+      employers_path,
       workforce_path,
       people_directory_path,
       hiring_path,
