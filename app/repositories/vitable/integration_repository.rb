@@ -113,6 +113,7 @@ module Vitable
     def payload_only_webhook_reconciliation(event, known_payload_only_resource_type: false, known_webhook_resource_type: false)
       return reconcile_payload_only_payroll_deduction(event) if event.resource_type == "payroll_deduction"
       return reconcile_payload_only_dependent(event) if event.resource_type == "dependent"
+      return PlanYearWebhookReconciliationRepository.new(event:).call if event.resource_type == "plan_year"
 
       snapshot_only_webhook_reconciliation(
         event,

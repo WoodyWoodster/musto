@@ -483,6 +483,97 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
     ENV.delete("VITABLE_CONNECT_API_KEY")
   end
 
+  test "reconciles plan year payload-only webhooks without remote fetch" do
+    employer = @organization.employers.create!(
+      name: "Plan Year Employer",
+      status: "active",
+      vitable_id: "empr_plan_year_payload"
+    )
+    plan = employer.benefit_plans.create!(
+      name: "Minimum Essential Coverage",
+      carrier: "Vitable",
+      category: "minimum_essential_coverage",
+      monthly_premium_cents: 14_900,
+      plan_year: 2027
+    )
+    campaign = employer.open_enrollment_campaigns.create!(
+      name: "2027 Open Enrollment",
+      plan_year: 2027,
+      starts_on: Date.new(2026, 11, 1),
+      ends_on: Date.new(2026, 11, 15),
+      status: "draft"
+    )
+    ENV["VITABLE_CONNECT_API_KEY"] = "vit_apk_test_value"
+    gateway_class = Class.new do
+      def self.retrievable_resource_type?(_resource_type)
+        false
+      end
+
+      def self.webhook_resource_type?(resource_type)
+        resource_type == "plan_year"
+      end
+
+      def self.payload_only_webhook_resource_type?(resource_type)
+        resource_type == "plan_year"
+      end
+
+      define_method(:initialize) { |_connection| }
+      define_method(:fetch_resource) { |_resource_type, _resource_id| raise "gateway should not fetch payload-only resources" }
+    end
+
+    assert_no_difference -> { @connection.sync_runs.count } do
+      result = Vitable::ProcessWebhookCommand.new(
+        payload: webhook_payload.merge(
+          event_id: "wevt_test_plan_year_payload_only",
+          event_name: "plan_year.updated",
+          resource_type: "plan_year",
+          resource_id: "pyear_remote_payload",
+          data: {
+            employer_id: "empr_plan_year_payload",
+            year: 2027,
+            starts_on: "2027-01-01",
+            ends_on: "2027-12-31",
+            open_enrollment_starts_on: "2026-10-15",
+            open_enrollment_ends_on: "2026-11-05",
+            status: "active"
+          }
+        ),
+        gateway_class:
+      ).call
+
+      assert result.success?
+      assert_equal "payload_only", result.value
+    end
+
+    event = WebhookEvent.find_by!(event_id: "wevt_test_plan_year_payload_only")
+    reconciliation = event.metadata.fetch("resource_reconciliation")
+    snapshot = employer.reload.settings.dig("vitable_plan_year_snapshots", "pyear_remote_payload")
+
+    assert_equal "processed", event.status
+    assert_equal "matched", reconciliation.fetch("status")
+    assert_equal "plan_year", reconciliation.fetch("resource_type")
+    assert_equal "Employer", reconciliation.fetch("local_record_type")
+    assert_equal employer.id, reconciliation.fetch("local_record_id")
+    assert_equal "remote_employer_id", reconciliation.fetch("matched_by")
+    assert_equal 2027, snapshot.fetch("plan_year")
+    assert_equal "wevt_test_plan_year_payload_only", snapshot.fetch("last_webhook_event_id")
+    assert_equal Date.new(2027, 1, 1), plan.reload.effective_on
+    assert_equal Date.new(2027, 12, 31), plan.expires_on
+    assert_equal "pyear_remote_payload", plan.metadata.fetch("vitable_plan_year_id")
+    assert_equal "wevt_test_plan_year_payload_only", plan.metadata.fetch("vitable_plan_year_last_webhook_event_id")
+    assert_equal Date.new(2026, 10, 15), campaign.reload.starts_on
+    assert_equal Date.new(2026, 11, 5), campaign.ends_on
+    assert_equal "active", campaign.status
+    assert_equal "pyear_remote_payload", campaign.metadata.fetch("vitable_plan_year_id")
+    assert_includes reconciliation.fetch("applied_changes"), "employer.settings.vitable_plan_year_snapshots"
+    assert_includes reconciliation.fetch("applied_changes"), "benefit_plans.#{plan.id}"
+    assert_includes reconciliation.fetch("applied_changes"), "open_enrollment_campaigns.#{campaign.id}"
+    assert_empty reconciliation.fetch("warnings")
+    assert_nil event.metadata.fetch("resource_snapshot", nil)
+  ensure
+    ENV.delete("VITABLE_CONNECT_API_KEY")
+  end
+
   test "stores unknown unsupported Vitable webhook resource types with explicit diagnostics" do
     ENV["VITABLE_CONNECT_API_KEY"] = "vit_apk_test_value"
     gateway_class = Class.new do
