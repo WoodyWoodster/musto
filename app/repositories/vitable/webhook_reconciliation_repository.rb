@@ -1,7 +1,7 @@
 module Vitable
   class WebhookReconciliationRepository < ApplicationRepository
-    ACCEPTED_ENROLLMENT_STATUSES = %w[accepted elected enrolled granted active].freeze
-    PENDING_ENROLLMENT_STATUSES = %w[pending started].freeze
+    ACCEPTED_ENROLLMENT_STATUSES = %w[accepted elected enrolled active].freeze
+    PENDING_ENROLLMENT_STATUSES = %w[pending started granted].freeze
     WAIVED_ENROLLMENT_STATUSES = %w[waived declined].freeze
     INACTIVE_ENROLLMENT_STATUSES = %w[inactive terminated canceled cancelled].freeze
 

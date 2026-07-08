@@ -77,8 +77,8 @@ module Vitable
 
     def self.local_status_for(remote_status)
       normalized = remote_status.to_s.downcase
-      return "accepted" if normalized.in?(%w[accepted elected enrolled granted active])
-      return "pending" if normalized.in?(%w[pending started])
+      return "accepted" if normalized.in?(%w[accepted elected enrolled active])
+      return "pending" if normalized.in?(%w[pending started granted])
       return "waived" if normalized.in?(%w[waived declined])
       return "inactive" if normalized.in?(%w[inactive terminated canceled cancelled])
 

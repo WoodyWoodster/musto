@@ -3310,6 +3310,54 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     ENV[@connection.api_key_reference] = previous_key
   end
 
+  test "Vitable API snapshot keeps granted enrollments pending for employee election" do
+    @employee.update!(vitable_id: "empl_ops_casey")
+    response_class = Data.define(:data)
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:list_all_employers) { response_class.new(data: [ { id: "empr_ops_123", name: "Atlas Global Services" } ]) }
+      define_method(:list_all_groups) { response_class.new(data: []) }
+      define_method(:list_all_plans) { response_class.new(data: [ { id: "bprd_remote_dental", name: "Dental" } ]) }
+      define_method(:list_all_webhook_events) { |**_filters| response_class.new(data: []) }
+      define_method(:list_all_employee_enrollments) do |employee_id|
+        response_class.new(
+          data: [
+            {
+              id: "enrl_remote_dental_granted",
+              employee_id:,
+              benefit: { id: "bprd_remote_dental", name: "Dental", category: "Dental" },
+              status: "granted",
+              employee_deduction_in_cents: 4500,
+              employer_contribution_in_cents: 500
+            }
+          ]
+        )
+      end
+    end
+    previous_key = ENV[@connection.api_key_reference]
+    ENV[@connection.api_key_reference] = "vit_apk_test_value"
+
+    result = Vitable::RefreshApiSnapshotCommand.new(
+      dto: Vitable::RefreshApiSnapshotDto.new(connection_id: @connection.id, requested_by: "integration_admin"),
+      gateway_class:
+    ).call
+
+    assert result.success?
+    @pending_enrollment.reload
+    @pending_deduction.reload
+
+    assert_equal "enrl_remote_dental_granted", @pending_enrollment.vitable_id
+    assert_equal "pending", @pending_enrollment.status
+    assert_nil @pending_enrollment.accepted_at
+    assert_equal "granted", @pending_enrollment.metadata.fetch("vitable_remote_status")
+    assert_equal 4500, @pending_enrollment.metadata.fetch("vitable_employee_deduction_cents")
+    assert_equal 0, @pending_deduction.amount_cents
+    assert_equal "waiting_on_enrollment", @pending_deduction.status
+    assert_equal "pending", @pending_deduction.metadata.dig("raw_payload", "status")
+  ensure
+    ENV[@connection.api_key_reference] = previous_key
+  end
+
   test "Vitable API snapshot refresh fails when employee enrollment omits remote enrollment id" do
     @employee.update!(vitable_id: "empl_ops_casey")
     response_class = Data.define(:data)
