@@ -49,11 +49,19 @@ module Vitable
         sync_operations: %w[employer_settings_update]
       },
       {
-        resource_type: "eligibility policies",
+        resource_type: "eligibility policy creation",
         method: "POST",
         fetch_path: "/v1/employers/:id/benefit-eligibility-policies",
         operations: %w[employer.eligibility_policy.create],
         sync_operations: %w[employer_create employer_settings_update]
+      },
+      {
+        resource_type: "eligibility policy retrieval",
+        method: "GET",
+        fetch_path: "/v1/benefit-eligibility-policies/:id",
+        operations: %w[eligibility_policy.retrieve],
+        resource_fetch_fragments: %w[/benefit-eligibility-policies/],
+        fetch_resource_types: %w[eligibility_policy benefit_eligibility_policy]
       },
       {
         resource_type: "census sync",

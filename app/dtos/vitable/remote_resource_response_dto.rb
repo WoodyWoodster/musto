@@ -5,7 +5,15 @@ module Vitable
     :attributes,
     :raw_payload
   ) do
-    SUPPORTED_RESOURCE_TYPES = %w[employee enrollment employer group webhook_event].freeze
+    SUPPORTED_RESOURCE_TYPES = %w[
+      employee
+      enrollment
+      employer
+      group
+      webhook_event
+      eligibility_policy
+      benefit_eligibility_policy
+    ].freeze
 
     def self.from_response(response_hash, resource_type:, resource_id:)
       payload = response_hash.to_h.stringify_keys

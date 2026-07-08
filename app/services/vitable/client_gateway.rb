@@ -2,7 +2,15 @@ require "vitable_connect"
 
 module Vitable
   class ClientGateway
-    RETRIEVABLE_RESOURCE_TYPES = %w[employee employer enrollment webhook_event group].freeze
+    RETRIEVABLE_RESOURCE_TYPES = %w[
+      employee
+      employer
+      enrollment
+      webhook_event
+      group
+      eligibility_policy
+      benefit_eligibility_policy
+    ].freeze
     SDK_METHOD_COVERAGE = [
       {
         resource_class: VitableConnect::Resources::Auth,
@@ -58,6 +66,11 @@ module Vitable
         gateway_method: :create_eligibility_policy,
         operation: "employer.eligibility_policy.create",
         path: "/v1/employers/:id/benefit-eligibility-policies"
+      },
+      {
+        gateway_method: :retrieve_eligibility_policy,
+        operation: "eligibility_policy.retrieve",
+        path: "/v1/benefit-eligibility-policies/:id"
       }
     ].freeze
     DOCUMENTED_WEBHOOK_EVENT_NAMES = %w[
@@ -142,6 +155,8 @@ module Vitable
         retrieve_webhook_event(resource_id)
       when "group"
         retrieve_group(resource_id)
+      when "eligibility_policy", "benefit_eligibility_policy"
+        retrieve_eligibility_policy(resource_id)
       else
         raise ArgumentError, "Vitable SDK does not expose a retrieve endpoint for #{resource_type}"
       end
@@ -313,6 +328,23 @@ module Vitable
             method: :post,
             path:,
             body:,
+            model: VitableConnect::Internal::Type::Unknown
+          )
+        end
+      end
+    end
+
+    def retrieve_eligibility_policy(policy_id)
+      path = "/v1/benefit-eligibility-policies/#{policy_id}"
+
+      instrument("eligibility_policy.retrieve", :get, path) do
+        policies = client.respond_to?(:benefit_eligibility_policies) ? client.benefit_eligibility_policies : nil
+        if policies.respond_to?(:retrieve)
+          policies.retrieve(policy_id)
+        else
+          client.request(
+            method: :get,
+            path:,
             model: VitableConnect::Internal::Type::Unknown
           )
         end

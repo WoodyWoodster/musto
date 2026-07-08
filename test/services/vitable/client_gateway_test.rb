@@ -236,6 +236,55 @@ module Vitable
       assert_equal "Full-time", log.request_body.fetch("classification")
     end
 
+    test "retrieves eligibility policy through authenticated request fallback when SDK resource has no retrieve method" do
+      organization = Organization.create!(name: "Gateway Policy Retrieve Test", external_id: "org_gateway_policy_retrieve_test")
+      connection = organization.integration_connections.create!(provider: "vitable", environment: "production")
+      gateway = ClientGateway.new(connection)
+      requests = []
+      fake_client = Object.new
+      fake_client.define_singleton_method(:request) do |request|
+        requests << request
+        { data: { id: "elig_policy_123", employer_id: "empr_123", active: true } }
+      end
+      gateway.define_singleton_method(:client) { fake_client }
+
+      response = gateway.retrieve_eligibility_policy("elig_policy_123")
+
+      assert_equal "empr_123", response.dig(:data, :employer_id)
+      request = requests.first
+      assert_equal :get, request.fetch(:method)
+      assert_equal "/v1/benefit-eligibility-policies/elig_policy_123", request.fetch(:path)
+      assert_not request.key?(:body)
+
+      log = connection.api_request_logs.last
+      assert_equal "eligibility_policy.retrieve", log.operation
+      assert_equal "/v1/benefit-eligibility-policies/elig_policy_123", log.path
+    end
+
+    test "retrieves eligibility policy through first class SDK resource when available" do
+      organization = Organization.create!(name: "Gateway SDK Policy Retrieve Test", external_id: "org_gateway_sdk_policy_retrieve_test")
+      connection = organization.integration_connections.create!(provider: "vitable", environment: "production")
+      gateway = ClientGateway.new(connection)
+      calls = []
+      policies = Object.new
+      policies.define_singleton_method(:retrieve) do |policy_id|
+        calls << policy_id
+        { data: { id: policy_id, employer_id: "empr_123" } }
+      end
+      fake_client = Object.new
+      fake_client.define_singleton_method(:benefit_eligibility_policies) { policies }
+      fake_client.define_singleton_method(:request) { |_request| raise "fallback request should not be used" }
+      gateway.define_singleton_method(:client) { fake_client }
+
+      response = gateway.retrieve_eligibility_policy("elig_policy_sdk_123")
+
+      assert_equal "empr_123", response.dig(:data, :employer_id)
+      assert_equal [ "elig_policy_sdk_123" ], calls
+      log = connection.api_request_logs.last
+      assert_equal "eligibility_policy.retrieve", log.operation
+      assert_equal "/v1/benefit-eligibility-policies/elig_policy_sdk_123", log.path
+    end
+
     test "marks the connection active after any successful Vitable request" do
       organization = Organization.create!(name: "Gateway Status Test", external_id: "org_gateway_status_test")
       connection = organization.integration_connections.create!(
@@ -427,6 +476,7 @@ module Vitable
       gateway.define_singleton_method(:retrieve_enrollment) { |id| calls << [ "enrollment", id ]; "enrollment_response" }
       gateway.define_singleton_method(:retrieve_webhook_event) { |id| calls << [ "webhook_event", id ]; "webhook_response" }
       gateway.define_singleton_method(:retrieve_group) { |id| calls << [ "group", id ]; "group_response" }
+      gateway.define_singleton_method(:retrieve_eligibility_policy) { |id| calls << [ "eligibility_policy", id ]; "eligibility_policy_response" }
 
       assert_equal "employee_response", gateway.fetch_resource("employee", "empl_123")
       assert ClientGateway.retrievable_resource_type?("employee")
@@ -434,13 +484,17 @@ module Vitable
       assert_equal "enrollment_response", gateway.fetch_resource("enrollment", "enrl_123")
       assert_equal "webhook_response", gateway.fetch_resource("webhook_event", "wevt_123")
       assert_equal "group_response", gateway.fetch_resource("group", "grp_123")
+      assert_equal "eligibility_policy_response", gateway.fetch_resource("benefit_eligibility_policy", "elig_policy_123")
+      assert ClientGateway.retrievable_resource_type?("eligibility_policy")
+      assert ClientGateway.retrievable_resource_type?("benefit_eligibility_policy")
       assert_not ClientGateway.retrievable_resource_type?("payroll_deduction")
       assert_equal [
         [ "employee", "empl_123" ],
         [ "employer", "empr_123" ],
         [ "enrollment", "enrl_123" ],
         [ "webhook_event", "wevt_123" ],
-        [ "group", "grp_123" ]
+        [ "group", "grp_123" ],
+        [ "eligibility_policy", "elig_policy_123" ]
       ], calls
       assert_raises(ArgumentError) { gateway.fetch_resource("benefit_plan", "bpln_123") }
     end
