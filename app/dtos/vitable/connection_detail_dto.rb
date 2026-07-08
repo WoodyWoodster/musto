@@ -130,6 +130,7 @@ module Vitable
         snapshot_count_key: "remote_webhook_event_count"
       }
     ].freeze
+    NON_READY_ENDPOINT_STATUSES = %w[failed needs_credentials blocked running].freeze
 
     def self.from_record(record, webhook_events:, sync_runs:, request_logs:, simulator_resource_ids: {})
       event_dtos = webhook_events.map { |event| Operations::IntegrationWebhookEventDto.from_record(event) }
@@ -261,8 +262,7 @@ module Vitable
 
     def self.endpoint_status(endpoint, activity, metadata)
       latest_status = activity.select { |entry| entry.fetch(:timestamp).present? }.max_by { |entry| entry.fetch(:timestamp) }&.fetch(:status)
-      return "failed" if latest_status == "failed"
-      return "needs_credentials" if latest_status == "needs_credentials"
+      return latest_status if NON_READY_ENDPOINT_STATUSES.include?(latest_status)
       return "ready" if activity.any? || snapshot_count(metadata, endpoint.fetch(:snapshot_count_key, nil)).positive?
 
       "pending"

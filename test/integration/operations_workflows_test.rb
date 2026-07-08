@@ -2731,6 +2731,20 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     groups_coverage = detail.endpoint_coverage.find { |coverage| coverage.resource_type == "groups" }
     assert_equal "pending", groups_coverage.status
 
+    blocked_member_sync = @connection.sync_runs.create!(
+      resource_type: "group",
+      operation: "care_member_sync_submit",
+      status: "blocked",
+      started_at: Time.current,
+      completed_at: Time.current,
+      error_message: "Remote Vitable care group ID is missing",
+      stats: { resource_id: "care_group_pending" }
+    )
+    detail_with_blocked_member_sync = Vitable::ConnectionDetailQuery.new.call(@connection.id)
+    member_sync_coverage = detail_with_blocked_member_sync.endpoint_coverage.find { |coverage| coverage.resource_type == "group member sync" }
+    assert_equal "blocked", member_sync_coverage.status
+    assert_equal blocked_member_sync.completed_at.to_i, member_sync_coverage.last_seen_at.to_i
+
     group_fetch_run = @connection.sync_runs.create!(
       resource_type: "group",
       operation: "fetch",
