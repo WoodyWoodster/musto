@@ -2960,12 +2960,16 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       "plans",
       "groups",
       "group member sync",
-      "webhook events"
+      "webhook events",
+      "payload-only webhooks"
     ], detail.endpoint_coverage.map(&:resource_type)
     employee_coverage = detail.endpoint_coverage.find { |coverage| coverage.resource_type == "employees" }
     assert_operator employee_coverage.activity_count, :>=, 2
     groups_coverage = detail.endpoint_coverage.find { |coverage| coverage.resource_type == "groups" }
     assert_equal "pending", groups_coverage.status
+    payload_webhook_coverage = detail.endpoint_coverage.find { |coverage| coverage.resource_type == "payload-only webhooks" }
+    assert_equal "pending", payload_webhook_coverage.status
+    assert_equal "/api/v1/webhooks/vitable", payload_webhook_coverage.fetch_path
 
     employer_fetch_log = @connection.api_request_logs.create!(
       operation: "employer.retrieve",
@@ -3022,6 +3026,23 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     groups_coverage = detail_with_group_event.endpoint_coverage.find { |coverage| coverage.resource_type == "groups" }
     assert_equal "ready", groups_coverage.status
     assert_equal group_event.created_at.to_i, groups_coverage.last_seen_at.to_i
+
+    payload_only_event = @connection.webhook_events.create!(
+      event_id: "wevt_ops_dependent_payload_updated",
+      organization_external_id: @organization.external_id,
+      event_name: "dependent.updated",
+      resource_type: "dependent",
+      resource_id: "dep_ops_harper",
+      occurred_at: Time.current,
+      status: "processed",
+      processed_at: Time.current,
+      payload: { "event_id" => "wevt_ops_dependent_payload_updated" }
+    )
+    detail_with_payload_event = Vitable::ConnectionDetailQuery.new.call(@connection.id)
+    payload_webhook_coverage = detail_with_payload_event.endpoint_coverage.find { |coverage| coverage.resource_type == "payload-only webhooks" }
+    assert_equal "ready", payload_webhook_coverage.status
+    assert_equal 1, payload_webhook_coverage.activity_count
+    assert_equal payload_only_event.created_at.to_i, payload_webhook_coverage.last_seen_at.to_i
     assert_equal @sync_run.id, detail.sync_runs.first.id
     assert_equal @request_log.id, detail.request_logs.first.id
     assert_not detail.webhook_secret_present

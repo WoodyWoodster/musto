@@ -140,6 +140,13 @@ module Vitable
         sync_operations: %w[webhook_replay webhook_delivery_refresh api_snapshot_refresh demo_smoke_check],
         fetch_resource_types: %w[webhook_event],
         snapshot_count_key: "remote_webhook_event_count"
+      },
+      {
+        resource_type: "payload-only webhooks",
+        method: "WEBHOOK",
+        fetch_path: "/api/v1/webhooks/vitable",
+        operations: %w[webhook.payload_only],
+        event_resource_types: %w[dependent payroll_deduction plan_year]
       }
     ].freeze
     NON_READY_ENDPOINT_STATUSES = %w[failed needs_credentials blocked running].freeze
