@@ -2,6 +2,7 @@ module Vitable
   class CensusSyncRepository < ApplicationRepository
     MANIFEST_KEY = "vitable_census_sync_batch"
     SUBMISSION_KEY = "vitable_census_sync_last_submission"
+    VERIFICATION_KEY = "vitable_census_roster_verification"
     MAX_EMPLOYEES = 5_000
     CENSUS_OPERATIONS = %w[census_manifest census_sync remote_roster_refresh].freeze
 
@@ -29,6 +30,10 @@ module Vitable
 
     def latest_submission
       @employer&.settings.to_h.fetch(SUBMISSION_KEY, nil)
+    end
+
+    def latest_roster_verification
+      @employer&.settings.to_h.fetch(VERIFICATION_KEY, nil)
     end
 
     def sync_runs(limit: 12)
@@ -183,6 +188,7 @@ module Vitable
       manifest = reconcile_manifest_from_remote_roster(remote_employees)
       manifest_lines = manifest.to_h.fetch("employees", [])
       fetched_at = Time.current.iso8601
+      verification = roster_verification(manifest:, remote_employees:, mapping:, checked_at: fetched_at)
       settings_update = {
         "vitable_remote_roster" => {
           "fetched_at" => fetched_at,
@@ -191,9 +197,11 @@ module Vitable
           "unmatched_employee_count" => mapping.fetch("unmatched_employee_count"),
           "matched_employee_ids" => mapping.fetch("matched_employee_ids"),
           "matched_remote_ids" => mapping.fetch("matched_remote_ids"),
-          "unmatched_remote_ids" => mapping.fetch("unmatched_remote_ids")
+          "unmatched_remote_ids" => mapping.fetch("unmatched_remote_ids"),
+          "verification_status" => verification.fetch("status")
         }
       }
+      settings_update[VERIFICATION_KEY] = verification if latest_submission.present?
       settings_update[MANIFEST_KEY] = manifest if manifest.present?
 
       @employer.update!(
@@ -210,7 +218,11 @@ module Vitable
           "matched_employee_count" => mapping.fetch("matched_employee_count"),
           "unmatched_employee_count" => mapping.fetch("unmatched_employee_count"),
           "manifest_synced_count" => manifest_lines.count { |line| line.fetch("status", nil) == "synced" },
-          "manifest_remote_pending_count" => manifest.to_h.dig("totals", "remote_pending_count")
+          "manifest_remote_pending_count" => manifest.to_h.dig("totals", "remote_pending_count"),
+          "verification_status" => verification.fetch("status"),
+          "submitted_employee_count" => verification.fetch("submitted_count"),
+          "matched_submitted_count" => verification.fetch("matched_submitted_count"),
+          "missing_submitted_count" => verification.fetch("missing_submitted_count")
         )
       )
       sync_run
@@ -477,11 +489,66 @@ module Vitable
     end
 
     def remote_pending_line(attributes)
+      employee = employee_for_manifest_line(attributes)
+      mark_employee_census_remote_pending(employee) if employee
+
       attributes.merge(
         "status" => "remote_pending",
         "readiness_status" => "pending",
         "readiness_reason" => "Not present in the latest Vitable remote roster."
       )
+    end
+
+    def mark_employee_census_remote_pending(employee)
+      employee.update!(
+        metadata: employee.metadata.to_h.stringify_keys.merge(
+          "vitable_census_sync_status" => "remote_pending",
+          "vitable_last_refreshed_at" => Time.current.iso8601
+        )
+      )
+    end
+
+    def roster_verification(manifest:, remote_employees:, mapping:, checked_at:)
+      manifest_lines = manifest.to_h.fetch("employees", []).map { |line| line.to_h.stringify_keys }
+      submitted_references = submitted_reference_ids
+      matched_references = manifest_lines
+        .select { |line| submitted_references.include?(line.fetch("reference_id", nil)) && line.fetch("remote_employee_id", nil).present? }
+        .filter_map { |line| line.fetch("reference_id", nil) }
+      missing_references = submitted_references - matched_references
+
+      {
+        "status" => roster_verification_status(submitted_references, missing_references),
+        "checked_at" => checked_at,
+        "submitted_count" => submitted_references.count,
+        "remote_employee_count" => remote_employees.count,
+        "matched_submitted_count" => matched_references.count,
+        "missing_submitted_count" => missing_references.count,
+        "unmatched_remote_count" => mapping.fetch("unmatched_employee_count"),
+        "missing_reference_ids" => missing_references,
+        "reason" => roster_verification_reason(submitted_references, matched_references, missing_references)
+      }
+    end
+
+    def submitted_reference_ids
+      submission = latest_submission.to_h.stringify_keys
+      references = submission.fetch("employee_reference_ids", [])
+      return references if latest_submission.present?
+
+      []
+    end
+
+    def roster_verification_status(submitted_references, missing_references)
+      return "pending" if submitted_references.empty?
+      return "verified" if missing_references.empty?
+
+      "needs_review"
+    end
+
+    def roster_verification_reason(submitted_references, matched_references, missing_references)
+      return "No submitted census rows are available for verification." if submitted_references.empty?
+      return "All submitted census rows were found in the latest Vitable remote roster." if missing_references.empty?
+
+      "#{missing_references.count} of #{submitted_references.count} submitted census rows were not found in the latest Vitable remote roster."
     end
 
     def employee_for_manifest_line(line)

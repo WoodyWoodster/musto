@@ -12,6 +12,7 @@ module Vitable
     :holdbacks,
     :latest_manifest,
     :latest_submission,
+    :latest_verification,
     :sync_runs,
     :request_logs,
     :endpoint_path,

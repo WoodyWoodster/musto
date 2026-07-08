@@ -2972,6 +2972,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_instance_of Vitable::CensusSyncEmployeeDto, detail.employees.first
     assert_instance_of Vitable::CensusSyncHoldbackDto, detail.holdbacks.first
     assert_nil detail.latest_submission
+    assert_nil detail.latest_verification
     assert_equal @employee.id, detail.employees.first.employee_id
     assert_equal holdback_employee.id, detail.holdbacks.first.employee_id
 
@@ -3077,6 +3078,9 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     response_class = Data.define(:data)
     gateway_class = Class.new do
       define_method(:initialize) { |_connection| }
+      define_method(:submit_census_sync) do |employer_id, employees|
+        response_class.new(data: { employer_id:, accepted_at: Time.current, employee_count: employees.count })
+      end
       define_method(:list_all_employer_employees) do |_employer_id|
         response_class.new(
           data: [
@@ -3107,11 +3111,16 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     previous_key = ENV[@connection.api_key_reference]
     ENV[@connection.api_key_reference] = "vit_apk_test_value"
 
+    submit_result = Vitable::SubmitCensusSyncCommand.new(
+      dto: Vitable::SubmitCensusSyncDto.new(requested_by: "integration_admin"),
+      gateway_class:
+    ).call
     result = Vitable::RefreshRemoteRosterCommand.new(
       dto: Vitable::RefreshRemoteRosterDto.new(requested_by: "integration_admin"),
       gateway_class:
     ).call
 
+    assert submit_result.success?
     assert result.success?
     assert_equal "empl_remote_casey", @employee.reload.vitable_id
     assert_equal "synced", @employee.metadata.fetch("vitable_census_sync_status")
@@ -3128,6 +3137,76 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal 1, sync.stats.fetch("remote_employee_count")
     assert_equal 1, sync.stats.fetch("matched_employee_count")
     assert_equal 1, sync.stats.fetch("manifest_synced_count")
+    assert_equal "verified", sync.stats.fetch("verification_status")
+    verification = @employer.reload.settings.fetch("vitable_census_roster_verification")
+    assert_equal "verified", verification.fetch("status")
+    assert_equal 1, verification.fetch("submitted_count")
+    assert_equal 1, verification.fetch("matched_submitted_count")
+    assert_equal 0, verification.fetch("missing_submitted_count")
+    detail = Vitable::CensusSyncQuery.new.call
+    assert_instance_of Vitable::CensusRosterVerificationDto, detail.latest_verification
+    assert_equal "verified", detail.latest_verification.status
+  ensure
+    ENV[@connection.api_key_reference] = previous_key
+  end
+
+  test "remote roster refresh detects partial census sync processing" do
+    @employer.update!(vitable_id: "empr_ops_123")
+    missing_employee = create_census_ready_employee
+    Vitable::GenerateCensusManifestCommand.new(dto: Vitable::GenerateCensusManifestDto.new(requested_by: "ops_test")).call
+    response_class = Data.define(:data)
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:submit_census_sync) do |employer_id, employees|
+        response_class.new(data: { employer_id:, accepted_at: Time.current, employee_count: employees.count })
+      end
+      define_method(:list_all_employer_employees) do |_employer_id|
+        response_class.new(
+          data: [
+            {
+              id: "empl_remote_casey",
+              email: "casey@example.com",
+              first_name: "Casey",
+              last_name: "Nguyen",
+              reference_id: "musto_employee_#{Employee.find_by!(email: "casey@example.com").id}",
+              status: "active"
+            }
+          ]
+        )
+      end
+    end
+    previous_key = ENV[@connection.api_key_reference]
+    ENV[@connection.api_key_reference] = "vit_apk_test_value"
+
+    submit_result = Vitable::SubmitCensusSyncCommand.new(
+      dto: Vitable::SubmitCensusSyncDto.new(requested_by: "integration_admin"),
+      gateway_class:
+    ).call
+    refresh_result = Vitable::RefreshRemoteRosterCommand.new(
+      dto: Vitable::RefreshRemoteRosterDto.new(requested_by: "integration_admin"),
+      gateway_class:
+    ).call
+
+    assert submit_result.success?
+    assert refresh_result.success?
+    verification = @employer.reload.settings.fetch("vitable_census_roster_verification")
+    missing_reference_id = "musto_employee_#{missing_employee.id}"
+    assert_equal "needs_review", verification.fetch("status")
+    assert_equal 2, verification.fetch("submitted_count")
+    assert_equal 1, verification.fetch("matched_submitted_count")
+    assert_equal 1, verification.fetch("missing_submitted_count")
+    assert_equal [ missing_reference_id ], verification.fetch("missing_reference_ids")
+    assert_equal "remote_pending", missing_employee.reload.metadata.fetch("vitable_census_sync_status")
+    manifest_by_reference = @employer.settings.fetch("vitable_census_sync_batch").fetch("employees").index_by { |line| line.fetch("reference_id") }
+    assert_equal "remote_pending", manifest_by_reference.fetch(missing_reference_id).fetch("status")
+    assert_equal "synced", manifest_by_reference.fetch("musto_employee_#{@employee.id}").fetch("status")
+    sync = @connection.sync_runs.where(operation: "remote_roster_refresh").recent_first.first
+    assert_equal "needs_review", sync.stats.fetch("verification_status")
+    assert_equal 1, sync.stats.fetch("missing_submitted_count")
+    detail = Vitable::CensusSyncQuery.new.call
+    assert_equal "needs_review", detail.latest_verification.status
+    assert_equal "1/2", detail.metrics.find { |metric| metric.label == "Roster verification" }.value
+    assert_equal "needs_review", detail.preflight_checks.find { |check| check.label == "Async roster verification" }.status
   ensure
     ENV[@connection.api_key_reference] = previous_key
   end
@@ -3758,6 +3837,22 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       title: "Benefits Analyst",
       compensation_cents: 82_000_00,
       onboarding_status: "complete"
+    )
+  end
+
+  def create_census_ready_employee
+    @employer.employees.create!(
+      first_name: "Jordan",
+      last_name: "Ready",
+      email: "jordan.ready@example.com",
+      department: @department,
+      work_location: @location,
+      title: "Benefits Coordinator",
+      date_of_birth: Date.new(1989, 8, 14),
+      start_on: Date.current - 1.year,
+      compensation_cents: 84_000_00,
+      onboarding_status: "complete",
+      metadata: { phone: "5551237780" }
     )
   end
 
