@@ -3602,6 +3602,84 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     ENV[@connection.api_key_reference] = previous_key
   end
 
+  test "Vitable API snapshot refresh mirrors retrieved webhook event detail responses" do
+    @employee.update!(vitable_id: "empl_remote_casey")
+    response_class = Data.define(:data)
+    gateway_class = Class.new do
+      define_singleton_method(:retrievable_resource_type?) { |resource_type| Vitable::ClientGateway.retrievable_resource_type?(resource_type) }
+      define_singleton_method(:webhook_resource_type?) { |resource_type| Vitable::ClientGateway.webhook_resource_type?(resource_type) }
+      define_singleton_method(:payload_only_webhook_resource_type?) { |resource_type| Vitable::ClientGateway.payload_only_webhook_resource_type?(resource_type) }
+
+      define_method(:initialize) { |_connection| }
+      define_method(:list_all_employers) { response_class.new(data: []) }
+      define_method(:list_all_groups) { response_class.new(data: []) }
+      define_method(:list_all_plans) { response_class.new(data: []) }
+      define_method(:list_all_employee_enrollments) { |_employee_id| response_class.new(data: []) }
+      define_method(:list_all_webhook_events) do |**_filters|
+        response_class.new(data: [ { id: "wevt_remote_detail_sparse" } ])
+      end
+      define_method(:retrieve_webhook_event) do |event_id|
+        response_class.new(
+          data: {
+            id: event_id,
+            organization_id: Organization.find_by!(name: "Ops Platform").external_id,
+            event_name: "dependent.updated",
+            resource_type: "dependent",
+            resource_id: "dep_remote_detail",
+            created_at: 2.minutes.ago.iso8601,
+            data: {
+              id: "dep_remote_detail",
+              employee_id: "empl_remote_casey",
+              first_name: "Harper",
+              last_name: "Ng",
+              relationship: "spouse",
+              date_of_birth: Date.current.prev_year(30).iso8601,
+              status: "active"
+            },
+            access_token: "vit_at_webhook_event_detail_secret"
+          }
+        )
+      end
+    end
+    previous_key = ENV[@connection.api_key_reference]
+    ENV[@connection.api_key_reference] = "vit_apk_test_value"
+
+    assert_difference -> { WebhookEvent.count }, 1 do
+      result = Vitable::RefreshApiSnapshotCommand.new(
+        dto: Vitable::RefreshApiSnapshotDto.new(connection_id: @connection.id, requested_by: "integration_admin"),
+        gateway_class:
+      ).call
+
+      assert result.success?, result.errors.to_sentence
+    end
+
+    snapshot = @connection.reload.metadata.fetch("api_snapshot")
+    detail = snapshot.fetch("webhook_event_details").sole
+    event = WebhookEvent.find_by!(event_id: "wevt_remote_detail_sparse")
+
+    assert_equal 1, snapshot.dig("counts", "remote_webhook_event_count")
+    assert_equal 1, snapshot.dig("counts", "retrieved_remote_webhook_event_count")
+    assert_equal 0, snapshot.dig("counts", "errored_remote_webhook_event_detail_count")
+    assert_equal 1, snapshot.dig("counts", "dependent_webhook_event_count")
+    assert_equal 1, snapshot.dig("counts", "imported_webhook_event_count")
+    assert_equal 1, snapshot.dig("counts", "recovered_webhook_event_count")
+    assert_equal "wevt_remote_detail_sparse", detail.fetch("remote_webhook_event_id")
+    assert_equal "[FILTERED]", detail.dig("response", "data", "access_token")
+    assert_equal "processed", event.status
+    assert_equal "dependent.updated", event.event_name
+    assert_equal "dependent", event.resource_type
+    assert_equal "dep_remote_detail", event.resource_id
+    assert_equal "matched", event.metadata.dig("resource_reconciliation", "status")
+    assert_equal "dep_remote_detail", @dependent.reload.vitable_id
+    assert_not_includes snapshot.to_json, "vit_at_webhook_event_detail_secret"
+
+    dto = Vitable::ConnectionDetailQuery.new.call(@connection.id).api_snapshot
+    assert_equal 1, dto.retrieved_remote_webhook_event_count
+    assert_equal 0, dto.errored_remote_webhook_event_detail_count
+  ensure
+    ENV[@connection.api_key_reference] = previous_key
+  end
+
   test "Vitable API snapshot refresh enriches roster employees from detail responses" do
     response_class = Data.define(:data)
     gateway_class = Class.new do

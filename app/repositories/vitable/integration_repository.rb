@@ -487,7 +487,10 @@ module Vitable
             /v1/plans
             /v1/benefit-eligibility-policies/:id
             /v1/webhook-events
+            /v1/webhook-events/:id
+            /v1/employees/:id
             /v1/employees/:id/enrollments
+            /v1/enrollments/:id
           ]
         }
       )
@@ -1080,6 +1083,8 @@ module Vitable
         "dependent_webhook_event_count" => webhook_resource_counts.fetch("dependent", 0),
         "payroll_deduction_webhook_event_count" => webhook_resource_counts.fetch("payroll_deduction", 0),
         "plan_year_webhook_event_count" => webhook_resource_counts.fetch("plan_year", 0),
+        "retrieved_remote_webhook_event_count" => snapshot.fetch("webhook_event_details", []).count { |entry| entry.to_h.fetch("webhook_event", nil).present? },
+        "errored_remote_webhook_event_detail_count" => snapshot.fetch("webhook_event_details", []).count { |entry| entry.to_h.fetch("error_class", nil).present? },
         "recovered_webhook_event_count" => snapshot.fetch("webhook_event_recovery", {}).to_h.fetch("processed_count", 0),
         "failed_webhook_recovery_count" => snapshot.fetch("webhook_event_recovery", {}).to_h.fetch("failed_count", 0),
         "skipped_webhook_recovery_count" => snapshot.fetch("webhook_event_recovery", {}).to_h.fetch("skipped_count", 0),

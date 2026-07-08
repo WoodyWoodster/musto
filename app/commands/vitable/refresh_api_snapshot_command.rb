@@ -88,6 +88,8 @@ module Vitable
         step: "webhook_events",
         response_label: "Vitable webhook event list response"
       ) { gateway.list_all_webhook_events(**webhook_event_query) }
+      webhook_event_details = remote_webhook_event_details(gateway, webhook_events, trace:)
+      webhook_events = webhook_event_reconciliation_snapshots(webhook_events, webhook_event_details)
 
       {
         "requested_by" => @dto.requested_by,
@@ -104,6 +106,7 @@ module Vitable
         "eligibility_policy_reconciliation" => eligibility_policy_reconciliation.to_metadata,
         "webhook_event_query" => webhook_event_query_metadata(webhook_event_query),
         "webhook_events" => webhook_events,
+        "webhook_event_details" => webhook_event_details,
         "remote_employee_rosters" => remote_employee_rosters,
         "employee_details" => employee_details,
         "employee_reconciliation" => employee_reconciliation.to_metadata,
@@ -182,6 +185,70 @@ module Vitable
         "reason" => reason,
         "errors" => Array(errors)
       }.compact
+    end
+
+    def remote_webhook_event_details(gateway, webhook_events, trace:)
+      return [] unless gateway.respond_to?(:retrieve_webhook_event)
+
+      remote_webhook_event_ids(webhook_events).map do |event_id|
+        response_hash = retrieve_snapshot_resource(
+          trace,
+          step: "webhook_event",
+          response_label: "Vitable webhook event retrieve response",
+          resource_id: event_id
+        ) { gateway.retrieve_webhook_event(event_id) }
+        dto = RemoteResourceResponseDto
+          .from_response(response_hash, resource_type: "webhook_event", resource_id: event_id)
+          .validate!
+        validate_retrieved_webhook_event!(dto.attributes, expected_remote_id: event_id)
+
+        {
+          "remote_webhook_event_id" => event_id,
+          "webhook_event" => dto.attributes,
+          "response" => response_hash
+        }
+      rescue VitableConnect::Errors::NotFoundError => e
+        {
+          "remote_webhook_event_id" => event_id,
+          "error_class" => e.class.name,
+          "error_message" => PayloadRedactor.error_message(e)
+        }
+      end
+    end
+
+    def webhook_event_reconciliation_snapshots(webhook_events, webhook_event_details)
+      detail_records_by_id = webhook_event_details.each_with_object({}) do |entry, index|
+        webhook_event = entry.to_h.fetch("webhook_event", nil)
+        next unless webhook_event.respond_to?(:to_h)
+
+        webhook_event = webhook_event.to_h.stringify_keys
+        remote_id = remote_webhook_event_id(webhook_event)
+        index[remote_id] = webhook_event if remote_id.present?
+      end
+
+      webhook_events.map do |event|
+        event = event.to_h.stringify_keys
+        remote_id = remote_webhook_event_id(event)
+        detail = detail_records_by_id.delete(remote_id)
+        detail.present? ? event.merge(detail.compact) : event
+      end
+    end
+
+    def remote_webhook_event_ids(webhook_events)
+      webhook_events.filter_map { |event| remote_webhook_event_id(event) }.uniq
+    end
+
+    def remote_webhook_event_id(webhook_event)
+      webhook_event.to_h.stringify_keys.fetch("event_id", nil).presence ||
+        webhook_event.to_h.stringify_keys.fetch("id", nil).presence
+    end
+
+    def validate_retrieved_webhook_event!(remote_webhook_event, expected_remote_id:)
+      remote_id = remote_webhook_event_id(remote_webhook_event)
+      raise ArgumentError, "Vitable webhook event retrieve response did not include a remote webhook event ID" if remote_id.blank?
+      return if remote_id == expected_remote_id
+
+      raise ArgumentError, "Vitable webhook event retrieve response returned remote webhook event ID #{remote_id}, expected #{expected_remote_id}"
     end
 
     def plan_reconciliation_snapshots(connection, remote_plans, refreshed_at:)
