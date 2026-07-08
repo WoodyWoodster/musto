@@ -3744,6 +3744,30 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert detail.employees.first.launch_token.present?
   end
 
+  test "embedded session packet holds back employees with terminated Vitable eligibility and pending elections" do
+    @employee.update!(
+      vitable_id: "empl_ops_casey",
+      metadata: @employee.metadata.to_h.merge("vitable_eligibility_status" => "terminated")
+    )
+
+    post generate_vitable_embedded_sessions_path, params: { requested_by: "integration_admin" }
+
+    assert_redirected_to vitable_embedded_sessions_path
+    packet = @employer.reload.settings.fetch("vitable_embedded_sessions_packet")
+
+    assert_equal "blocked", packet.fetch("status")
+    assert_equal 0, packet.fetch("totals").fetch("ready_count")
+    assert_equal 1, packet.fetch("totals").fetch("holdback_count")
+    assert_empty packet.fetch("employees")
+    assert_equal @employee.id, packet.fetch("holdbacks").first.fetch("employee_id")
+    assert_equal "eligibility_terminated", packet.fetch("holdbacks").first.fetch("reason_code")
+    assert_match "eligibility is terminated", packet.fetch("holdbacks").first.fetch("reason")
+
+    detail = Vitable::EmbeddedSessionsQuery.new.call
+    assert_equal @employee.id, detail.holdbacks.first.employee_id
+    assert_equal "eligibility_terminated", detail.holdbacks.first.reason_code
+  end
+
   test "issues embedded enrollment session as missing credentials sync run without API key" do
     @employee.update!(vitable_id: "empl_ops_casey")
     Vitable::GenerateEmbeddedSessionsCommand.new(dto: Vitable::GenerateEmbeddedSessionsDto.new(requested_by: "ops_test")).call
@@ -3759,6 +3783,29 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal @employee.vitable_id, sync.stats.dig("bound_entity", "id")
     assert_equal "integration_admin", sync.stats.fetch("requested_by")
     assert_not_includes sync.stats.to_json, "vit_at_"
+  end
+
+  test "embedded session command blocks pending enrollment launch after Vitable eligibility termination" do
+    @employee.update!(
+      vitable_id: "empl_ops_casey",
+      metadata: @employee.metadata.to_h.merge("vitable_eligibility_status" => "terminated")
+    )
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:issue_employee_access_token) { |_employee_id| raise "token should not be issued" }
+    end
+
+    result = Vitable::IssueEmbeddedSessionCommand.new(
+      dto: Vitable::IssueEmbeddedSessionDto.new(employee_id: @employee.id, requested_by: "integration_admin"),
+      gateway_class:
+    ).call
+
+    assert_not result.success?
+    assert_match "eligibility is terminated", result.errors.to_sentence
+    sync = @connection.sync_runs.where(operation: "embedded_enrollment_token").recent_first.first
+    assert_equal "blocked", sync.status
+    assert_equal "eligibility_terminated", sync.stats.dig("line", "reason_code")
+    assert_match "eligibility is terminated", sync.error_message
   end
 
   test "successful embedded session command redacts token response" do

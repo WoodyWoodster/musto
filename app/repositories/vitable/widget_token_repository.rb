@@ -2,8 +2,9 @@ module Vitable
   class WidgetTokenRepository < ApplicationRepository
     OPERATION = "widget_token_broker"
 
-    def initialize(employer:)
+    def initialize(employer:, eligibility_repository: EmployeeEligibilityRepository.new)
       @employer = employer
+      @eligibility_repository = eligibility_repository
     end
 
     def connection
@@ -12,6 +13,12 @@ module Vitable
 
     def find_employee(id)
       @employer.employees.active.find(id)
+    end
+
+    def employee_token_block_reason(employee)
+      return "Employee needs a Vitable employee ID before a widget token can be issued" if employee.vitable_id.blank?
+
+      @eligibility_repository.enrollment_token_block_reason(employee)
     end
 
     def create_token_run(dto:, bound_entity_id:, local_record:)

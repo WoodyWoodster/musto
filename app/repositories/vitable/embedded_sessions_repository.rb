@@ -2,8 +2,9 @@ module Vitable
   class EmbeddedSessionsRepository < ApplicationRepository
     TOKEN_OPERATION = "embedded_enrollment_token"
 
-    def initialize(employer:)
+    def initialize(employer:, eligibility_repository: EmployeeEligibilityRepository.new)
       @employer = employer
+      @eligibility_repository = eligibility_repository
     end
 
     def connection
@@ -46,6 +47,12 @@ module Vitable
 
       session_candidates.each do |employee|
         active_enrollments = enrollment_candidates(employee)
+        eligibility_block = enrollment_token_block_reason(employee)
+
+        if eligibility_block.present?
+          holdbacks << holdback_for(employee, active_enrollments, "eligibility_terminated", eligibility_block)
+          next
+        end
 
         if employee.vitable_id.blank?
           holdbacks << holdback_for(employee, active_enrollments, "remote_employee_id", "Employee needs a Vitable employee ID before a bound enrollment token can be issued.")
@@ -153,6 +160,10 @@ module Vitable
       sync_run
     end
 
+    def enrollment_token_block_reason(employee)
+      @eligibility_repository.enrollment_token_block_reason(employee)
+    end
+
     private
 
     def session_candidates
@@ -165,6 +176,9 @@ module Vitable
 
     def line_or_holdback_for(employee)
       active_enrollments = enrollment_candidates(employee)
+      eligibility_block = enrollment_token_block_reason(employee)
+      return holdback_for(employee, active_enrollments, "eligibility_terminated", eligibility_block) if eligibility_block.present?
+
       return holdback_for(employee, active_enrollments, "remote_employee_id", "Employee needs a Vitable employee ID before a bound enrollment token can be issued.") if employee.vitable_id.blank?
 
       line_for(employee, active_enrollments)

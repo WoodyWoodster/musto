@@ -14,6 +14,9 @@ module Vitable
       employee = @repository.find_employee(@dto.employee_id)
       @repository.generate_packet(requested_by: @dto.requested_by) unless @repository.latest_packet
       sync_run = @repository.create_token_run(employee:, requested_by: @dto.requested_by)
+      eligibility_block = @repository.enrollment_token_block_reason(employee)
+
+      return blocked(sync_run, eligibility_block) if eligibility_block.present?
 
       return blocked(sync_run, "Employee needs a Vitable employee ID before a token can be issued") if employee.vitable_id.blank?
       return blocked(sync_run, "Employee has no pending or accepted enrollment records") if employee.enrollments.none? { |enrollment| enrollment.status.in?(%w[pending accepted]) }

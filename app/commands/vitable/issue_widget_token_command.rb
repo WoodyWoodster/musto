@@ -56,7 +56,7 @@ module Vitable
         {
           remote_id: employee.vitable_id,
           local_record: { "type" => "employee", "id" => employee.id, "name" => employee.full_name },
-          blocked_reason: employee.vitable_id.blank? ? "Employee needs a Vitable employee ID before a widget token can be issued" : nil
+          blocked_reason: @repository.employee_token_block_reason(employee)
         }
       else
         raise ArgumentError, "Unsupported widget token entity: #{@dto.bound_entity_type}"

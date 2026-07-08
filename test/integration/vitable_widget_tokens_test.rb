@@ -214,6 +214,29 @@ class VitableWidgetTokensTest < ActionDispatch::IntegrationTest
     ENV.delete("VITABLE_WIDGET_TOKEN_BROKER_SECRET")
   end
 
+  test "employee widget token endpoint blocks pending enrollment launch after eligibility termination" do
+    plan = @employer.benefit_plans.create!(name: "Dental", category: "dental", monthly_premium_cents: 4_500)
+    @employee.enrollments.create!(benefit_plan: plan, status: "pending", effective_on: Date.current.next_month.beginning_of_month)
+    @employee.update!(metadata: @employee.metadata.to_h.merge("vitable_eligibility_status" => "terminated"))
+    ENV["VITABLE_CONNECT_API_KEY"] = "vit_apk_test_value"
+    ENV["VITABLE_WIDGET_TOKEN_BROKER_SECRET"] = "broker_secret"
+
+    post "/api/v1/vitable/widget-tokens/employees/#{@employee.id}",
+         params: { requested_by: "widget_test" },
+         headers: broker_headers
+
+    assert_response :unprocessable_entity
+    body = JSON.parse(response.body)
+    assert_match "eligibility is terminated", body.fetch("errors").to_sentence
+    sync = @connection.sync_runs.where(operation: "widget_token_broker", resource_type: "employee").recent_first.first
+    assert_equal "blocked", sync.status
+    assert_match "eligibility is terminated", sync.error_message
+    assert_nil sync.stats.dig("issuance", "token_present")
+  ensure
+    ENV.delete("VITABLE_CONNECT_API_KEY")
+    ENV.delete("VITABLE_WIDGET_TOKEN_BROKER_SECRET")
+  end
+
   test "widget token endpoint does not issue tokens when broker secret is not configured" do
     ENV["VITABLE_CONNECT_API_KEY"] = "vit_apk_test_value"
 
