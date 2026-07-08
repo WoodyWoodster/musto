@@ -110,6 +110,16 @@ module Vitable
       )
     end
 
+    def payload_only_webhook_reconciliation(event, known_payload_only_resource_type: false, known_webhook_resource_type: false)
+      return reconcile_payload_only_payroll_deduction(event) if event.resource_type == "payroll_deduction"
+
+      snapshot_only_webhook_reconciliation(
+        event,
+        known_payload_only_resource_type:,
+        known_webhook_resource_type:
+      )
+    end
+
     def snapshot_only_webhook_warning(event, known_payload_only_resource_type:, known_webhook_resource_type:)
       if known_payload_only_resource_type
         return "Vitable webhook resource type #{event.resource_type} is listed by the installed SDK but has no retrieve endpoint; event was stored from the webhook payload only."
@@ -720,6 +730,100 @@ module Vitable
       attributes.merge!(dto.to_event_attributes.except(:event_id)) unless event.processed?
       attributes[:integration_connection] = connection if event.integration_connection.blank? && connection.present?
       attributes
+    end
+
+    def reconcile_payload_only_payroll_deduction(event)
+      payload = payroll_deduction_payload(event)
+      employee, matched_by = payroll_deduction_employee_match(event, payload)
+      unless employee
+        return WebhookResourceReconciliationDto.new(
+          status: "unmatched",
+          resource_type: event.resource_type,
+          resource_id: event.resource_id,
+          local_record_type: nil,
+          local_record_id: nil,
+          matched_by: nil,
+          applied_changes: [],
+          warnings: [ "No local employee matched this Vitable payroll deduction payload." ]
+        )
+      end
+
+      result = PayrollDeductionRepository.new.sync_employee_deductions(
+        employee:,
+        remote_deductions: [ payload ],
+        source: "vitable_webhook_payload",
+        source_event: event,
+        reconciled_at: Time.current.iso8601
+      )
+
+      WebhookResourceReconciliationDto.new(
+        status: "matched",
+        resource_type: event.resource_type,
+        resource_id: event.resource_id,
+        local_record_type: "Employee",
+        local_record_id: employee.id,
+        matched_by:,
+        applied_changes: result.changed_ids.map { |id| "payroll_deductions.#{id}" },
+        warnings: []
+      )
+    end
+
+    def payroll_deduction_payload(event)
+      payload = event.payload.to_h.stringify_keys
+      resource_payload = %w[data resource object].lazy.filter_map do |key|
+        value = payload.fetch(key, nil)
+        value.to_h.stringify_keys if value.respond_to?(:to_h)
+      end.first || payload
+
+      resource_payload.merge(
+        "id" => resource_payload.fetch("id", nil).presence || event.resource_id
+      )
+    end
+
+    def payroll_deduction_employee_match(event, payload)
+      scope = payroll_deduction_employee_scope(event)
+      employee_payload = payroll_deduction_employee_payload(payload)
+      reference_id = payload.fetch("reference_id", nil).presence ||
+        employee_payload.fetch("reference_id", nil).presence
+      employee = payroll_deduction_employee_from_reference_id(scope, reference_id)
+      return [ employee, "reference_id" ] if employee
+
+      remote_employee_id = payload.fetch("employee_id", nil).presence ||
+        payload.fetch("member_id", nil).presence ||
+        employee_payload.fetch("id", nil).presence
+      if remote_employee_id.present?
+        employee = scope.find_by(vitable_id: remote_employee_id) ||
+          scope.detect { |candidate| candidate.metadata.to_h.stringify_keys.fetch("vitable_member_id", nil) == remote_employee_id }
+        return [ employee, "remote_employee_id" ] if employee
+      end
+
+      email = payload.fetch("email", nil).presence || employee_payload.fetch("email", nil).presence
+      if email.present?
+        matches = scope.where(email: email.to_s.downcase).to_a
+        return [ matches.first, "email" ] if matches.one?
+      end
+
+      [ nil, nil ]
+    end
+
+    def payroll_deduction_employee_payload(payload)
+      employee = payload.fetch("employee", {})
+      return employee.to_h.stringify_keys if employee.respond_to?(:to_h)
+
+      {}
+    end
+
+    def payroll_deduction_employee_from_reference_id(scope, reference_id)
+      value = reference_id.to_s
+      return unless value.match?(/\Amusto_employee_\d+\z/)
+
+      scope.find_by(id: value.delete_prefix("musto_employee_").to_i)
+    end
+
+    def payroll_deduction_employee_scope(event)
+      organization = event.integration_connection&.organization
+      employers = Employer.where(organization_id: organization&.id)
+      Employee.where(employer_id: employers.select(:id))
     end
 
     def event_metadata(metadata, signature_verification)

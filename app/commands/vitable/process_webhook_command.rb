@@ -26,13 +26,13 @@ module Vitable
       end
 
       unless retrievable_resource_type?(event.resource_type)
-        reconciliation = @repository.snapshot_only_webhook_reconciliation(
+        reconciliation = @repository.payload_only_webhook_reconciliation(
           event,
           known_payload_only_resource_type: payload_only_webhook_resource_type?(event.resource_type),
           known_webhook_resource_type: webhook_resource_type?(event.resource_type)
         )
         @repository.mark_processed(event, reconciliation:)
-        return success(record: event, value: "snapshot_only")
+        return success(record: event, value: reconciliation.status == "matched" ? "payload_only" : "snapshot_only")
       end
 
       fetch_result = FetchResourceCommand.new(

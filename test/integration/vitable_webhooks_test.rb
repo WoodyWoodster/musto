@@ -327,7 +327,27 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
     ENV.delete("VITABLE_CONNECT_API_KEY")
   end
 
-  test "stores unsupported Vitable webhook resource types as payload-only snapshots" do
+  test "reconciles payroll deduction payload-only webhooks without remote fetch" do
+    employer = @organization.employers.create!(name: "Payroll Deduction Employer", status: "active")
+    employee = employer.employees.create!(
+      first_name: "Casey",
+      last_name: "Deductions",
+      email: "casey.payload@example.com",
+      vitable_id: "empl_payload_casey"
+    )
+    plan = employer.benefit_plans.create!(
+      name: "Primary Care",
+      carrier: "Vitable",
+      category: "direct_primary_care",
+      monthly_premium_cents: 9_900,
+      vitable_id: "plan_payload_primary"
+    )
+    enrollment = employee.enrollments.create!(
+      benefit_plan: plan,
+      status: "accepted",
+      effective_on: Date.current,
+      vitable_id: "enrl_payload_primary"
+    )
     ENV["VITABLE_CONNECT_API_KEY"] = "vit_apk_test_value"
     gateway_class = Class.new do
       def self.retrievable_resource_type?(_resource_type)
@@ -349,26 +369,45 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
     assert_no_difference -> { @connection.sync_runs.count } do
       result = Vitable::ProcessWebhookCommand.new(
         payload: webhook_payload.merge(
-          event_id: "wevt_test_payroll_deduction_snapshot_only",
+          event_id: "wevt_test_payroll_deduction_payload_only",
           event_name: "employee.deduction_created",
           resource_type: "payroll_deduction",
-          resource_id: "pded_remote_snapshot_only"
+          resource_id: "pded_remote_payload",
+          data: {
+            employee_id: "empl_payload_casey",
+            plan_id: "plan_payload_primary",
+            enrollment_id: "enrl_payload_primary",
+            benefit_name: "Primary Care",
+            deduction_amount_in_cents: 7_900,
+            frequency: "bi_weekly",
+            status: "active"
+          }
         ),
         gateway_class:
       ).call
 
       assert result.success?
-      assert_equal "snapshot_only", result.value
+      assert_equal "payload_only", result.value
     end
 
-    event = WebhookEvent.find_by!(event_id: "wevt_test_payroll_deduction_snapshot_only")
+    event = WebhookEvent.find_by!(event_id: "wevt_test_payroll_deduction_payload_only")
     reconciliation = event.metadata.fetch("resource_reconciliation")
+    deduction = employer.payroll_runs.sole.payroll_deductions.sole
 
     assert_equal "processed", event.status
     assert_not_nil event.processed_at
-    assert_equal "skipped", reconciliation.fetch("status")
+    assert_equal "matched", reconciliation.fetch("status")
     assert_equal "payroll_deduction", reconciliation.fetch("resource_type")
-    assert_match "listed by the installed SDK", reconciliation.fetch("warnings").join(" ")
+    assert_equal employee.id, reconciliation.fetch("local_record_id")
+    assert_equal "remote_employee_id", reconciliation.fetch("matched_by")
+    assert_equal enrollment.id, deduction.enrollment_id
+    assert_equal "pded_remote_payload", deduction.vitable_id
+    assert_equal 7_900, deduction.amount_cents
+    assert_equal "ready", deduction.status
+    assert_equal "VITABLE_PRIMARY_CARE", deduction.code
+    assert_equal "vitable_webhook_payload", deduction.metadata.fetch("source")
+    assert_equal "wevt_test_payroll_deduction_payload_only", deduction.metadata.fetch("last_webhook_event_id")
+    assert_includes reconciliation.fetch("applied_changes"), "payroll_deductions.#{deduction.id}"
     assert_nil event.metadata.fetch("resource_snapshot", nil)
   ensure
     ENV.delete("VITABLE_CONNECT_API_KEY")
