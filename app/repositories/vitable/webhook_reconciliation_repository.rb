@@ -303,8 +303,8 @@ module Vitable
 
       email = remote_resource.fetch("email", nil).presence
       if email
-        matches = scope.where(email:).to_a
-        return [ matches.first, "email" ] if matches.one?
+        employee = employee_by_email(scope, email)
+        return [ employee, "email" ] if employee
       end
 
       [ nil, nil ]
@@ -393,6 +393,14 @@ module Vitable
       return unless value.match?(/\Amusto_employee_\d+\z/)
 
       scope.find_by(id: value.delete_prefix("musto_employee_").to_i)
+    end
+
+    def employee_by_email(scope, email)
+      normalized = email.to_s.downcase.presence
+      return if normalized.blank?
+
+      matches = scope.select { |employee| employee.email.to_s.downcase == normalized }
+      matches.one? ? matches.first : nil
     end
 
     def enrollment_from_reference_id(scope, reference_id)

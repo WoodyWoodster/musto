@@ -259,6 +259,52 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
     ENV.delete("VITABLE_CONNECT_API_KEY")
   end
 
+  test "matches fetched employee webhook resources by email case insensitively" do
+    employer = @organization.employers.create!(name: "Webhook Email Match Employer", status: "active")
+    employee = employer.employees.create!(
+      first_name: "Riley",
+      last_name: "Case",
+      email: "Riley.CaseMatch@example.com"
+    )
+    ENV["VITABLE_CONNECT_API_KEY"] = "vit_apk_test_value"
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:fetch_resource) do |_resource_type, resource_id|
+        {
+          data: {
+            id: resource_id,
+            email: "riley.casematch@example.com",
+            status: "active",
+            member_id: "mem_remote_riley_case"
+          }
+        }
+      end
+    end
+
+    result = Vitable::ProcessWebhookCommand.new(
+      payload: webhook_payload.merge(
+        event_id: "wevt_test_employee_email_case_match",
+        event_name: "employee.eligibility_granted",
+        resource_type: "employee",
+        resource_id: "empl_remote_riley_case"
+      ),
+      gateway_class:
+    ).call
+
+    assert result.success?
+    event = WebhookEvent.find_by!(event_id: "wevt_test_employee_email_case_match")
+    reconciliation = event.metadata.fetch("resource_reconciliation")
+
+    assert_equal "processed", event.status
+    assert_equal "matched", reconciliation.fetch("status")
+    assert_equal "email", reconciliation.fetch("matched_by")
+    assert_equal employee.id, reconciliation.fetch("local_record_id")
+    assert_equal "empl_remote_riley_case", employee.reload.vitable_id
+    assert_equal "mem_remote_riley_case", employee.metadata.fetch("vitable_member_id")
+  ensure
+    ENV.delete("VITABLE_CONNECT_API_KEY")
+  end
+
   test "fails fetched employee webhook reconciliation when response omits remote resource id" do
     employer = @organization.employers.create!(name: "Webhook Employer", status: "active")
     employee = employer.employees.create!(first_name: "Casey", last_name: "Nguyen", email: "casey@example.com")
@@ -430,6 +476,79 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
     ENV.delete("VITABLE_CONNECT_API_KEY")
   end
 
+  test "matches payroll deduction payload-only webhooks by employee email case insensitively" do
+    employer = @organization.employers.create!(name: "Payroll Email Match Employer", status: "active")
+    employee = employer.employees.create!(
+      first_name: "Taylor",
+      last_name: "Deductions",
+      email: "Taylor.DeductionMatch@example.com"
+    )
+    plan = employer.benefit_plans.create!(
+      name: "Primary Care",
+      carrier: "Vitable",
+      category: "direct_primary_care",
+      monthly_premium_cents: 9_900,
+      vitable_id: "plan_email_primary"
+    )
+    enrollment = employee.enrollments.create!(
+      benefit_plan: plan,
+      status: "accepted",
+      effective_on: Date.current,
+      vitable_id: "enrl_email_primary"
+    )
+    ENV["VITABLE_CONNECT_API_KEY"] = "vit_apk_test_value"
+    gateway_class = Class.new do
+      def self.retrievable_resource_type?(_resource_type)
+        false
+      end
+
+      def self.webhook_resource_type?(resource_type)
+        resource_type == "payroll_deduction"
+      end
+
+      def self.payload_only_webhook_resource_type?(resource_type)
+        resource_type == "payroll_deduction"
+      end
+
+      define_method(:initialize) { |_connection| }
+      define_method(:fetch_resource) { |_resource_type, _resource_id| raise "gateway should not fetch payload-only resources" }
+    end
+
+    result = Vitable::ProcessWebhookCommand.new(
+      payload: webhook_payload.merge(
+        event_id: "wevt_test_payroll_deduction_email_case_match",
+        event_name: "employee.deduction_created",
+        resource_type: "payroll_deduction",
+        resource_id: "pded_remote_email_case",
+        data: {
+          email: "taylor.deductionmatch@example.com",
+          plan_id: "plan_email_primary",
+          enrollment_id: "enrl_email_primary",
+          benefit_name: "Primary Care",
+          deduction_amount_in_cents: 7_900,
+          frequency: "bi_weekly",
+          status: "active"
+        }
+      ),
+      gateway_class:
+    ).call
+
+    assert result.success?
+    event = WebhookEvent.find_by!(event_id: "wevt_test_payroll_deduction_email_case_match")
+    reconciliation = event.metadata.fetch("resource_reconciliation")
+    deduction = employer.payroll_runs.sole.payroll_deductions.sole
+
+    assert_equal "processed", event.status
+    assert_equal "matched", reconciliation.fetch("status")
+    assert_equal "email", reconciliation.fetch("matched_by")
+    assert_equal employee.id, reconciliation.fetch("local_record_id")
+    assert_equal enrollment.id, deduction.enrollment_id
+    assert_equal "pded_remote_email_case", deduction.vitable_id
+    assert_equal 7_900, deduction.amount_cents
+  ensure
+    ENV.delete("VITABLE_CONNECT_API_KEY")
+  end
+
   test "reconciles dependent payload-only webhooks without remote fetch" do
     employer = @organization.employers.create!(name: "Dependent Payload Employer", status: "active")
     employee = employer.employees.create!(
@@ -496,6 +615,66 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
     assert_equal "eligible", dependent.eligibility_status
     assert_equal "wevt_test_dependent_payload_only", dependent.metadata.fetch("vitable_last_webhook_event_id")
     assert_includes reconciliation.fetch("applied_changes"), "dependents.created"
+  ensure
+    ENV.delete("VITABLE_CONNECT_API_KEY")
+  end
+
+  test "matches dependent payload-only webhooks by employee email case insensitively" do
+    employer = @organization.employers.create!(name: "Dependent Email Match Employer", status: "active")
+    employee = employer.employees.create!(
+      first_name: "Jordan",
+      last_name: "Dependents",
+      email: "Jordan.DependentMatch@example.com"
+    )
+    ENV["VITABLE_CONNECT_API_KEY"] = "vit_apk_test_value"
+    gateway_class = Class.new do
+      def self.retrievable_resource_type?(_resource_type)
+        false
+      end
+
+      def self.webhook_resource_type?(resource_type)
+        resource_type == "dependent"
+      end
+
+      def self.payload_only_webhook_resource_type?(resource_type)
+        resource_type == "dependent"
+      end
+
+      define_method(:initialize) { |_connection| }
+      define_method(:fetch_resource) { |_resource_type, _resource_id| raise "gateway should not fetch payload-only resources" }
+    end
+
+    result = Vitable::ProcessWebhookCommand.new(
+      payload: webhook_payload.merge(
+        event_id: "wevt_test_dependent_email_case_match",
+        event_name: "dependent.updated",
+        resource_type: "dependent",
+        resource_id: "dep_remote_email_case",
+        data: {
+          employee_email: "jordan.dependentmatch@example.com",
+          first_name: "Avery",
+          last_name: "Dependents",
+          relationship: "child",
+          date_of_birth: "2020-09-10",
+          status: "active"
+        }
+      ),
+      gateway_class:
+    ).call
+
+    assert result.success?
+    event = WebhookEvent.find_by!(event_id: "wevt_test_dependent_email_case_match")
+    reconciliation = event.metadata.fetch("resource_reconciliation")
+    dependent = employee.dependents.sole
+
+    assert_equal "processed", event.status
+    assert_equal "matched", reconciliation.fetch("status")
+    assert_equal "created_from_payload", reconciliation.fetch("matched_by")
+    assert_equal dependent.id, reconciliation.fetch("local_record_id")
+    assert_equal employee.id, dependent.employee_id
+    assert_equal "dep_remote_email_case", dependent.vitable_id
+    assert_equal "Avery", dependent.first_name
+    assert_equal "eligible", dependent.eligibility_status
   ensure
     ENV.delete("VITABLE_CONNECT_API_KEY")
   end
