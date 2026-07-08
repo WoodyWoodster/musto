@@ -1,13 +1,15 @@
 require "test_helper"
 
 class IntegrationConnectionTest < ActiveSupport::TestCase
-  test "defaults new Vitable connections to the demo API target" do
+  test "defaults new Vitable connections to the demo SDK environment" do
     organization = Organization.create!(name: "Integration Demo Org", external_id: "integration_demo_org")
     connection = organization.integration_connections.create!(provider: "vitable")
 
-    assert_equal "demo", connection.environment
-    assert_equal "https://api.demo.vitablehealth.com", connection.effective_api_base_url
-    assert_nil connection.sdk_environment
+    assert_equal Vitable::Configuration::DEFAULT_ENVIRONMENT, connection.environment
+    assert_equal Vitable::Configuration::DEFAULT_ENVIRONMENT, connection.sdk_environment
+    assert_nil connection.configured_api_base_url
+    assert_equal Vitable::Configuration::DEMO_API_BASE_URL, connection.sdk_base_url
+    assert_equal Vitable::Configuration::DEMO_API_BASE_URL, connection.effective_api_base_url
   end
 
   test "passes production through to the SDK when no base URL override is present" do
@@ -16,6 +18,19 @@ class IntegrationConnectionTest < ActiveSupport::TestCase
 
     assert_nil connection.effective_api_base_url
     assert_equal "production", connection.sdk_environment
+    assert_nil connection.sdk_base_url
+  end
+
+  test "uses explicit API base URL overrides without changing the SDK environment" do
+    with_vitable_env(Vitable::Configuration::API_BASE_URL_ENV => "https://vitable-proxy.example.test") do
+      organization = Organization.create!(name: "Integration Override Org", external_id: "integration_override_org")
+      connection = organization.integration_connections.create!(provider: "vitable")
+
+      assert_equal Vitable::Configuration::DEFAULT_ENVIRONMENT, connection.sdk_environment
+      assert_equal "https://vitable-proxy.example.test", connection.configured_api_base_url
+      assert_equal "https://vitable-proxy.example.test", connection.sdk_base_url
+      assert_equal "https://vitable-proxy.example.test", connection.effective_api_base_url
+    end
   end
 
   test "reports webhook secret presence without exposing the value in DTOs" do
@@ -25,11 +40,9 @@ class IntegrationConnectionTest < ActiveSupport::TestCase
       environment: "production",
       webhook_secret_reference: "VITABLE_WEBHOOK_SECRET_TEST"
     )
-    ENV["VITABLE_WEBHOOK_SECRET_TEST"] = "whsec_model_value"
+    set_vitable_env("VITABLE_WEBHOOK_SECRET_TEST" => "whsec_model_value")
 
     assert connection.webhook_secret_present?
     assert_equal "whsec_model_value", connection.webhook_secret
-  ensure
-    ENV.delete("VITABLE_WEBHOOK_SECRET_TEST")
   end
 end

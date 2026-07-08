@@ -2,13 +2,12 @@ require "test_helper"
 
 class VitableWebhooksTest < ActionDispatch::IntegrationTest
   setup do
-    ENV.delete("VITABLE_CONNECT_API_KEY")
-    ENV.delete("VITABLE_WEBHOOK_SECRET")
+    clear_vitable_env
     @organization = Organization.create!(name: "Webhook Org", external_id: "org_webhook_test")
     @connection = @organization.integration_connections.create!(
       provider: "vitable",
       environment: "demo",
-      api_key_reference: "VITABLE_CONNECT_API_KEY",
+      api_key_reference: Vitable::Configuration::DEFAULT_API_KEY_REFERENCE,
       status: "needs_credentials"
     )
   end

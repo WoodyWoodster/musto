@@ -2,8 +2,7 @@ require "test_helper"
 
 class VitableWidgetTokensTest < ActionDispatch::IntegrationTest
   setup do
-    ENV.delete("VITABLE_CONNECT_API_KEY")
-    ENV.delete("VITABLE_WIDGET_TOKEN_BROKER_SECRET")
+    clear_vitable_env
     @organization = Organization.create!(name: "Widget Org", external_id: "org_widget")
     @employer = @organization.employers.create!(
       name: "Widget Employer",
@@ -28,7 +27,7 @@ class VitableWidgetTokensTest < ActionDispatch::IntegrationTest
     @connection = @organization.integration_connections.create!(
       provider: "vitable",
       environment: "demo",
-      api_key_reference: "VITABLE_CONNECT_API_KEY",
+      api_key_reference: Vitable::Configuration::DEFAULT_API_KEY_REFERENCE,
       status: "active"
     )
   end

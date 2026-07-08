@@ -555,8 +555,8 @@ module Vitable
       assert_equal [ "/v1/employees/empl_123", "/v1/employers/empr_123", "/v1/enrollments/enrl_123" ], logs.map(&:path)
     end
 
-    test "targets the Vitable demo base URL for demo connections" do
-      ENV["VITABLE_TEST_API_KEY"] = "vit_apk_test"
+    test "sets the SDK environment and targets the centralized demo base URL for demo connections" do
+      set_vitable_env("VITABLE_TEST_API_KEY" => "vit_apk_test")
       organization = Organization.create!(name: "Gateway Demo Test", external_id: "org_gateway_demo_test")
       connection = organization.integration_connections.create!(
         provider: "vitable",
@@ -566,10 +566,28 @@ module Vitable
 
       client = ClientGateway.new(connection).send(:client)
 
-      assert_equal "https://api.demo.vitablehealth.com", client.base_url.to_s
-      assert_nil connection.sdk_environment
-    ensure
-      ENV.delete("VITABLE_TEST_API_KEY")
+      assert_equal Vitable::Configuration::DEMO_API_BASE_URL, client.base_url.to_s
+      assert_equal Vitable::Configuration::DEFAULT_ENVIRONMENT, connection.sdk_environment
+      assert_equal Vitable::Configuration::DEMO_API_BASE_URL, connection.sdk_base_url
+    end
+
+    test "uses an explicit base URL override without replacing the SDK environment" do
+      set_vitable_env(
+        "VITABLE_TEST_API_KEY" => "vit_apk_test",
+        Vitable::Configuration::API_BASE_URL_ENV => "https://vitable-proxy.example.test"
+      )
+      organization = Organization.create!(name: "Gateway Override Test", external_id: "org_gateway_override_test")
+      connection = organization.integration_connections.create!(
+        provider: "vitable",
+        environment: "demo",
+        api_key_reference: "VITABLE_TEST_API_KEY"
+      )
+
+      client = ClientGateway.new(connection).send(:client)
+
+      assert_equal "https://vitable-proxy.example.test", client.base_url.to_s
+      assert_equal Vitable::Configuration::DEFAULT_ENVIRONMENT, connection.sdk_environment
+      assert_equal "https://vitable-proxy.example.test", connection.configured_api_base_url
     end
 
     private

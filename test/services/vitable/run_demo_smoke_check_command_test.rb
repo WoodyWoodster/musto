@@ -3,25 +3,24 @@ require "test_helper"
 module Vitable
   class RunDemoSmokeCheckCommandTest < ActiveSupport::TestCase
     setup do
-      ENV.delete("VITABLE_CONNECT_API_KEY")
+      clear_vitable_env
       @organization = Organization.create!(name: "Smoke Org", external_id: "org_smoke")
       @connection = @organization.integration_connections.create!(
         provider: "vitable",
         environment: "demo",
-        api_key_reference: "VITABLE_CONNECT_API_KEY",
-        status: "pending",
-        metadata: { "api_base_url" => "https://api.demo.vitablehealth.com" }
+        api_key_reference: Vitable::Configuration::DEFAULT_API_KEY_REFERENCE,
+        status: "pending"
       )
     end
 
     test "runs read-only smoke checks and persists an auditable snapshot" do
-      ENV["VITABLE_CONNECT_API_KEY"] = "vit_apk_test_value"
+      set_vitable_env(Vitable::Configuration::DEFAULT_API_KEY_REFERENCE => "vit_apk_test_value")
 
       result = RunDemoSmokeCheckCommand.new(
         dto: RunDemoSmokeCheckDto.new(
           connection_id: @connection.id,
           environment: "demo",
-          api_key_reference: "VITABLE_CONNECT_API_KEY",
+          api_key_reference: Vitable::Configuration::DEFAULT_API_KEY_REFERENCE,
           requested_by: "test"
         ),
         gateway_class: successful_gateway_class
@@ -34,7 +33,7 @@ module Vitable
       assert_equal "succeeded", sync_run.status
       assert_equal "demo_smoke_check", sync_run.operation
       assert_equal "active", @connection.status
-      assert_equal "https://api.demo.vitablehealth.com", snapshot.fetch("base_url")
+      assert_equal Vitable::Configuration::DEMO_API_BASE_URL, snapshot.fetch("base_url")
       assert_equal "ready", snapshot.fetch("checks").find { |check| check.fetch("name") == "auth.issue_employer_access_token" }.fetch("status")
       assert_equal "ready", snapshot.fetch("checks").find { |check| check.fetch("name") == "auth.issue_employee_access_token" }.fetch("status")
       assert_equal 1, snapshot.dig("counts", "employers")
@@ -43,8 +42,6 @@ module Vitable
       assert_equal "empr_demo_123", snapshot.dig("samples", "employer_id")
       assert_includes snapshot.fetch("warnings").first, "zero plans"
       assert_not_includes sync_run.stats.to_json, "vit_at_secret"
-    ensure
-      ENV.delete("VITABLE_CONNECT_API_KEY")
     end
 
     test "records needs credentials when the configured key is unavailable" do
@@ -52,7 +49,7 @@ module Vitable
         dto: RunDemoSmokeCheckDto.new(
           connection_id: @connection.id,
           environment: "demo",
-          api_key_reference: "VITABLE_CONNECT_API_KEY",
+          api_key_reference: Vitable::Configuration::DEFAULT_API_KEY_REFERENCE,
           requested_by: "test"
         ),
         gateway_class: successful_gateway_class
@@ -61,7 +58,7 @@ module Vitable
       assert result.failure?
       sync_run = result.record
       assert_equal "needs_credentials", sync_run.status
-      assert_match "VITABLE_CONNECT_API_KEY", sync_run.error_message
+      assert_match Vitable::Configuration::DEFAULT_API_KEY_REFERENCE, sync_run.error_message
     end
 
     private
