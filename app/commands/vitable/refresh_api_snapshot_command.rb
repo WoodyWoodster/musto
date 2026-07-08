@@ -1,6 +1,7 @@
 module Vitable
   class RefreshApiSnapshotCommand < ApplicationCommand
     MAX_RECOVERED_WEBHOOK_EVENTS = 25
+    WEBHOOK_EVENT_LOOKBACK = 5.minutes
 
     def initialize(dto:, repository: IntegrationRepository.new, gateway_class: ClientGateway)
       @dto = dto
@@ -243,7 +244,7 @@ module Vitable
       previous_refreshed_at = previous_api_snapshot_refreshed_at(connection)
       return {} unless previous_refreshed_at
 
-      { created_after: previous_refreshed_at }
+      { created_after: previous_refreshed_at - WEBHOOK_EVENT_LOOKBACK }
     end
 
     def previous_api_snapshot_refreshed_at(connection)

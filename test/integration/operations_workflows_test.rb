@@ -3196,10 +3196,11 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
 
     assert result.success?
     assert_equal 1, webhook_filters.count
-    assert_equal previous_refreshed_at.to_i, webhook_filters.first.fetch(:created_after).to_i
+    expected_created_after = previous_refreshed_at - Vitable::RefreshApiSnapshotCommand::WEBHOOK_EVENT_LOOKBACK
+    assert_equal expected_created_after.to_i, webhook_filters.first.fetch(:created_after).to_i
 
     snapshot = @connection.reload.metadata.fetch("api_snapshot")
-    assert_equal previous_refreshed_at.iso8601, snapshot.dig("webhook_event_query", "created_after")
+    assert_equal expected_created_after.iso8601, snapshot.dig("webhook_event_query", "created_after")
     assert_equal 0, snapshot.dig("counts", "remote_webhook_event_count")
   ensure
     ENV[@connection.api_key_reference] = previous_key
