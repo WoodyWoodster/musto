@@ -348,9 +348,9 @@ module Vitable
         limit: 25,
         created_after:,
         created_before:,
-        event_name: "employee.deduction_created",
-        resource_id: "empl_123",
-        resource_type: "employee"
+        event_name: "employer.eligibility_policy_created",
+        resource_id: "empr_123",
+        resource_type: "employer"
       )
 
       assert_equal(
@@ -358,17 +358,17 @@ module Vitable
           limit: 25,
           created_after:,
           created_before:,
-          event_name: :"employee.deduction_created",
-          resource_id: "empl_123",
-          resource_type: :employee
+          event_name: :"employer.eligibility_policy_created",
+          resource_id: "empr_123",
+          resource_type: :employer
         },
         calls.first
       )
       log = connection.api_request_logs.last
       assert_equal "webhook_event.list", log.operation
       assert_equal "/v1/webhook-events", log.path
-      assert_equal "employee.deduction_created", log.request_body.fetch("event_name")
-      assert_equal "employee", log.request_body.fetch("resource_type")
+      assert_equal "employer.eligibility_policy_created", log.request_body.fetch("event_name")
+      assert_equal "employer", log.request_body.fetch("resource_type")
     end
 
     test "rejects unsupported webhook list filters before SDK calls" do

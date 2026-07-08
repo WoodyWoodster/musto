@@ -60,7 +60,20 @@ module Vitable
         path: "/v1/employers/:id/benefit-eligibility-policies"
       }
     ].freeze
-    WEBHOOK_EVENT_NAMES = VitableConnect::WebhookEventListParams::EventName.values.map(&:to_s).freeze
+    DOCUMENTED_WEBHOOK_EVENT_NAMES = %w[
+      enrollment.accepted
+      enrollment.terminated
+      enrollment.elected
+      enrollment.granted
+      enrollment.waived
+      enrollment.started
+      employee.eligibility_granted
+      employee.eligibility_terminated
+      employee.deactivated
+      employee.deduction_created
+      employer.eligibility_policy_created
+    ].freeze
+    WEBHOOK_EVENT_NAMES = (VitableConnect::WebhookEventListParams::EventName.values.map(&:to_s) + DOCUMENTED_WEBHOOK_EVENT_NAMES).uniq.freeze
     WEBHOOK_RESOURCE_TYPES = VitableConnect::WebhookEventListParams::ResourceType.values.map(&:to_s).freeze
     WEBHOOK_PAYLOAD_ONLY_RESOURCE_TYPES = (WEBHOOK_RESOURCE_TYPES - RETRIEVABLE_RESOURCE_TYPES).freeze
 

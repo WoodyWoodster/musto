@@ -2883,16 +2883,17 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_instance_of Vitable::ApiSnapshotDto, detail.api_snapshot
     assert_instance_of Vitable::WebhookSimulatorDto, detail.simulator
     assert_instance_of Vitable::WebhookSimulationEventOptionDto, detail.simulator.event_options.first
-    assert_equal 10, detail.simulator.event_options.count
-    assert_equal %w[enrollment employee], detail.simulator.resource_options
+    assert_equal 11, detail.simulator.event_options.count
+    assert_equal %w[enrollment employee employer], detail.simulator.resource_options
     event_names = detail.simulator.event_options.map(&:event_name)
-    sdk_event_names = VitableConnect::WebhookEventListParams::EventName.values.map(&:to_s)
     assert_includes event_names, "employee.deduction_created"
+    assert_includes event_names, "employer.eligibility_policy_created"
     assert_not_includes event_names, "group.updated"
     assert_not_includes event_names, "benefit_plan.updated"
-    assert_empty event_names - sdk_event_names
+    assert_empty event_names - Vitable::ClientGateway::WEBHOOK_EVENT_NAMES
     assert_equal "enrl_ops_primary_care", detail.simulator.default_resource_id
     assert_equal "empl_ops_casey", detail.simulator.event_options.find { |option| option.resource_type == "employee" }.sample_resource_id
+    assert_equal "empr_ops_123", detail.simulator.event_options.find { |option| option.resource_type == "employer" }.sample_resource_id
     assert_equal [
       "auth tokens",
       "employers",
