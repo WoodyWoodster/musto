@@ -56,6 +56,23 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
     assert_equal occurred_at.iso8601, event.payload.fetch("created_at")
   end
 
+  test "accepts a Vitable webhook that uses organization_external_id for routing" do
+    payload = webhook_payload.except(:organization_id).merge(
+      event_id: "wevt_test_external_org_shape",
+      organization_external_id: @organization.external_id
+    )
+
+    assert_difference "WebhookEvent.count", 1 do
+      post api_v1_webhooks_vitable_path, params: payload, as: :json
+    end
+
+    assert_response :accepted
+    event = WebhookEvent.find_by!(event_id: "wevt_test_external_org_shape")
+    assert_equal @connection, event.integration_connection
+    assert_equal @organization.external_id, event.organization_external_id
+    assert_equal @organization.external_id, event.payload.fetch("organization_id")
+  end
+
   test "rejects a Vitable webhook with an invalid event timestamp" do
     payload = webhook_payload.merge(
       event_id: "wevt_test_invalid_timestamp",
@@ -926,6 +943,46 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
     assert_equal "WebhookEvent", sync_run.stats.dig("resource_reconciliation", "local_record_type")
     assert_equal event.id, sync_run.stats.dig("resource_reconciliation", "local_record_id")
     assert_equal "created_from_event_id", sync_run.stats.dig("resource_reconciliation", "matched_by")
+  ensure
+    ENV.delete("VITABLE_CONNECT_API_KEY")
+  end
+
+  test "direct webhook event fetch accepts organization external id" do
+    ENV["VITABLE_CONNECT_API_KEY"] = "vit_apk_test_value"
+    occurred_at = Time.current.change(usec: 0)
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:fetch_resource) do |_resource_type, resource_id|
+        {
+          data: {
+            id: resource_id,
+            organization_external_id: "org_webhook_test",
+            event_name: "group.updated",
+            resource_type: "group",
+            resource_id: "grp_remote_external_org",
+            created_at: occurred_at.iso8601
+          }
+        }
+      end
+    end
+
+    assert_difference "WebhookEvent.count", 1 do
+      result = Vitable::FetchResourceCommand.new(
+        dto: Vitable::FetchResourceDto.new(connection_id: @connection.id, resource_type: "webhook_event", resource_id: "wevt_remote_external_org_fetch"),
+        gateway_class:
+      ).call
+
+      assert result.success?
+    end
+
+    event = WebhookEvent.find_by!(event_id: "wevt_remote_external_org_fetch")
+    sync_run = @connection.sync_runs.where(operation: "fetch", resource_type: "webhook_event").recent_first.first
+
+    assert_equal @organization.external_id, event.organization_external_id
+    assert_equal "grp_remote_external_org", event.resource_id
+    assert_equal occurred_at.to_i, event.occurred_at.to_i
+    assert_equal "matched", sync_run.stats.dig("resource_reconciliation", "status")
+    assert_equal event.id, sync_run.stats.dig("resource_reconciliation", "local_record_id")
   ensure
     ENV.delete("VITABLE_CONNECT_API_KEY")
   end

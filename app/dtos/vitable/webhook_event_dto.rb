@@ -15,16 +15,23 @@ module Vitable
 
       timestamp = attrs[:created_at].presence || attrs[:occurred_at].presence
       occurred_at = parse_time!(timestamp)
+      organization_external_id = organization_external_id_from(attrs)
 
       new(
         event_id:,
-        organization_external_id: required_attr(attrs, :organization_id),
+        organization_external_id:,
         event_name: required_attr(attrs, :event_name),
         resource_type: required_attr(attrs, :resource_type),
         resource_id: required_attr(attrs, :resource_id),
         occurred_at:,
-        payload: attrs.merge(event_id:, created_at: occurred_at.iso8601)
+        payload: attrs.merge(event_id:, organization_id: organization_external_id, created_at: occurred_at.iso8601)
       )
+    end
+
+    def self.organization_external_id_from(attrs)
+      attrs[:organization_id].presence ||
+        attrs[:organization_external_id].presence ||
+        required_attr(attrs, :organization_id)
     end
 
     def self.required_attr(attrs, key)

@@ -256,13 +256,18 @@ module Vitable
       end
 
       missing_fields = {
-        "organization_id" => remote_resource.fetch("organization_id", nil),
+        "organization_id" => remote_webhook_event_organization_id(remote_resource),
         "event_name" => remote_resource.fetch("event_name", nil),
         "resource_type" => remote_resource.fetch("resource_type", nil),
         "resource_id" => remote_resource.fetch("resource_id", nil),
         "created_at" => remote_resource.fetch("created_at", nil).presence || remote_resource.fetch("occurred_at", nil).presence
       }.filter_map { |field, value| field if value.blank? }
       raise ArgumentError, "Vitable webhook event #{remote_event_id} did not include #{missing_fields.to_sentence}" if missing_fields.any?
+    end
+
+    def remote_webhook_event_organization_id(remote_resource)
+      remote_resource.fetch("organization_id", nil).presence ||
+        remote_resource.fetch("organization_external_id", nil).presence
     end
 
     def webhook_event_organization_mismatch?(dto, expected_organization_id)
