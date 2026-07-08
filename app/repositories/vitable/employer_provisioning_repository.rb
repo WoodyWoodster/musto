@@ -5,6 +5,7 @@ module Vitable
     REQUEST_OPERATIONS = %w[employer.create employer.update_settings employer.eligibility_policy.create].freeze
     ELIGIBILITY_CLASSIFICATIONS = [ "All", "Full time", "Part time" ].freeze
     ELIGIBILITY_WAITING_PERIODS = [ "1st of the following month", "30 days", "60 days", "None" ].freeze
+    VITABLE_PAY_FREQUENCIES = %w[weekly bi_weekly semi_monthly monthly].freeze
 
     def initialize(employer:)
       @employer = employer
@@ -157,7 +158,7 @@ module Vitable
       {
         "name" => @employer.name,
         "legal_name" => @employer.legal_name,
-        "ein" => @employer.ein,
+        "ein" => formatted_ein,
         "email" => billing_email,
         "phone_number" => phone_number,
         "reference_id" => "musto_employer_#{@employer.id}",
@@ -169,10 +170,10 @@ module Vitable
       return {} unless location
 
       {
-        "address_line_1" => location.address_line1,
-        "city" => location.city,
-        "state" => location.state,
-        "zipcode" => location.postal_code
+        "address_line_1" => location.address_line1&.strip,
+        "city" => location.city&.strip,
+        "state" => location.state&.strip&.upcase,
+        "zipcode" => location.postal_code&.strip
       }.compact
     end
 
@@ -192,10 +193,15 @@ module Vitable
 
           holdbacks << holdback(field:, reason_code: "missing_required_field", reason: "#{field.to_s.humanize} is required before creating a Vitable employer.")
         end
+
+        holdbacks.concat(create_payload_format_holdbacks(create_payload))
       end
 
-      if settings_payload.fetch("pay_frequency", nil).blank?
+      pay_frequency = settings_payload.fetch("pay_frequency", nil)
+      if pay_frequency.blank?
         holdbacks << holdback(field: "pay_frequency", reason_code: "missing_pay_frequency", reason: "Pay frequency is required before Vitable employer settings can be updated.")
+      elsif !VITABLE_PAY_FREQUENCIES.include?(pay_frequency)
+        holdbacks << holdback(field: "pay_frequency", reason_code: "unsupported_pay_frequency", reason: "Pay frequency must be one of #{VITABLE_PAY_FREQUENCIES.map(&:humanize).to_sentence}.")
       end
 
       required_eligibility_profile_fields(eligibility_profile).each do |field, value|
@@ -230,6 +236,28 @@ module Vitable
       }
     end
 
+    def create_payload_format_holdbacks(create_payload)
+      [
+        invalid_present_format_holdback("ein", create_payload.fetch("ein", nil), "invalid_ein_format", "EIN must use XX-XXXXXXX before creating a Vitable employer.") { |value| valid_ein?(value) },
+        invalid_present_format_holdback("billing_email", create_payload.fetch("email", nil), "invalid_billing_email", "Billing email must be a valid email address before creating a Vitable employer.") { |value| valid_email?(value) },
+        invalid_format_holdback("phone_number", "invalid_phone_number", "Phone number must contain 10 US digits when supplied.") { valid_optional_phone?(create_payload.fetch("phone_number", nil)) },
+        invalid_present_format_holdback("state", create_payload.dig("address", "state"), "invalid_state_code", "State must be a two-letter code before creating a Vitable employer.") { |value| valid_state?(value) },
+        invalid_present_format_holdback("zipcode", create_payload.dig("address", "zipcode"), "invalid_zipcode", "ZIP code must be a 5-digit or ZIP+4 code before creating a Vitable employer.") { |value| valid_zipcode?(value) }
+      ].compact
+    end
+
+    def invalid_present_format_holdback(field, value, reason_code, reason)
+      return if value.blank? || yield(value)
+
+      holdback(field:, reason_code:, reason:)
+    end
+
+    def invalid_format_holdback(field, reason_code, reason)
+      return if yield
+
+      holdback(field:, reason_code:, reason:)
+    end
+
     def required_eligibility_profile_fields(eligibility_profile)
       {
         classification: eligibility_profile.fetch("classification", nil),
@@ -259,11 +287,14 @@ module Vitable
     end
 
     def billing_email
-      settings.fetch("billing_email", nil).presence || settings.fetch("benefits_email", nil).presence
+      (settings.fetch("billing_email", nil).presence || settings.fetch("benefits_email", nil).presence)&.strip&.downcase
     end
 
     def phone_number
-      settings.fetch("phone_number", nil).presence || settings.fetch("billing_phone", nil).presence
+      raw = settings.fetch("phone_number", nil).presence || settings.fetch("billing_phone", nil).presence
+      digits = raw.to_s.gsub(/\D/, "")
+      digits = digits.delete_prefix("1") if digits.length == 11 && digits.start_with?("1")
+      digits.presence
     end
 
     def vitable_pay_frequency
@@ -276,6 +307,34 @@ module Vitable
         "semi_monthly" => "semi_monthly",
         "monthly" => "monthly"
       }.fetch(local_frequency, local_frequency.presence)
+    end
+
+    def formatted_ein
+      raw = @employer.ein.to_s.strip
+      digits = raw.gsub(/\D/, "")
+      return raw unless digits.length == 9
+
+      "#{digits[0, 2]}-#{digits[2, 7]}"
+    end
+
+    def valid_ein?(value)
+      value.to_s.match?(/\A\d{2}-\d{7}\z/)
+    end
+
+    def valid_email?(value)
+      value.to_s.match?(/\A[^@\s]+@[^@\s]+\.[^@\s]+\z/)
+    end
+
+    def valid_optional_phone?(value)
+      value.blank? || value.to_s.match?(/\A\d{10}\z/)
+    end
+
+    def valid_state?(value)
+      value.to_s.match?(/\A[A-Z]{2}\z/)
+    end
+
+    def valid_zipcode?(value)
+      value.to_s.match?(/\A\d{5}(-\d{4})?\z/)
     end
 
     def settings

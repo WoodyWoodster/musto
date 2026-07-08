@@ -3303,6 +3303,68 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_empty packet.fetch("holdbacks")
   end
 
+  test "Vitable employer provisioning normalizes outbound create fields" do
+    prepare_provisioning_profile
+    @employer.update!(
+      ein: "123456789",
+      settings: @employer.settings.to_h.merge(
+        "billing_email" => " OPS-BENEFITS@EXAMPLE.COM ",
+        "phone_number" => "+1 (555) 123-9000"
+      )
+    )
+    @employer.work_locations.find_by!(name: "Ops HQ").update!(
+      state: "pa",
+      postal_code: " 19106-1234 "
+    )
+
+    post generate_vitable_employer_provisioning_path, params: { requested_by: "integration_admin" }
+
+    packet = @employer.reload.settings.fetch("vitable_employer_provisioning_packet")
+    payload = packet.fetch("create_payload")
+
+    assert_equal "ready", packet.fetch("status")
+    assert_equal "12-3456789", payload.fetch("ein")
+    assert_equal "ops-benefits@example.com", payload.fetch("email")
+    assert_equal "5551239000", payload.fetch("phone_number")
+    assert_equal "PA", payload.fetch("address").fetch("state")
+    assert_equal "19106-1234", payload.fetch("address").fetch("zipcode")
+    assert_empty packet.fetch("holdbacks")
+  end
+
+  test "Vitable employer provisioning blocks invalid API contract fields" do
+    prepare_provisioning_profile
+    @employer.update!(
+      ein: "12345",
+      settings: @employer.settings.to_h.merge(
+        "billing_email" => "ops-benefits",
+        "phone_number" => "555123",
+        "pay_frequency" => "annually"
+      )
+    )
+    @employer.work_locations.find_by!(name: "Ops HQ").update!(
+      state: "Pennsylvania",
+      postal_code: "191"
+    )
+
+    post generate_vitable_employer_provisioning_path, params: { requested_by: "integration_admin" }
+
+    packet = @employer.reload.settings.fetch("vitable_employer_provisioning_packet")
+    reason_codes = packet.fetch("holdbacks").map { |holdback| holdback.fetch("reason_code") }
+
+    assert_equal "blocked", packet.fetch("status")
+    assert_includes reason_codes, "invalid_ein_format"
+    assert_includes reason_codes, "invalid_billing_email"
+    assert_includes reason_codes, "invalid_phone_number"
+    assert_includes reason_codes, "invalid_state_code"
+    assert_includes reason_codes, "invalid_zipcode"
+    assert_includes reason_codes, "unsupported_pay_frequency"
+
+    detail = Vitable::EmployerProvisioningQuery.new.call
+    assert_equal "blocked", detail.preflight_checks.find { |check| check.label == "Legal entity" }.status
+    assert_equal "blocked", detail.preflight_checks.find { |check| check.label == "Physical address" }.status
+    assert_equal "blocked", detail.metrics.find { |metric| metric.label == "Pay frequency" }.status
+  end
+
   test "submits Vitable employer provisioning as missing credentials sync run without API key" do
     prepare_provisioning_profile
     Vitable::GenerateEmployerProvisioningCommand.new(dto: Vitable::GenerateEmployerProvisioningDto.new(requested_by: "ops_test")).call

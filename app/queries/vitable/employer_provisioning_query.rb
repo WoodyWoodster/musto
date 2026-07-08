@@ -41,13 +41,15 @@ module Vitable
       [
         EmployerProvisioningMetricDto.new(label: "Remote employer", value: @employer&.vitable_id.presence || "Create pending", hint: "Vitable employer identifier", status: @employer&.vitable_id.present? ? "ready" : "pending", accent: "bg-indigo-500", format: "text"),
         EmployerProvisioningMetricDto.new(label: "Required fields", value: holdbacks.count.zero? ? "Complete" : "#{holdbacks.count} missing", hint: "legal entity, billing email, address, payroll cadence", status: holdbacks.any? ? "blocked" : "ready", accent: "bg-emerald-500", format: "text"),
-        EmployerProvisioningMetricDto.new(label: "Pay frequency", value: @employer&.settings.to_h.fetch("pay_frequency", "missing").to_s.humanize, hint: "mapped to Vitable settings enum", status: @employer&.settings.to_h.fetch("pay_frequency", nil).present? ? "ready" : "blocked", accent: "bg-cyan-500", format: "text"),
+        EmployerProvisioningMetricDto.new(label: "Pay frequency", value: @employer&.settings.to_h.fetch("pay_frequency", "missing").to_s.humanize, hint: "mapped to Vitable settings enum", status: holdbacks.any? { |holdback| holdback.field == "pay_frequency" } ? "blocked" : "ready", accent: "bg-cyan-500", format: "text"),
         EmployerProvisioningMetricDto.new(label: "Eligibility policy", value: eligibility_profile_value, hint: "remote classification and waiting period", status: eligibility_profile_status, accent: "bg-violet-500", format: "text"),
         EmployerProvisioningMetricDto.new(label: "Last provision", value: last_run&.status&.humanize || "Not sent", hint: connection ? "credential-aware provisioning attempt" : "no Vitable connection", status: last_run&.status || "pending", accent: "bg-amber-500", format: "text")
       ]
     end
 
     def preflight_checks(latest_packet, payload, holdbacks, connection)
+      holdback_fields = holdbacks.map(&:field)
+
       [
         EmployerProvisioningPreflightCheckDto.new(
           label: "Vitable connection",
@@ -61,12 +63,12 @@ module Vitable
         ),
         EmployerProvisioningPreflightCheckDto.new(
           label: "Legal entity",
-          status: [ payload.name, payload.legal_name, payload.ein, payload.email ].all?(&:present?) ? "ready" : "blocked",
+          status: blocked_fields?(holdback_fields, %w[name legal_name ein billing_email phone_number]) ? "blocked" : "ready",
           detail: [ payload.legal_name, payload.ein, payload.email ].compact_blank.to_sentence.presence || "Name, legal name, EIN, and billing email are required for create."
         ),
         EmployerProvisioningPreflightCheckDto.new(
           label: "Physical address",
-          status: [ payload.address_line_1, payload.city, payload.state, payload.zipcode ].all?(&:present?) ? "ready" : "blocked",
+          status: blocked_fields?(holdback_fields, %w[address_line_1 city state zipcode]) ? "blocked" : "ready",
           detail: [ payload.address_line_1, payload.city, payload.state, payload.zipcode ].compact_blank.join(", ").presence || "A non-remote employer address is required for create."
         ),
         EmployerProvisioningPreflightCheckDto.new(
@@ -85,6 +87,10 @@ module Vitable
           detail: holdbacks.any? ? "#{holdbacks.count} blocking fields need attention before submit." : "Packet can be submitted once credentials are configured."
         )
       ]
+    end
+
+    def blocked_fields?(holdback_fields, fields)
+      holdback_fields.intersect?(fields)
     end
 
     def eligibility_profile
