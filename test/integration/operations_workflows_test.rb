@@ -4080,7 +4080,9 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       define_method(:initialize) { |_connection| }
       define_method(:list_all_employers) { response_class.new(data: [ { id: "empr_ops_123", name: "Atlas Global Services" } ]) }
       define_method(:list_all_groups) { response_class.new(data: []) }
-      define_method(:list_all_plans) { response_class.new(data: [ { id: "bprd_remote_dental", name: "Dental" } ]) }
+      define_method(:list_all_plans) do
+        response_class.new(data: [ { plan: { id: "bprd_remote_dental", name: "Dental", product_code: "VD" } } ])
+      end
       define_method(:list_all_webhook_events) { |**_filters| response_class.new(data: []) }
       define_method(:list_all_employee_enrollments) do |employee_id|
         response_class.new(
@@ -4126,9 +4128,14 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal "ready", @pending_deduction.status
     assert_equal "vitable_api_snapshot", @pending_deduction.metadata.fetch("source")
     assert_equal "enrl_remote_dental", @pending_deduction.metadata.fetch("raw_payload").fetch("enrollment_id")
+    assert_equal "bprd_remote_dental", snapshot.fetch("plans").first.fetch("id")
+    assert_equal "Dental", snapshot.fetch("plans").first.fetch("name")
     assert_equal 1, snapshot.dig("counts", "mapped_plan_count")
     assert_equal 2, snapshot.dig("counts", "unmatched_local_plan_count")
     assert_equal 1, snapshot.fetch("plan_reconciliation").first.fetch("mapped_plan_count")
+    plan_catalog_snapshot = @employer.reload.settings.fetch("vitable_plan_catalog_snapshot")
+    assert_equal "bprd_remote_dental", plan_catalog_snapshot.fetch("remote_plans").first.fetch("id")
+    assert_equal "VD", plan_catalog_snapshot.fetch("remote_plans").first.fetch("product_code")
     assert_equal 1, snapshot.dig("counts", "reconciled_enrollment_count")
     assert_equal 1, snapshot.dig("counts", "updated_enrollment_count")
     assert_equal 1, snapshot.dig("counts", "enrollment_deduction_changed_count")
@@ -4332,6 +4339,35 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal "[FILTERED]", sync.stats.dig("api_snapshot_trace", "last_response", "api_key")
     assert_match "data array", result.errors.to_sentence
     assert_not_includes sync.stats.to_json, "vit_apk_bad_snapshot_list"
+  ensure
+    ENV[@connection.api_key_reference] = previous_key
+  end
+
+  test "Vitable API snapshot refresh fails when plan list item omits remote plan id" do
+    response_class = Data.define(:data)
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:list_all_employers) { response_class.new(data: []) }
+      define_method(:list_all_groups) { response_class.new(data: []) }
+      define_method(:list_all_plans) { response_class.new(data: [ { name: "Primary Care", api_key: "vit_apk_bad_snapshot_plan" } ]) }
+    end
+    previous_key = ENV[@connection.api_key_reference]
+    ENV[@connection.api_key_reference] = "vit_apk_test_value"
+
+    result = Vitable::RefreshApiSnapshotCommand.new(
+      dto: Vitable::RefreshApiSnapshotDto.new(connection_id: @connection.id, requested_by: "integration_admin"),
+      gateway_class:
+    ).call
+
+    assert result.failure?
+    assert_nil @connection.reload.metadata.fetch("api_snapshot", nil)
+    sync = @connection.sync_runs.where(operation: "api_snapshot_refresh").recent_first.first
+    assert_equal "failed", sync.status
+    assert_equal "plans", sync.stats.dig("api_snapshot_trace", "last_step")
+    assert_equal "[FILTERED]", sync.stats.dig("api_snapshot_trace", "last_response", "data", 0, "api_key")
+    assert_match "Vitable plan list response item 1 Primary Care did not include a remote plan ID", sync.error_message
+    assert_match "remote plan ID", result.errors.to_sentence
+    assert_not_includes sync.stats.to_json, "vit_apk_bad_snapshot_plan"
   ensure
     ENV[@connection.api_key_reference] = previous_key
   end

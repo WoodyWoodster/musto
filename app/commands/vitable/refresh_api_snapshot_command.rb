@@ -48,7 +48,9 @@ module Vitable
       refreshed_at = snapshot_refreshed_at.iso8601
       employers = list_snapshot_page(trace, step: "employers", response_label: "Vitable employer list response") { gateway.list_all_employers }
       groups = list_snapshot_page(trace, step: "groups", response_label: "Vitable group list response") { gateway.list_all_groups }
-      plans = list_snapshot_page(trace, step: "plans", response_label: "Vitable plan list response") { gateway.list_all_plans }
+      plans = plan_catalog_snapshots(
+        list_snapshot_page(trace, step: "plans", response_label: "Vitable plan list response") { gateway.list_all_plans }
+      )
       employer_details = remote_employer_details(gateway, connection, trace:)
       group_details = remote_group_details(gateway, connection, groups, trace:)
       employer_reconciliation = RemoteEmployerSnapshotRepository.new(connection:).reconcile_snapshot(
@@ -319,6 +321,15 @@ module Vitable
           "unmatched_local_count" => snapshot.fetch("unmatched_local_plans", []).count,
           "ambiguous_remote_count" => snapshot.fetch("ambiguous_remote_plans", []).count
         }
+      end
+    end
+
+    def plan_catalog_snapshots(remote_plans)
+      Array(remote_plans).map.with_index do |remote_plan, index|
+        RemotePlanDto
+          .from_hash(remote_plan)
+          .validate!(response_label: "Vitable plan list response item #{index + 1}")
+          .to_snapshot_hash
       end
     end
 
