@@ -387,7 +387,7 @@ module Vitable
 
     def succeed_webhook_delivery_run(event, sync_run, response)
       response_hash = serialize_response(response)
-      deliveries = response_hash.fetch("data", [])
+      deliveries = webhook_delivery_payloads_from_response(response_hash, expected_webhook_event_id: event.event_id)
       refreshed_at = Time.current.iso8601
       event.update!(
         metadata: event.metadata.to_h.merge(
@@ -565,6 +565,18 @@ module Vitable
     end
 
     private
+
+    def webhook_delivery_payloads_from_response(response_hash, expected_webhook_event_id:)
+      data = response_hash.fetch("data", [])
+      raise ArgumentError, "Vitable webhook delivery response did not include a data array" unless data.is_a?(Array)
+
+      data.map do |payload|
+        WebhookDeliveryDto
+          .from_hash(payload)
+          .validate!(expected_webhook_event_id:)
+          .to_snapshot_hash
+      end
+    end
 
     def webhook_replay_stats(sync_run, event, result: nil, errors: [])
       stats = sync_run.stats.to_h.merge(

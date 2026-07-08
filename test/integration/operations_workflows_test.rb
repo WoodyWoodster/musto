@@ -2768,6 +2768,77 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     ENV[@connection.api_key_reference] = previous_key
   end
 
+  test "webhook delivery refresh fails when remote delivery omits id" do
+    response_class = Data.define(:data)
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:list_webhook_event_deliveries) do |event_id|
+        response_class.new(
+          data: [
+            {
+              webhook_event_id: event_id,
+              subscription_id: "wsub_ops_123",
+              status: "Delivered",
+              created_at: Time.current
+            }
+          ]
+        )
+      end
+    end
+    previous_key = ENV[@connection.api_key_reference]
+    ENV[@connection.api_key_reference] = "vit_apk_test_value"
+
+    result = Vitable::RefreshWebhookDeliveriesCommand.new(
+      dto: Vitable::RefreshWebhookDeliveriesDto.new(webhook_event_id: @webhook_event.id, requested_by: "integration_admin"),
+      gateway_class:
+    ).call
+
+    assert result.failure?
+    assert_nil @webhook_event.reload.metadata.to_h.fetch("delivery_snapshot", nil)
+    sync = @connection.sync_runs.where(operation: "webhook_delivery_refresh").recent_first.first
+    assert_equal "failed", sync.status
+    assert_match "remote delivery ID", sync.error_message
+    assert_match "remote delivery ID", result.errors.to_sentence
+  ensure
+    ENV[@connection.api_key_reference] = previous_key
+  end
+
+  test "webhook delivery refresh fails when remote delivery belongs to another event" do
+    response_class = Data.define(:data)
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:list_webhook_event_deliveries) do |_event_id|
+        response_class.new(
+          data: [
+            {
+              id: "wdlv_ops_123",
+              webhook_event_id: "wevt_other",
+              subscription_id: "wsub_ops_123",
+              status: "Delivered",
+              created_at: Time.current
+            }
+          ]
+        )
+      end
+    end
+    previous_key = ENV[@connection.api_key_reference]
+    ENV[@connection.api_key_reference] = "vit_apk_test_value"
+
+    result = Vitable::RefreshWebhookDeliveriesCommand.new(
+      dto: Vitable::RefreshWebhookDeliveriesDto.new(webhook_event_id: @webhook_event.id, requested_by: "integration_admin"),
+      gateway_class:
+    ).call
+
+    assert result.failure?
+    assert_nil @webhook_event.reload.metadata.to_h.fetch("delivery_snapshot", nil)
+    sync = @connection.sync_runs.where(operation: "webhook_delivery_refresh").recent_first.first
+    assert_equal "failed", sync.status
+    assert_match "expected #{@webhook_event.event_id}", sync.error_message
+    assert_match "expected #{@webhook_event.event_id}", result.errors.to_sentence
+  ensure
+    ENV[@connection.api_key_reference] = previous_key
+  end
+
   test "unsupported Vitable resource fetches are recorded as failed sync runs" do
     previous_key = ENV[@connection.api_key_reference]
     ENV[@connection.api_key_reference] = "vit_apk_test_value"
