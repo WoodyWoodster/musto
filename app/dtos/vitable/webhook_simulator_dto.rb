@@ -10,9 +10,7 @@ module Vitable
       { label: "Employee eligibility granted", event_name: "employee.eligibility_granted", resource_type: "employee" },
       { label: "Employee eligibility terminated", event_name: "employee.eligibility_terminated", resource_type: "employee" },
       { label: "Employee deactivated", event_name: "employee.deactivated", resource_type: "employee" },
-      { label: "Employee deduction created", event_name: "employee.deduction_created", resource_type: "employee" },
-      { label: "Employer eligibility policy created", event_name: "employer.eligibility_policy_created", resource_type: "employer" },
-      { label: "Group updated", event_name: "group.updated", resource_type: "group" }
+      { label: "Employee deduction created", event_name: "employee.deduction_created", resource_type: "employee" }
     ].freeze
 
     def self.default

@@ -1388,8 +1388,8 @@ end
 
 [
   [ "wevt_demo_enrollment_accepted", "enrollment.accepted", "enrollment", "enrl_demo_accepted", "needs_credentials", 2.hours.ago ],
-  [ "wevt_demo_employee_created", "employee.created", "employee", "empl_demo_created", "needs_credentials", 90.minutes.ago ],
-  [ "wevt_demo_payroll_deduction", "payroll_deduction.generated", "payroll_deduction", "pded_demo_generated", "received", 25.minutes.ago ]
+  [ "wevt_demo_employee_eligibility", "employee.eligibility_granted", "employee", "empl_demo_eligibility", "needs_credentials", 90.minutes.ago ],
+  [ "wevt_demo_employee_deduction", "employee.deduction_created", "employee", "empl_demo_deduction", "received", 25.minutes.ago ]
 ].each do |event_id, event_name, resource_type, resource_id, status, occurred_at|
   event = WebhookEvent.find_or_initialize_by(event_id:)
   event.assign_attributes(
