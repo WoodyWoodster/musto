@@ -2,6 +2,40 @@ require "test_helper"
 
 module Vitable
   class ClientGatewayTest < ActiveSupport::TestCase
+    test "documents every installed Vitable SDK endpoint method" do
+      ignored_subresources = {
+        VitableConnect::Resources::Groups => %i[members]
+      }
+      documented_methods = ClientGateway::SDK_METHOD_COVERAGE.flat_map do |entry|
+        entry.fetch(:sdk_methods).map { |method_name| [ entry.fetch(:resource_class).name, method_name.to_s ] }
+      end
+      installed_methods = ClientGateway::SDK_METHOD_COVERAGE.flat_map do |entry|
+        resource_class = entry.fetch(:resource_class)
+        ignored = ignored_subresources.fetch(resource_class, [])
+        (resource_class.public_instance_methods(false) - [ :initialize ] - ignored).map do |method_name|
+          [ resource_class.name, method_name.to_s ]
+        end
+      end
+
+      assert_equal installed_methods.sort, documented_methods.sort
+    end
+
+    test "SDK coverage registry points at real gateway methods and endpoint catalog operations" do
+      gateway_methods = ClientGateway.public_instance_methods(false)
+      missing_gateway_methods = (
+        ClientGateway::SDK_METHOD_COVERAGE.flat_map { |entry| entry.fetch(:gateway_methods) } +
+        ClientGateway::CUSTOM_OPERATION_COVERAGE.map { |entry| entry.fetch(:gateway_method) }
+      ).uniq - gateway_methods
+      catalog_operations = ConnectionDetailDto.endpoint_catalog.flat_map { |endpoint| endpoint.fetch(:operations) }.uniq
+      missing_catalog_operations = (
+        ClientGateway::SDK_METHOD_COVERAGE.flat_map { |entry| entry.fetch(:operations) } +
+        ClientGateway::CUSTOM_OPERATION_COVERAGE.map { |entry| entry.fetch(:operation) }
+      ).uniq - catalog_operations
+
+      assert_empty missing_gateway_methods
+      assert_empty missing_catalog_operations
+    end
+
     test "redacts sensitive values from serialized responses" do
       organization = Organization.create!(name: "Gateway Test", external_id: "org_gateway_test")
       connection = organization.integration_connections.create!(provider: "vitable", environment: "production")

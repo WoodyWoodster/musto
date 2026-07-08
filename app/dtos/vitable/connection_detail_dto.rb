@@ -133,6 +133,10 @@ module Vitable
     ].freeze
     NON_READY_ENDPOINT_STATUSES = %w[failed needs_credentials blocked running].freeze
 
+    def self.endpoint_catalog
+      ENDPOINT_CATALOG
+    end
+
     def self.from_record(record, webhook_events:, sync_runs:, request_logs:, simulator_resource_ids: {})
       event_dtos = webhook_events.map { |event| Operations::IntegrationWebhookEventDto.from_record(event) }
       sync_dtos = sync_runs.map { |sync| Operations::SyncRunDto.from_record(sync) }
@@ -215,7 +219,7 @@ module Vitable
     end
 
     def self.endpoint_coverage(webhook_events, sync_runs, request_logs, metadata)
-      ENDPOINT_CATALOG.map do |endpoint|
+      endpoint_catalog.map do |endpoint|
         activity = endpoint_activity(endpoint, webhook_events, sync_runs, request_logs)
         EndpointCoverageDto.new(
           resource_type: endpoint.fetch(:resource_type),

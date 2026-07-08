@@ -3,6 +3,63 @@ require "vitable_connect"
 module Vitable
   class ClientGateway
     RETRIEVABLE_RESOURCE_TYPES = %w[employee employer enrollment webhook_event group].freeze
+    SDK_METHOD_COVERAGE = [
+      {
+        resource_class: VitableConnect::Resources::Auth,
+        sdk_methods: %i[issue_access_token],
+        gateway_methods: %i[issue_access_token issue_employee_access_token issue_employer_access_token],
+        operations: %w[auth.issue_access_token auth.issue_employee_access_token auth.issue_employer_access_token]
+      },
+      {
+        resource_class: VitableConnect::Resources::Employees,
+        sdk_methods: %i[retrieve list_enrollments],
+        gateway_methods: %i[retrieve_employee list_employee_enrollments list_all_employee_enrollments],
+        operations: %w[employee.retrieve employee.list_enrollments]
+      },
+      {
+        resource_class: VitableConnect::Resources::Employers,
+        sdk_methods: %i[create retrieve list list_employees submit_census_sync update_settings],
+        gateway_methods: %i[create_employer retrieve_employer list_employers list_all_employers list_employer_employees list_all_employer_employees submit_census_sync update_employer_settings],
+        operations: %w[employer.create employer.retrieve employer.list employer.list_employees employer.census_sync employer.update_settings]
+      },
+      {
+        resource_class: VitableConnect::Resources::Enrollments,
+        sdk_methods: %i[retrieve],
+        gateway_methods: %i[retrieve_enrollment],
+        operations: %w[enrollment.retrieve]
+      },
+      {
+        resource_class: VitableConnect::Resources::WebhookEvents,
+        sdk_methods: %i[retrieve list list_deliveries],
+        gateway_methods: %i[retrieve_webhook_event list_webhook_events list_all_webhook_events list_webhook_event_deliveries],
+        operations: %w[webhook_event.retrieve webhook_event.list webhook_event.list_deliveries]
+      },
+      {
+        resource_class: VitableConnect::Resources::Groups,
+        sdk_methods: %i[create retrieve update list],
+        gateway_methods: %i[create_group retrieve_group update_group list_groups list_all_groups],
+        operations: %w[group.create group.retrieve group.update group.list]
+      },
+      {
+        resource_class: VitableConnect::Resources::Groups::Members::Sync,
+        sdk_methods: %i[submit retrieve],
+        gateway_methods: %i[submit_group_member_sync retrieve_group_member_sync],
+        operations: %w[group.member_sync.submit group.member_sync.retrieve]
+      },
+      {
+        resource_class: VitableConnect::Resources::Plans,
+        sdk_methods: %i[list],
+        gateway_methods: %i[list_plans list_all_plans],
+        operations: %w[plan.list]
+      }
+    ].freeze
+    CUSTOM_OPERATION_COVERAGE = [
+      {
+        gateway_method: :create_eligibility_policy,
+        operation: "employer.eligibility_policy.create",
+        path: "/v1/employers/:id/benefit-eligibility-policies"
+      }
+    ].freeze
 
     def self.retrievable_resource_type?(resource_type)
       RETRIEVABLE_RESOURCE_TYPES.include?(resource_type.to_s)
