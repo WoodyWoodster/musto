@@ -4,6 +4,7 @@ module Vitable
     SUBMISSION_KEY = "vitable_census_sync_last_submission"
     VERIFICATION_KEY = "vitable_census_roster_verification"
     MAX_EMPLOYEES = 5_000
+    MIN_EMPLOYEES = 1
     CENSUS_OPERATIONS = %w[census_manifest census_sync remote_roster_refresh].freeze
 
     def initialize(employer:)
@@ -252,7 +253,7 @@ module Vitable
     private
 
     def manifest_status(lines, holdbacks, offboarding_omissions)
-      return "blocked" if lines.empty? && offboarding_omissions.empty?
+      return "blocked" if lines.count < MIN_EMPLOYEES
       return "needs_review" if @employer.vitable_id.blank? || holdbacks.any?
 
       "ready"

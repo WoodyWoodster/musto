@@ -15,9 +15,7 @@ module Vitable
       sync_run = @repository.create_sync_run(manifest:, requested_by: @dto.requested_by)
 
       return blocked(sync_run, "Remote Vitable employer ID is missing") if @employer.vitable_id.blank?
-      if ready_employees(manifest).empty? && offboarding_omissions(manifest).empty?
-        return blocked(sync_run, "Generate at least one ready employee row or approved offboarding omission before submitting census sync")
-      end
+      return blocked(sync_run, "Generate at least one ready employee row before submitting census sync") if ready_employees(manifest).empty?
 
       unless @repository.connection.credentials_present?
         sync_run = @repository.mark_sync_needs_credentials(sync_run)
@@ -38,10 +36,6 @@ module Vitable
 
     def ready_employees(manifest)
       manifest.fetch("api_payload", {}).fetch("employees", [])
-    end
-
-    def offboarding_omissions(manifest)
-      manifest.fetch("offboarding_omissions", [])
     end
 
     def blocked(sync_run, message)

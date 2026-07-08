@@ -3371,7 +3371,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
 
     assert_redirected_to vitable_census_sync_path
     batch = @employer.reload.settings.fetch("vitable_census_sync_batch")
-    assert_equal "ready", batch.fetch("status")
+    assert_equal "blocked", batch.fetch("status")
     assert_equal 1, batch.fetch("totals").fetch("offboarding_omission_count")
     assert_empty batch.fetch("api_payload").fetch("employees")
     omission = batch.fetch("offboarding_omissions").first
@@ -3380,10 +3380,12 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal "empl_ops_casey", omission.fetch("remote_employee_id")
 
     detail = Vitable::CensusSyncQuery.new.call
+    assert_not detail.submittable?
     assert_instance_of Vitable::CensusSyncOffboardingOmissionDto, detail.offboarding_omissions.first
+    assert_equal "blocked", detail.preflight_checks.find { |check| check.label == "Batch size" }.status
   end
 
-  test "submits offboarding-only Vitable census sync for employee deactivation" do
+  test "blocks offboarding-only Vitable census sync before remote submit" do
     @employer.update!(vitable_id: "empr_ops_123")
     @employee.update!(vitable_id: "empl_ops_casey")
     @enrollment.update!(vitable_id: "enrl_ops_primary")
@@ -3393,7 +3395,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
 
     response_class = Data.define(:data)
     gateway_class = Class.new do
-      define_method(:initialize) { |_connection| }
+      define_method(:initialize) { |_connection| raise "gateway should not be called for empty census roster" }
       define_method(:submit_census_sync) do |employer_id, employees|
         response_class.new(
           data: {
@@ -3413,14 +3415,16 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       gateway_class:
     ).call
 
-    assert result.success?
-    submission = @employer.reload.settings.fetch("vitable_census_sync_last_submission")
-    assert_equal "accepted", submission.fetch("status")
-    assert_equal 0, submission.fetch("ready_count")
-    assert_equal 1, submission.fetch("offboarding_omission_count")
-    assert_empty submission.fetch("employee_reference_ids")
-    assert_equal "deactivation_submitted", @employee.reload.metadata.fetch("vitable_census_sync_status")
-    assert_equal "submitted", @employer.settings.fetch("vitable_census_sync_batch").fetch("offboarding_omissions").first.fetch("status")
+    assert_not result.success?
+    assert_nil @employer.reload.settings.fetch("vitable_census_sync_last_submission", nil)
+    sync = @connection.sync_runs.where(operation: "census_sync").recent_first.first
+    assert_equal "blocked", sync.status
+    assert_equal "Generate at least one ready employee row before submitting census sync", sync.error_message
+    assert_equal "Generate at least one ready employee row before submitting census sync", sync.stats.fetch("blocked_reason")
+    assert_nil @employee.reload.metadata.fetch("vitable_census_sync_status", nil)
+    omission = @employer.settings.fetch("vitable_census_sync_batch").fetch("offboarding_omissions").first
+    assert_nil omission.fetch("submitted_at", nil)
+    assert_nil omission.fetch("accepted_at", nil)
   ensure
     ENV[@connection.api_key_reference] = previous_key
   end

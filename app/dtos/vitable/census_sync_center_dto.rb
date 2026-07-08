@@ -25,7 +25,7 @@ module Vitable
     end
 
     def submittable?
-      generated? && (latest_manifest.ready_count.positive? || latest_manifest.offboarding_omission_count.positive?)
+      generated? && latest_manifest.ready_count >= CensusSyncRepository::MIN_EMPLOYEES
     end
   end
 end

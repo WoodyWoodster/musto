@@ -84,8 +84,8 @@ module Vitable
         ),
         CensusSyncPreflightCheckDto.new(
           label: "Batch size",
-          status: roster.count > CensusSyncRepository::MAX_EMPLOYEES ? "blocked" : "ready",
-          detail: "#{roster.count} of #{CensusSyncRepository::MAX_EMPLOYEES} maximum employees selected."
+          status: batch_size_status(latest_manifest, roster),
+          detail: batch_size_detail(latest_manifest, roster)
         ),
         CensusSyncPreflightCheckDto.new(
           label: "Remote roster mapping",
@@ -107,6 +107,20 @@ module Vitable
 
     def verification
       @verification ||= @repository.latest_roster_verification.present? ? CensusRosterVerificationDto.from_hash(@repository.latest_roster_verification) : nil
+    end
+
+    def batch_size_status(latest_manifest, roster)
+      return "blocked" if latest_manifest&.ready_count.to_i < CensusSyncRepository::MIN_EMPLOYEES
+      return "blocked" if roster.count > CensusSyncRepository::MAX_EMPLOYEES
+
+      "ready"
+    end
+
+    def batch_size_detail(latest_manifest, roster)
+      ready_count = latest_manifest&.ready_count.to_i
+      return "Generate at least #{CensusSyncRepository::MIN_EMPLOYEES} ready employee row before submitting census sync." if ready_count < CensusSyncRepository::MIN_EMPLOYEES
+
+      "#{roster.count} of #{CensusSyncRepository::MAX_EMPLOYEES} maximum employees selected."
     end
 
     def verification_status

@@ -15,7 +15,7 @@
 
         <div class="mt-6 flex flex-wrap gap-3">
           <%= button_to "Generate manifest", generate_vitable_census_manifest_path, method: :post, params: { requested_by: "Musto Operations" }, class: "rounded-md bg-slate-950 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-slate-800" %>
-          <%= button_to "Submit census sync", submit_vitable_census_sync_path, method: :post, params: { requested_by: "Musto Operations" }, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
+          <%= button_to "Submit census sync", submit_vitable_census_sync_path, method: :post, params: { requested_by: "Musto Operations" }, disabled: !@census.submittable?, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 disabled:shadow-none" %>
           <%= button_to "Refresh remote roster", refresh_vitable_remote_roster_path, method: :post, params: { requested_by: "Musto Operations" }, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
           <%= link_to "Vitable connection", @census.connection_id ? integration_connection_path(@census.connection_id) : integrations_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
           <%= link_to "Partner docs", @census.ruby_docs_url, target: "_blank", rel: "noopener", class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
