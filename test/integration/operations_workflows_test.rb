@@ -2085,9 +2085,14 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal 2, snapshot.fetch("mapped_plan_count")
     assert_equal "plan_remote_unknown", snapshot.fetch("unmatched_remote_plans").first.fetch("id")
     assert_equal "plans.list", @plan.metadata.dig("vitable_plan_mapping", "matched_by")
+    assert_equal "exact_name", @plan.metadata.dig("vitable_plan_mapping", "match_strategy")
+    assert_equal "plan_remote_primary", @plan.metadata.dig("vitable_plan_mapping", "remote_plan_snapshot", "id")
+    assert_equal "exact_name", @pending_plan.metadata.dig("vitable_plan_mapping", "match_strategy")
+    assert_equal "exact_name", snapshot.fetch("mapped_plans").find { |plan| plan.fetch("remote_plan_id") == "plan_remote_primary" }.fetch("match_strategy")
 
     detail = Benefits::PlanAdministrationQuery.new.call
     assert_instance_of Benefits::VitablePlanMappingDto, detail.mapped_plans.first
+    assert_equal "exact_name", detail.mapped_plans.find { |plan| plan.remote_plan_id == "plan_remote_primary" }.match_strategy
     assert_instance_of Benefits::VitablePlanMappingIssueDto, detail.mapping_issues.first
   ensure
     ENV[@connection.api_key_reference] = previous_key

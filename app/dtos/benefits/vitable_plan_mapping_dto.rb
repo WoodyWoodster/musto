@@ -4,6 +4,7 @@ module Benefits
     :local_plan_name,
     :remote_plan_id,
     :remote_plan_name,
+    :match_strategy,
     :category
   ) do
     def self.from_hash(payload)
@@ -14,6 +15,7 @@ module Benefits
         local_plan_name: attributes.fetch("local_plan_name"),
         remote_plan_id: attributes.fetch("remote_plan_id"),
         remote_plan_name: attributes.fetch("remote_plan_name"),
+        match_strategy: attributes.fetch("match_strategy", nil),
         category: attributes.fetch("category", nil)
       )
     end
