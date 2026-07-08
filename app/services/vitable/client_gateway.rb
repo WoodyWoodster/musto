@@ -1,3 +1,4 @@
+require "json"
 require "vitable_connect"
 
 module Vitable
@@ -324,12 +325,12 @@ module Vitable
         if policies.respond_to?(:create)
           policies.create(employer_id, body)
         else
-          client.request(
+          client.request({
             method: :post,
-            path:,
+            path: sdk_request_path(path),
             body:,
             model: VitableConnect::Internal::Type::Unknown
-          )
+          })
         end
       end
     end
@@ -342,11 +343,11 @@ module Vitable
         if policies.respond_to?(:retrieve)
           policies.retrieve(policy_id)
         else
-          client.request(
+          client.request({
             method: :get,
-            path:,
+            path: sdk_request_path(path),
             model: VitableConnect::Internal::Type::Unknown
-          )
+          })
         end
       end
     end
@@ -455,10 +456,14 @@ module Vitable
         response
       when Array
         { data: response }
-      when String, Numeric, TrueClass, FalseClass
+      when String
+        parsed_string_response(response)
+      when Numeric, TrueClass, FalseClass
         { value: response }
       else
-        if response.respond_to?(:deep_to_h)
+        if io_like_response?(response)
+          parsed_string_response(response_body_string(response))
+        elsif response.respond_to?(:deep_to_h)
           response.deep_to_h
         elsif response.respond_to?(:to_h)
           response.to_h
@@ -466,6 +471,34 @@ module Vitable
           { value: response.to_s }
         end
       end
+    end
+
+    def parsed_string_response(value)
+      parsed = JSON.parse(value.to_s)
+
+      case parsed
+      when Hash
+        parsed
+      when Array
+        { data: parsed }
+      else
+        { value: parsed }
+      end
+    rescue JSON::ParserError
+      { value: value.to_s }
+    end
+
+    def io_like_response?(response)
+      response.respond_to?(:string) || response.respond_to?(:read)
+    end
+
+    def response_body_string(response)
+      return response.string if response.respond_to?(:string)
+
+      position = response.pos if response.respond_to?(:pos)
+      body = response.read
+      response.pos = position if position && response.respond_to?(:pos=)
+      body.to_s
     end
 
     def page_response(page)
@@ -534,6 +567,10 @@ module Vitable
 
     def eligibility_policy_payload(payload)
       payload.to_h.deep_symbolize_keys.slice(:classification, :waiting_period).compact
+    end
+
+    def sdk_request_path(path)
+      path.to_s.delete_prefix("/")
     end
 
     def webhook_events_query(limit:, created_after:, created_before:, event_name:, resource_id:, resource_type:)

@@ -74,7 +74,10 @@ module Vitable
       when Numeric, TrueClass, FalseClass
         { value: value }
       else
-        if value.respond_to?(:deep_to_h)
+        if io_like_payload?(value)
+          body = payload_body_string(value)
+          parsed_json_payload(body) || { value: redact_text(body) }
+        elsif value.respond_to?(:deep_to_h)
           value.deep_to_h
         elsif value.respond_to?(:to_h)
           value.to_h
@@ -82,6 +85,19 @@ module Vitable
           { value: redact_text(value.to_s) }
         end
       end
+    end
+
+    def io_like_payload?(value)
+      value.respond_to?(:string) || value.respond_to?(:read)
+    end
+
+    def payload_body_string(value)
+      return value.string if value.respond_to?(:string)
+
+      position = value.pos if value.respond_to?(:pos)
+      body = value.read
+      value.pos = position if position && value.respond_to?(:pos=)
+      body.to_s
     end
 
     def parsed_json_payload(value)

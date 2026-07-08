@@ -98,7 +98,7 @@ module Vitable
         remote_ids: {},
         employer_name: "Musto Certification #{certification_id}",
         employee_email: "benefits+#{certification_id}@example.com",
-        phone: "5550101234",
+        phone: "267555#{SecureRandom.random_number(10_000).to_s.rjust(4, "0")}",
         ein: "#{SecureRandom.random_number(90) + 10}-#{SecureRandom.random_number(10_000_000).to_s.rjust(7, "0")}"
       }
     end

@@ -74,28 +74,6 @@ module Vitable
         demo_supported: true
       },
       {
-        key: "employer.eligibility_policy.create",
-        resource_type: "eligibility policy creation",
-        method: "POST",
-        endpoint: EndpointCatalog::EMPLOYER_ELIGIBILITY_POLICIES,
-        operation: "employer.eligibility_policy.create",
-        sdk_resource_class: nil,
-        sdk_method: nil,
-        demo_supported: true,
-        transport: "raw_request_fallback"
-      },
-      {
-        key: "eligibility_policy.retrieve",
-        resource_type: "eligibility policy retrieval",
-        method: "GET",
-        endpoint: EndpointCatalog::BENEFIT_ELIGIBILITY_POLICY,
-        operation: "eligibility_policy.retrieve",
-        sdk_resource_class: nil,
-        sdk_method: nil,
-        demo_supported: true,
-        transport: "raw_request_fallback"
-      },
-      {
         key: "employer.census_sync",
         resource_type: "census sync",
         method: "POST",

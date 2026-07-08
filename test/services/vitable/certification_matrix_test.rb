@@ -5,7 +5,7 @@ module Vitable
     test "has a certification case for every endpoint catalog row" do
       certified_endpoints = CertificationMatrix.cases.map { |entry| entry.fetch(:endpoint) }
 
-      EndpointCatalog.coverage_catalog.each do |entry|
+      EndpointCatalog.coverage_catalog.select { |entry| entry.fetch(:certifiable, true) }.each do |entry|
         assert_includes certified_endpoints, entry.fetch(:fetch_path), "#{entry.fetch(:resource_type)} is not certified"
       end
     end

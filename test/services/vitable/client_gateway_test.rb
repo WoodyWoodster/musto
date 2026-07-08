@@ -226,13 +226,34 @@ module Vitable
       assert_equal "elig_policy_123", response.dig(:data, :id)
       request = requests.first
       assert_equal :post, request.fetch(:method)
-      assert_equal "/v1/employers/empr_123/benefit-eligibility-policies", request.fetch(:path)
+      assert_equal "v1/employers/empr_123/benefit-eligibility-policies", request.fetch(:path)
       assert_equal({ classification: "All", waiting_period: "30 days" }, request.fetch(:body))
 
       log = connection.api_request_logs.last
       assert_equal "employer.eligibility_policy.create", log.operation
       assert_equal "/v1/employers/empr_123/benefit-eligibility-policies", log.path
       assert_equal "All", log.request_body.fetch("classification")
+    end
+
+    test "logs JSON IO responses from authenticated request fallback" do
+      organization = Organization.create!(name: "Gateway IO Fallback Test", external_id: "org_gateway_io_fallback_test")
+      connection = organization.integration_connections.create!(provider: "vitable", environment: "production")
+      gateway = ClientGateway.new(connection)
+      fake_client = Object.new
+      fake_client.define_singleton_method(:request) do |_request|
+        StringIO.new(JSON.generate(data: { id: "elig_policy_io_123", employer_id: "empr_123" }))
+      end
+      gateway.define_singleton_method(:client) { fake_client }
+
+      gateway.create_eligibility_policy("empr_123", {
+        "classification" => "All",
+        "waiting_period" => "30 days"
+      })
+
+      log = connection.api_request_logs.last
+      assert_equal "employer.eligibility_policy.create", log.operation
+      assert_equal "elig_policy_io_123", log.response_body.dig("data", "id")
+      assert_equal "empr_123", log.response_body.dig("data", "employer_id")
     end
 
     test "submits eligibility policy through first class SDK resource when available" do
@@ -283,7 +304,7 @@ module Vitable
       assert_equal "empr_123", response.dig(:data, :employer_id)
       request = requests.first
       assert_equal :get, request.fetch(:method)
-      assert_equal "/v1/benefit-eligibility-policies/elig_policy_123", request.fetch(:path)
+      assert_equal "v1/benefit-eligibility-policies/elig_policy_123", request.fetch(:path)
       assert_not request.key?(:body)
 
       log = connection.api_request_logs.last

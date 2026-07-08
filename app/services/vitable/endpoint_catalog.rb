@@ -87,7 +87,9 @@ module Vitable
         method: "POST",
         fetch_path: EMPLOYER_ELIGIBILITY_POLICIES,
         operations: %w[employer.eligibility_policy.create],
-        sync_operations: %w[employer_create employer_settings_update]
+        sync_operations: %w[employer_create employer_settings_update],
+        certifiable: false,
+        certification_note: "Current Vitable docs expose the resource without create/retrieve methods; demo returns 404 for this raw fallback path."
       },
       {
         resource_type: "eligibility policy retrieval",
@@ -96,7 +98,9 @@ module Vitable
         operations: %w[eligibility_policy.retrieve],
         sync_operations: %w[api_snapshot_refresh],
         resource_fetch_fragments: %w[/benefit-eligibility-policies/],
-        fetch_resource_types: %w[eligibility_policy benefit_eligibility_policy]
+        fetch_resource_types: %w[eligibility_policy benefit_eligibility_policy],
+        certifiable: false,
+        certification_note: "Current Vitable docs expose the resource without create/retrieve methods; demo returns 404 for this raw fallback path."
       },
       {
         resource_type: "census sync",
