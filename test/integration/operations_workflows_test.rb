@@ -3965,6 +3965,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
           data: [
             {
               id: "empl_remote_inactive_casey",
+              member_id: "mem_remote_inactive_casey",
               email: "casey@example.com",
               reference_id: "musto_employee_#{Employee.find_by!(email: "casey@example.com").id}",
               status: "inactive"
@@ -3992,6 +3993,44 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal 3, sync.stats.fetch("inactive_enrollment_count")
     assert_equal 3, sync.stats.fetch("inactive_payroll_deduction_count")
     assert_equal 3, @employer.reload.settings.dig("vitable_remote_roster", "lifecycle_reconciliation", "inactive_enrollment_count")
+  ensure
+    ENV[@connection.api_key_reference] = previous_key
+  end
+
+  test "remote roster refresh fails when employee response omits remote employee id" do
+    @employer.update!(vitable_id: "empr_ops_123")
+    response_class = Data.define(:data)
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:list_all_employer_employees) do |_employer_id|
+        response_class.new(
+          data: [
+            {
+              member_id: "mem_remote_casey_missing_employee_id",
+              email: "casey@example.com",
+              reference_id: "musto_employee_#{Employee.find_by!(email: "casey@example.com").id}",
+              status: "active"
+            }
+          ]
+        )
+      end
+    end
+    previous_key = ENV[@connection.api_key_reference]
+    ENV[@connection.api_key_reference] = "vit_apk_test_value"
+
+    result = Vitable::RefreshRemoteRosterCommand.new(
+      dto: Vitable::RefreshRemoteRosterDto.new(requested_by: "integration_admin"),
+      gateway_class:
+    ).call
+
+    assert result.failure?
+    assert_nil @employee.reload.vitable_id
+    assert_nil @employee.metadata.fetch("vitable_member_id", nil)
+    assert_nil @employer.reload.settings.to_h.fetch("vitable_remote_roster", nil)
+    sync = @connection.sync_runs.where(operation: "remote_roster_refresh").recent_first.first
+    assert_equal "failed", sync.status
+    assert_match "remote employee ID", sync.error_message
+    assert_match "remote employee ID", result.errors.to_sentence
   ensure
     ENV[@connection.api_key_reference] = previous_key
   end
@@ -4103,6 +4142,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
           data: [
             {
               id: "empl_remote_casey",
+              member_id: "mem_remote_casey",
               email: "casey@example.com",
               first_name: "Casey",
               last_name: "Nguyen",

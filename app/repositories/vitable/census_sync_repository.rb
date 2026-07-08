@@ -436,9 +436,10 @@ module Vitable
       lifecycle_reconciliation = EmployeeLifecycleReconciliationDto.empty
 
       remote_employees.each do |remote_employee|
+        validate_remote_employee_identity!(remote_employee)
         employee = employee_for_remote(remote_employee)
         if employee
-          remote_employee_id = remote_employee.fetch("id", employee.vitable_id)
+          remote_employee_id = remote_employee.fetch("id")
           refreshed_at = Time.current.iso8601
           update_attributes = {
             vitable_id: remote_employee_id,
@@ -643,6 +644,12 @@ module Vitable
           "vitable_last_refreshed_at" => Time.current.iso8601
         )
       )
+    end
+
+    def validate_remote_employee_identity!(remote_employee)
+      reference = remote_employee.fetch("reference_id", nil).presence || remote_employee.fetch("email", nil).presence || "unknown remote employee"
+      raise ArgumentError, "Vitable remote roster employee #{reference} did not include a remote employee ID" if remote_employee.fetch("id", nil).blank?
+      raise ArgumentError, "Vitable remote roster employee #{reference} did not include a remote member ID" if remote_employee.fetch("member_id", nil).blank?
     end
 
     def roster_verification(manifest:, remote_employees:, mapping:, checked_at:)
