@@ -5824,6 +5824,123 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     ENV[@connection.api_key_reference] = previous_key
   end
 
+  test "care member sync refresh fails when completed response omits results" do
+    prepare_care_group_profile(remote_group_id: "grp_ops_123")
+    Vitable::GenerateCareMemberSyncCommand.new(dto: Vitable::GenerateCareMemberSyncDto.new(requested_by: "ops_test")).call
+    response_class = Data.define(:data)
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:submit_group_member_sync) do |group_id, members|
+        response_class.new(
+          data: {
+            group_id:,
+            request_id: "grpmsr_ops_missing_results",
+            accepted_at: Time.current,
+            member_count: members.count
+          }
+        )
+      end
+      define_method(:retrieve_group_member_sync) do |group_id, request_id|
+        response_class.new(
+          data: {
+            group_id:,
+            request_id:,
+            accepted_at: 1.minute.ago,
+            completed_at: Time.current
+          }
+        )
+      end
+    end
+    previous_key = ENV[@connection.api_key_reference]
+    ENV[@connection.api_key_reference] = "vit_apk_test_value"
+
+    submit_result = Vitable::SubmitCareMemberSyncCommand.new(
+      dto: Vitable::SubmitCareMemberSyncDto.new(requested_by: "integration_admin"),
+      gateway_class:
+    ).call
+    refresh_result = Vitable::RefreshCareMemberSyncCommand.new(
+      dto: Vitable::RefreshCareMemberSyncDto.new(requested_by: "integration_admin"),
+      gateway_class:
+    ).call
+
+    assert submit_result.success?
+    assert refresh_result.failure?
+    request = @employer.reload.settings.fetch("vitable_care_member_sync_last_request")
+    assert_equal "processing", request.fetch("status")
+    assert_nil request.fetch("reconciliation", nil)
+    assert_nil @employee.reload.metadata.fetch("vitable_care_member_sync_status", nil)
+    sync = @connection.sync_runs.where(operation: "care_member_sync_refresh").recent_first.first
+    assert_equal "failed", sync.status
+    assert_match "completed without results", sync.error_message
+    assert_match "completed without results", refresh_result.errors.to_sentence
+  ensure
+    ENV[@connection.api_key_reference] = previous_key
+  end
+
+  test "care member sync refresh fails when completed response includes malformed failure rows" do
+    prepare_care_group_profile(remote_group_id: "grp_ops_123")
+    Vitable::GenerateCareMemberSyncCommand.new(dto: Vitable::GenerateCareMemberSyncDto.new(requested_by: "ops_test")).call
+    response_class = Data.define(:data)
+    employee_reference_id = "musto_employee_#{@employee.id}"
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:submit_group_member_sync) do |group_id, members|
+        response_class.new(
+          data: {
+            group_id:,
+            request_id: "grpmsr_ops_bad_failure",
+            accepted_at: Time.current,
+            member_count: members.count
+          }
+        )
+      end
+      define_method(:retrieve_group_member_sync) do |group_id, request_id|
+        response_class.new(
+          data: {
+            group_id:,
+            request_id:,
+            accepted_at: 1.minute.ago,
+            completed_at: Time.current,
+            results: {
+              added_group_member_ids: [],
+              removed_group_member_ids: [],
+              failures: [
+                {
+                  operation: "add",
+                  reference_id: employee_reference_id
+                }
+              ]
+            }
+          }
+        )
+      end
+    end
+    previous_key = ENV[@connection.api_key_reference]
+    ENV[@connection.api_key_reference] = "vit_apk_test_value"
+
+    submit_result = Vitable::SubmitCareMemberSyncCommand.new(
+      dto: Vitable::SubmitCareMemberSyncDto.new(requested_by: "integration_admin"),
+      gateway_class:
+    ).call
+    refresh_result = Vitable::RefreshCareMemberSyncCommand.new(
+      dto: Vitable::RefreshCareMemberSyncDto.new(requested_by: "integration_admin"),
+      gateway_class:
+    ).call
+
+    assert submit_result.success?
+    assert refresh_result.failure?
+    request = @employer.reload.settings.fetch("vitable_care_member_sync_last_request")
+    assert_equal "processing", request.fetch("status")
+    assert_nil request.fetch("reconciliation", nil)
+    assert_nil @employee.reload.metadata.fetch("vitable_care_member_sync_status", nil)
+    sync = @connection.sync_runs.where(operation: "care_member_sync_refresh").recent_first.first
+    assert_equal "failed", sync.status
+    assert_match "failure 1 did not include reason", sync.error_message
+    assert_match "failure 1 did not include reason", refresh_result.errors.to_sentence
+  ensure
+    ENV[@connection.api_key_reference] = previous_key
+  end
+
   test "successful care member sync stores request status and refresh results" do
     prepare_care_group_profile(remote_group_id: "grp_ops_123")
     care_location = @employer.work_locations.find_by!(name: "Ops HQ")
