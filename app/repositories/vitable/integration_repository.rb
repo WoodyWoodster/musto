@@ -430,6 +430,24 @@ module Vitable
       sync_run
     end
 
+    def record_api_snapshot_webhook_recovery(connection, sync_run, recovery)
+      counts = webhook_recovery_counts(recovery)
+      metadata = connection.reload.metadata.to_h
+      snapshot = metadata.fetch("api_snapshot", {}).to_h
+      snapshot_counts = snapshot.fetch("counts", {}).to_h.merge(counts)
+      snapshot = snapshot.merge(
+        "webhook_event_recovery" => recovery,
+        "counts" => snapshot_counts
+      )
+
+      connection.update!(metadata: metadata.merge("api_snapshot" => snapshot))
+      sync_run.update!(
+        completed_at: Time.current,
+        stats: sync_run.stats.to_h.merge(counts).merge("webhook_event_recovery" => recovery)
+      )
+      sync_run
+    end
+
     def fail_api_snapshot_run(connection, sync_run, error)
       connection.update!(
         status: "failed",
@@ -623,6 +641,9 @@ module Vitable
         "unmatched_local_plan_count" => plan_reconciliation.sum { |entry| entry.to_h.fetch("unmatched_local_count", 0) },
         "ambiguous_remote_plan_count" => plan_reconciliation.sum { |entry| entry.to_h.fetch("ambiguous_remote_count", 0) },
         "remote_webhook_event_count" => snapshot.fetch("webhook_events", []).count,
+        "recovered_webhook_event_count" => snapshot.fetch("webhook_event_recovery", {}).to_h.fetch("processed_count", 0),
+        "failed_webhook_recovery_count" => snapshot.fetch("webhook_event_recovery", {}).to_h.fetch("failed_count", 0),
+        "skipped_webhook_recovery_count" => snapshot.fetch("webhook_event_recovery", {}).to_h.fetch("skipped_count", 0),
         "remote_employee_count" => snapshot.fetch("remote_employee_rosters", []).sum { |entry| entry.to_h.fetch("employees", []).count },
         "mapped_employee_count" => employee_reconciliation.fetch("matched_count", 0),
         "unmatched_remote_employee_count" => employee_reconciliation.fetch("unmatched_count", 0),
@@ -635,6 +656,16 @@ module Vitable
         "enrollment_deduction_changed_count" => deduction_sync.fetch("created_count", 0) + deduction_sync.fetch("updated_count", 0),
         "imported_webhook_event_count" => webhook_ingestion.fetch("created_count", 0),
         "existing_webhook_event_count" => webhook_ingestion.fetch("existing_count", 0)
+      }
+    end
+
+    def webhook_recovery_counts(recovery)
+      recovery = recovery.to_h
+      {
+        "webhook_recovery_candidate_count" => recovery.fetch("candidate_count", 0),
+        "recovered_webhook_event_count" => recovery.fetch("processed_count", 0),
+        "failed_webhook_recovery_count" => recovery.fetch("failed_count", 0),
+        "skipped_webhook_recovery_count" => recovery.fetch("skipped_count", 0)
       }
     end
 

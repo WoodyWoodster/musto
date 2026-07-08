@@ -1,5 +1,7 @@
 module Vitable
   class RefreshApiSnapshotCommand < ApplicationCommand
+    MAX_RECOVERED_WEBHOOK_EVENTS = 25
+
     def initialize(dto:, repository: IntegrationRepository.new, gateway_class: ClientGateway)
       @dto = dto
       @repository = repository
@@ -23,7 +25,9 @@ module Vitable
 
       snapshot = build_snapshot(connection)
       sync_run = @repository.succeed_api_snapshot_run(connection, sync_run, snapshot)
-      success(record: sync_run, value: snapshot)
+      recovery = recover_webhook_events(connection, sync_run)
+      sync_run = @repository.record_api_snapshot_webhook_recovery(connection, sync_run, recovery)
+      success(record: sync_run, value: connection.reload.metadata.fetch("api_snapshot"))
     rescue VitableConnect::Errors::APIError => e
       @repository.fail_api_snapshot_run(connection, sync_run, e)
       failure(record: sync_run, errors: "#{e.class}: #{e.message}")
@@ -77,6 +81,77 @@ module Vitable
         "employee_enrollments" => employee_enrollments,
         "enrollment_reconciliation" => enrollment_reconciliation.to_metadata
       }
+    end
+
+    def recover_webhook_events(connection, sync_run)
+      ingestion = sync_run.stats.to_h.fetch("webhook_event_ingestion", {}).to_h
+      event_ids = (
+        ingestion.fetch("created_event_ids", []) +
+        ingestion.fetch("existing_event_ids", [])
+      ).uniq
+      return webhook_recovery_result(candidate_event_ids: event_ids) if event_ids.empty?
+
+      scope = connection.webhook_events.where(event_id: event_ids, processed_at: nil).order(:occurred_at, :id)
+      candidate_count = scope.count
+      events = scope.limit(MAX_RECOVERED_WEBHOOK_EVENTS).to_a
+      limit_exceeded_count = [ candidate_count - events.count, 0 ].max
+      processed_event_ids = []
+      failed_events = []
+      skipped_events = []
+
+      events.each do |event|
+        result = ProcessWebhookCommand.new(
+          payload: @repository.replay_payload(event),
+          repository: @repository,
+          gateway_class: @gateway_class
+        ).call
+        event.reload
+
+        if result.success? && event.processed?
+          processed_event_ids << event.event_id
+        elsif result.success?
+          skipped_events << webhook_recovery_event(event, reason: "not_processed")
+        else
+          failed_events << webhook_recovery_event(event, reason: "failed", errors: result.errors)
+        end
+      end
+
+      webhook_recovery_result(
+        candidate_event_ids: event_ids,
+        candidate_count:,
+        processed_event_ids:,
+        failed_events:,
+        skipped_events:,
+        limit_exceeded_count:
+      )
+    end
+
+    def webhook_recovery_result(candidate_event_ids:, candidate_count: 0, processed_event_ids: [], failed_events: [], skipped_events: [], limit_exceeded_count: 0)
+      {
+        "source" => "api_snapshot_refresh",
+        "candidate_event_ids" => candidate_event_ids,
+        "candidate_count" => candidate_count,
+        "processed_count" => processed_event_ids.count,
+        "failed_count" => failed_events.count,
+        "skipped_count" => skipped_events.count + limit_exceeded_count,
+        "limit" => MAX_RECOVERED_WEBHOOK_EVENTS,
+        "limit_exceeded_count" => limit_exceeded_count,
+        "processed_event_ids" => processed_event_ids,
+        "failed_events" => failed_events,
+        "skipped_events" => skipped_events,
+        "recovered_at" => Time.current.iso8601
+      }
+    end
+
+    def webhook_recovery_event(event, reason:, errors: [])
+      {
+        "event_id" => event.event_id,
+        "status" => event.status,
+        "resource_type" => event.resource_type,
+        "resource_id" => event.resource_id,
+        "reason" => reason,
+        "errors" => Array(errors)
+      }.compact
     end
 
     def plan_reconciliation_snapshots(connection, remote_plans, refreshed_at:)

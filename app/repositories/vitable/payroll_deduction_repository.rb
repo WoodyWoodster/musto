@@ -78,7 +78,7 @@ module Vitable
         return deduction if deduction
       end
 
-      if enrollment
+      if enrollment && dto.remote_id.blank?
         deduction = payroll_run.payroll_deductions.find_by(employee:, enrollment:)
         return deduction if deduction
       end
