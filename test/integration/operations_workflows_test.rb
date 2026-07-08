@@ -3050,6 +3050,14 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
         created_at: 2.minutes.ago.iso8601
       },
       {
+        id: "wevt_remote_external_org",
+        organization_external_id: @organization.external_id,
+        event_name: "employee.eligibility_granted",
+        resource_type: "employee",
+        resource_id: "empl_remote_casey",
+        created_at: 90.seconds.ago.iso8601
+      },
+      {
         id: existing_event.event_id,
         organization_id: @organization.external_id,
         event_name: existing_event.event_name,
@@ -3108,7 +3116,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     previous_key = ENV[@connection.api_key_reference]
     ENV[@connection.api_key_reference] = "vit_apk_test_value"
 
-    assert_difference -> { WebhookEvent.count }, 1 do
+    assert_difference -> { WebhookEvent.count }, 2 do
       result = Vitable::RefreshApiSnapshotCommand.new(
         dto: Vitable::RefreshApiSnapshotDto.new(connection_id: @connection.id, requested_by: "integration_admin"),
         gateway_class:
@@ -3121,11 +3129,11 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal 1, snapshot.dig("counts", "remote_employer_count")
     assert_equal 1, snapshot.dig("counts", "remote_group_count")
     assert_equal 2, snapshot.dig("counts", "remote_plan_count")
-    assert_equal 5, snapshot.dig("counts", "remote_webhook_event_count")
-    assert_equal 1, snapshot.dig("counts", "imported_webhook_event_count")
+    assert_equal 6, snapshot.dig("counts", "remote_webhook_event_count")
+    assert_equal 2, snapshot.dig("counts", "imported_webhook_event_count")
     assert_equal 1, snapshot.dig("counts", "existing_webhook_event_count")
-    assert_equal 1, snapshot.dig("counts", "webhook_recovery_candidate_count")
-    assert_equal 1, snapshot.dig("counts", "recovered_webhook_event_count")
+    assert_equal 2, snapshot.dig("counts", "webhook_recovery_candidate_count")
+    assert_equal 2, snapshot.dig("counts", "recovered_webhook_event_count")
     assert_equal 0, snapshot.dig("counts", "failed_webhook_recovery_count")
     assert_equal 0, snapshot.dig("counts", "skipped_webhook_recovery_count")
     assert_equal 1, snapshot.dig("counts", "remote_employee_enrollment_count")
@@ -3153,22 +3161,28 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal "active", @employee.reload.metadata.fetch("vitable_remote_status")
     assert_equal "mem_remote_casey", @employee.metadata.fetch("vitable_member_id")
 
+    external_org_event = WebhookEvent.find_by!(event_id: "wevt_remote_external_org")
+    assert_equal @organization.external_id, external_org_event.organization_external_id
+    assert_equal "processed", external_org_event.status
+    assert_equal "vitable_webhook_events_api", external_org_event.metadata.dig("remote_webhook_event_snapshot", "source")
+
     assert_equal "processed", existing_event.reload.status
     assert existing_event.processed_at.present?
     assert_equal "vitable_webhook_events_api", existing_event.metadata.dig("remote_webhook_event_snapshot", "source")
     assert_nil WebhookEvent.find_by(event_id: "wevt_other_org")
 
     sync = @connection.sync_runs.where(operation: "api_snapshot_refresh").recent_first.first
-    assert_equal 1, sync.stats.dig("webhook_event_ingestion", "created_count")
+    assert_equal 2, sync.stats.dig("webhook_event_ingestion", "created_count")
     assert_equal 1, sync.stats.dig("webhook_event_ingestion", "existing_count")
     assert_equal 3, sync.stats.dig("webhook_event_ingestion", "skipped_count")
-    assert_equal 1, sync.stats.dig("webhook_event_recovery", "processed_count")
+    assert_equal 2, sync.stats.dig("webhook_event_recovery", "processed_count")
     assert_includes sync.stats.dig("webhook_event_recovery", "processed_event_ids"), "wevt_remote_123"
+    assert_includes sync.stats.dig("webhook_event_recovery", "processed_event_ids"), "wevt_remote_external_org"
 
     detail = Vitable::ConnectionDetailQuery.new.call(@connection.id)
-    assert_equal 1, detail.api_snapshot.imported_webhook_event_count
+    assert_equal 2, detail.api_snapshot.imported_webhook_event_count
     assert_equal 1, detail.api_snapshot.existing_webhook_event_count
-    assert_equal 1, detail.api_snapshot.recovered_webhook_event_count
+    assert_equal 2, detail.api_snapshot.recovered_webhook_event_count
   ensure
     ENV[@connection.api_key_reference] = previous_key
   end
