@@ -25,8 +25,7 @@ module Vitable
       response = issue_token(context.fetch(:remote_id))
       response_hash = serialize_response(response)
       response_dto = WidgetTokenResponseDto.from_response(response_hash, issued_at: Time.current)
-      raise ArgumentError, "Vitable widget token response did not include an access token" if response_dto.access_token.blank?
-      response_dto.validate_bound_entity!(
+      response_dto.validate!(
         expected_type: @dto.bound_entity_type,
         expected_id: context.fetch(:remote_id)
       )

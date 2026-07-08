@@ -4807,6 +4807,34 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     ENV[@connection.api_key_reference] = previous_key
   end
 
+  test "embedded session command fails when token response omits expiry" do
+    @employee.update!(vitable_id: "empl_ops_casey")
+    response_class = Data.define(:access_token, :token_type, :bound_entity)
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:issue_employee_access_token) do |employee_id|
+        response_class.new(access_token: "vit_at_secret_value", token_type: "Bearer", bound_entity: { id: employee_id, type: "employee" })
+      end
+    end
+    previous_key = ENV[@connection.api_key_reference]
+    ENV[@connection.api_key_reference] = "vit_apk_test_value"
+
+    result = Vitable::IssueEmbeddedSessionCommand.new(
+      dto: Vitable::IssueEmbeddedSessionDto.new(employee_id: @employee.id, requested_by: "integration_admin"),
+      gateway_class:
+    ).call
+
+    assert result.failure?
+    assert_nil @employee.reload.metadata.to_h.fetch("vitable_embedded_session", nil)
+    sync = @connection.sync_runs.where(operation: "embedded_enrollment_token").recent_first.first
+    assert_equal "failed", sync.status
+    assert_match "expires_in", sync.error_message
+    assert_match "expires_in", result.errors.to_sentence
+    assert_not_includes sync.stats.to_json, "vit_at_secret_value"
+  ensure
+    ENV[@connection.api_key_reference] = previous_key
+  end
+
   test "embedded session command fails when token response is bound to another employee" do
     @employee.update!(vitable_id: "empl_ops_casey")
     response_class = Data.define(:access_token, :expires_in, :token_type, :bound_entity)
@@ -4988,6 +5016,34 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal "failed", sync.status
     assert_match "access token", sync.error_message
     assert_match "access token", result.errors.to_sentence
+  ensure
+    ENV[@connection.api_key_reference] = previous_key
+  end
+
+  test "employer admin session command fails when token response type is not bearer" do
+    prepare_provisioning_profile(remote_id: "empr_ops_123")
+    response_class = Data.define(:access_token, :expires_in, :token_type, :bound_entity)
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:issue_employer_access_token) do |employer_id|
+        response_class.new(access_token: "vit_at_secret_value", expires_in: 3_600, token_type: "Basic", bound_entity: { id: employer_id, type: "employer" })
+      end
+    end
+    previous_key = ENV[@connection.api_key_reference]
+    ENV[@connection.api_key_reference] = "vit_apk_test_value"
+
+    result = Vitable::IssueAdminSessionCommand.new(
+      dto: Vitable::IssueAdminSessionDto.new(requested_by: "integration_admin"),
+      gateway_class:
+    ).call
+
+    assert result.failure?
+    assert_nil @employer.reload.settings.to_h.fetch("vitable_admin_session", nil)
+    sync = @connection.sync_runs.where(operation: "embedded_admin_token").recent_first.first
+    assert_equal "failed", sync.status
+    assert_match "expected Bearer", sync.error_message
+    assert_match "expected Bearer", result.errors.to_sentence
+    assert_not_includes sync.stats.to_json, "vit_at_secret_value"
   ensure
     ENV[@connection.api_key_reference] = previous_key
   end

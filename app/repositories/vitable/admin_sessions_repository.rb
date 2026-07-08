@@ -123,8 +123,7 @@ module Vitable
       issued_at = Time.current
       response_hash = serialize_response(response)
       issuance = AdminSessionIssuanceDto.from_response(response_hash, issued_at:, sync_run_id: sync_run.id)
-      raise ArgumentError, "Vitable admin token response did not include an access token" unless issuance.token_present
-      issuance.validate_bound_entity!(expected_type: "employer", expected_id: @employer.vitable_id)
+      issuance.validate!(expected_type: "employer", expected_id: @employer.vitable_id)
 
       persist_issuance(issuance)
 
