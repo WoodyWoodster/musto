@@ -566,7 +566,7 @@ module Vitable
     end
 
     def deactivate_employee_benefits(employee, remote_resource, timestamp)
-      return EmployeeLifecycleReconciliationDto.empty unless employee_employment_status_for(remote_resource) == "terminated"
+      return EmployeeLifecycleReconciliationDto.empty unless deactivate_employee_benefits?(remote_resource)
 
       EmployeeEligibilityRepository.new.deactivate_benefits!(
         employee:,
@@ -574,6 +574,11 @@ module Vitable
         source_event: @event,
         reconciled_at: timestamp
       )
+    end
+
+    def deactivate_employee_benefits?(remote_resource)
+      employee_employment_status_for(remote_resource) == "terminated" ||
+        @event.event_name == "employee.eligibility_terminated"
     end
 
     def reconciliation_result(status:, remote_resource: nil, local_record: nil, matched_by: nil, applied_changes: [], warnings: [])

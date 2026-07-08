@@ -281,6 +281,69 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
     ENV.delete("VITABLE_CONNECT_API_KEY")
   end
 
+  test "employee eligibility terminated webhooks deactivate benefits without terminating HRIS employee" do
+    employer = @organization.employers.create!(name: "Eligibility Employer", status: "active")
+    employee = employer.employees.create!(first_name: "Elliot", last_name: "Eligible", email: "elliot.eligible@example.com")
+    plan = employer.benefit_plans.create!(name: "Vitable Care", category: "direct_primary_care", carrier: "Vitable")
+    enrollment = employee.enrollments.create!(benefit_plan: plan, status: "accepted", accepted_at: 1.month.ago)
+    payroll_run = employer.payroll_runs.create!(
+      period_start_on: Date.current.beginning_of_month,
+      period_end_on: Date.current.end_of_month,
+      pay_date: Date.current.end_of_month,
+      gross_pay_cents: 0,
+      status: "estimated"
+    )
+    deduction = payroll_run.payroll_deductions.create!(
+      employee:,
+      enrollment:,
+      code: "VITABLE_CARE",
+      amount_cents: 9900,
+      status: "ready"
+    )
+    ENV["VITABLE_CONNECT_API_KEY"] = "vit_apk_test_value"
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:fetch_resource) do |_resource_type, resource_id|
+        {
+          data: {
+            id: resource_id,
+            reference_id: "musto_employee_#{Employee.find_by!(email: "elliot.eligible@example.com").id}",
+            email: "elliot.eligible@example.com",
+            status: "active"
+          }
+        }
+      end
+    end
+
+    result = Vitable::ProcessWebhookCommand.new(
+      payload: webhook_payload.merge(
+        event_id: "wevt_test_employee_eligibility_terminated",
+        event_name: "employee.eligibility_terminated",
+        resource_type: "employee",
+        resource_id: "empl_eligibility_elliot"
+      ),
+      gateway_class:
+    ).call
+
+    assert result.success?
+    employee.reload
+    reconciliation = WebhookEvent.find_by!(event_id: "wevt_test_employee_eligibility_terminated").metadata.fetch("resource_reconciliation")
+
+    assert_equal "active", employee.employment_status
+    assert_equal "terminated", employee.metadata.fetch("vitable_eligibility_status")
+    assert_equal "inactive", enrollment.reload.status
+    assert_nil enrollment.accepted_at
+    assert_equal "employee.eligibility_terminated", enrollment.metadata.fetch("vitable_lifecycle_event_name")
+    assert_equal 0, deduction.reload.amount_cents
+    assert_equal "inactive", deduction.status
+    assert_equal "employee.eligibility_terminated", deduction.metadata.fetch("last_webhook_event_name")
+    assert_not_includes reconciliation.fetch("applied_changes"), "employment_status"
+    assert_includes reconciliation.fetch("applied_changes"), "enrollments.#{enrollment.id}"
+    assert_includes reconciliation.fetch("applied_changes"), "payroll_deductions.#{deduction.id}"
+  ensure
+    ENV.delete("VITABLE_CONNECT_API_KEY")
+  end
+
   test "direct webhook event fetches import the remote event ledger row" do
     ENV["VITABLE_CONNECT_API_KEY"] = "vit_apk_test_value"
     occurred_at = Time.current.change(usec: 0)
