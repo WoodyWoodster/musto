@@ -10,15 +10,16 @@ module Vitable
   ) do
     def self.from_payload(payload)
       attrs = ApplicationDto.coerce_hash(payload).deep_symbolize_keys
+      event_id = attrs[:event_id].presence || attrs.fetch(:id)
 
       new(
-        event_id: attrs.fetch(:event_id),
+        event_id:,
         organization_external_id: attrs.fetch(:organization_id),
         event_name: attrs.fetch(:event_name),
         resource_type: attrs.fetch(:resource_type),
         resource_id: attrs.fetch(:resource_id),
         occurred_at: Time.iso8601(attrs.fetch(:created_at)),
-        payload: attrs
+        payload: attrs.merge(event_id:)
       )
     end
 

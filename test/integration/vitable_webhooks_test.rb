@@ -26,6 +26,19 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
     assert_nil event.processed_at
   end
 
+  test "accepts a Vitable webhook that uses id for the event identifier" do
+    payload = webhook_payload.except(:event_id).merge(id: "wevt_test_sdk_id_shape")
+
+    assert_difference "WebhookEvent.count", 1 do
+      post api_v1_webhooks_vitable_path, params: payload, as: :json
+    end
+
+    assert_response :accepted
+    event = WebhookEvent.find_by!(event_id: "wevt_test_sdk_id_shape")
+    assert_equal @connection, event.integration_connection
+    assert_equal "wevt_test_sdk_id_shape", event.payload.fetch("event_id")
+  end
+
   test "does not duplicate webhook events with the same event id" do
     post api_v1_webhooks_vitable_path, params: webhook_payload, as: :json
     assert_response :accepted
