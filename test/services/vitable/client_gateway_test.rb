@@ -175,6 +175,36 @@ module Vitable
       assert_equal :semi_monthly, gateway.send(:pay_frequency_value, "semimonthly")
     end
 
+    test "normalizes census employee enum values for the SDK" do
+      organization = Organization.create!(name: "Gateway Census Payload Test", external_id: "org_gateway_census_payload_test")
+      connection = organization.integration_connections.create!(provider: "vitable", environment: "production")
+      gateway = ClientGateway.new(connection)
+
+      payload = gateway.send(:census_employee_payload, {
+        "reference_id" => "musto_employee_123",
+        "first_name" => "Casey",
+        "last_name" => "Ng",
+        "email" => "casey@example.com",
+        "phone" => "5551234567",
+        "date_of_birth" => "1990-01-15",
+        "start_date" => "2026-01-01",
+        "compensation_type" => "hourly",
+        "employee_class" => "part_time",
+        "address" => {
+          "address_line_1" => "214 Market Street",
+          "city" => "Philadelphia",
+          "state" => "PA",
+          "zipcode" => "19106"
+        }
+      })
+
+      assert_equal Date.new(1990, 1, 15), payload.fetch(:date_of_birth)
+      assert_equal Date.new(2026, 1, 1), payload.fetch(:start_date)
+      assert_equal :Hourly, payload.fetch(:compensation_type)
+      assert_equal :"Part Time", payload.fetch(:employee_class)
+      assert_equal :PA, payload.dig(:address, :state)
+    end
+
     test "submits eligibility policy through authenticated request fallback when SDK resource has no create method" do
       organization = Organization.create!(name: "Gateway Capability Test", external_id: "org_gateway_capability_test")
       connection = organization.integration_connections.create!(provider: "vitable", environment: "production")

@@ -510,8 +510,8 @@ module Vitable
       attributes = employee.to_h.deep_symbolize_keys
       attributes[:date_of_birth] = Date.iso8601(attributes.fetch(:date_of_birth)) if attributes[:date_of_birth].is_a?(String)
       attributes[:start_date] = Date.iso8601(attributes.fetch(:start_date)) if attributes[:start_date].is_a?(String)
-      attributes[:compensation_type] = attributes[:compensation_type].to_sym if attributes[:compensation_type].present?
-      attributes[:employee_class] = attributes[:employee_class].to_sym if attributes[:employee_class].present?
+      attributes[:compensation_type] = compensation_type_value(attributes[:compensation_type]) if attributes[:compensation_type].present?
+      attributes[:employee_class] = employee_class_value(attributes[:employee_class]) if attributes[:employee_class].present?
       attributes[:address] = census_address_payload(attributes[:address]) if attributes[:address].present?
       attributes.compact
     end
@@ -592,6 +592,27 @@ module Vitable
           "monthly" => :monthly
         }.fetch(frequency, frequency.to_sym)
       end
+    end
+
+    def compensation_type_value(value)
+      {
+        "salary" => :Salary,
+        "hourly" => :Hourly
+      }.fetch(value.to_s.strip.downcase.tr("_-", " "), value.to_s.to_sym)
+    end
+
+    def employee_class_value(value)
+      {
+        "full time" => :"Full Time",
+        "fulltime" => :"Full Time",
+        "part time" => :"Part Time",
+        "parttime" => :"Part Time",
+        "temporary" => :Temporary,
+        "intern" => :Intern,
+        "seasonal" => :Seasonal,
+        "individual contractor" => :"Individual Contractor",
+        "contractor" => :"Individual Contractor"
+      }.fetch(value.to_s.strip.downcase.tr("_-", " "), value.to_s.to_sym)
     end
   end
 end
