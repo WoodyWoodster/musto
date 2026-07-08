@@ -2100,7 +2100,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       define_method(:list_all_plans) do
         response_class.new(
           data: [
-            { name: "Primary Care" }
+            { name: "Primary Care", api_key: "vit_apk_bad_plan_response" }
           ]
         )
       end
@@ -2119,7 +2119,11 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     sync = @connection.sync_runs.where(operation: "plan_mapping_refresh").recent_first.first
     assert_equal "failed", sync.status
     assert_match "remote plan ID", sync.error_message
+    assert_equal "ArgumentError", sync.stats.fetch("error_class")
+    assert_equal "Primary Care", sync.stats.dig("remote_response", "data", 0, "name")
+    assert_equal "[FILTERED]", sync.stats.dig("remote_response", "data", 0, "api_key")
     assert_match "remote plan ID", result.errors.to_sentence
+    assert_not_includes sync.stats.to_json, "vit_apk_bad_plan_response"
   ensure
     ENV[@connection.api_key_reference] = previous_key
   end

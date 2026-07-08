@@ -155,12 +155,26 @@ module Benefits
       snapshot
     end
 
-    def mark_mapping_failed(sync_run, error)
-      sync_run&.update!(
+    def mark_mapping_failed(sync_run, error, response: nil)
+      return unless sync_run
+
+      completed_at = Time.current
+      stats = sync_run.stats.to_h.merge("error_class" => error.class.name)
+
+      if response
+        response_hash = serialize_response(response)
+        stats = stats.merge(
+          "response_class" => response.class.name,
+          "remote_response" => response_hash,
+          "fetched_at" => completed_at.iso8601
+        )
+      end
+
+      sync_run.update!(
         status: "failed",
-        completed_at: Time.current,
+        completed_at:,
         error_message: error.message,
-        stats: sync_run.stats.to_h.merge("error_class" => error.class.name)
+        stats:
       )
       sync_run
     end
@@ -338,11 +352,18 @@ module Benefits
     end
 
     def serialize_response(response)
-      return {} if response.blank?
-      return response.deep_to_h.deep_stringify_keys if response.respond_to?(:deep_to_h)
-      return response.to_h.deep_stringify_keys if response.respond_to?(:to_h)
+      serialized =
+        if response.blank?
+          {}
+        elsif response.respond_to?(:deep_to_h)
+          response.deep_to_h
+        elsif response.respond_to?(:to_h)
+          response.to_h
+        else
+          { "value" => response.to_s }
+        end
 
-      { "value" => response.to_s }
+      ::Vitable::PayloadRedactor.redact(serialized.deep_stringify_keys)
     end
   end
 end
