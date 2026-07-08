@@ -537,23 +537,32 @@ module Vitable
       sync_run
     end
 
-    def fail_api_snapshot_run(connection, sync_run, error)
+    def fail_api_snapshot_run(connection, sync_run, error, trace: {})
+      trace = trace.to_h
+      error_metadata = {
+        "message" => error.message,
+        "error_class" => error.class.name,
+        "checked_at" => Time.current.iso8601
+      }
+      error_metadata["trace"] = trace if trace.present?
+
       connection.update!(
         status: "failed",
         metadata: connection.metadata.to_h.merge(
-          "api_snapshot_error" => {
-            "message" => error.message,
-            "error_class" => error.class.name,
-            "checked_at" => Time.current.iso8601
-          }
+          "api_snapshot_error" => error_metadata
         )
       )
-      sync_run&.update!(
-        status: "failed",
-        completed_at: Time.current,
-        error_message: error.message,
-        stats: sync_run.stats.to_h.merge("error_class" => error.class.name)
-      )
+      if sync_run
+        stats = sync_run.stats.to_h.merge("error_class" => error.class.name)
+        stats = stats.merge("api_snapshot_trace" => trace) if trace.present?
+
+        sync_run.update!(
+          status: "failed",
+          completed_at: Time.current,
+          error_message: error.message,
+          stats:
+        )
+      end
       sync_run
     end
 

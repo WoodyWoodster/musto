@@ -3338,10 +3338,10 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
   end
 
   test "Vitable API snapshot refresh fails when list response omits data array" do
-    response_class = Data.define(:items)
+    response_class = Data.define(:items, :api_key)
     gateway_class = Class.new do
       define_method(:initialize) { |_connection| }
-      define_method(:list_all_employers) { response_class.new(items: []) }
+      define_method(:list_all_employers) { response_class.new(items: [], api_key: "vit_apk_bad_snapshot_list") }
     end
     previous_key = ENV[@connection.api_key_reference]
     ENV[@connection.api_key_reference] = "vit_apk_test_value"
@@ -3356,7 +3356,10 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     sync = @connection.sync_runs.where(operation: "api_snapshot_refresh").recent_first.first
     assert_equal "failed", sync.status
     assert_match "employer list response", sync.error_message
+    assert_equal "employers", sync.stats.dig("api_snapshot_trace", "last_step")
+    assert_equal "[FILTERED]", sync.stats.dig("api_snapshot_trace", "last_response", "api_key")
     assert_match "data array", result.errors.to_sentence
+    assert_not_includes sync.stats.to_json, "vit_apk_bad_snapshot_list"
   ensure
     ENV[@connection.api_key_reference] = previous_key
   end
@@ -3507,7 +3510,8 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
               member_id: "mem_remote_casey_missing_snapshot_employee_id",
               reference_id: "musto_employee_#{Employee.find_by!(email: "casey@example.com").id}",
               email: "casey@example.com",
-              status: "active"
+              status: "active",
+              access_token: "vit_at_bad_snapshot_roster"
             }
           ]
         )
@@ -3528,7 +3532,11 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     sync = @connection.sync_runs.where(operation: "api_snapshot_refresh").recent_first.first
     assert_equal "failed", sync.status
     assert_match "remote employee ID", sync.error_message
+    assert_equal "employer_employees", sync.stats.dig("api_snapshot_trace", "last_step")
+    assert_equal "mem_remote_casey_missing_snapshot_employee_id", sync.stats.dig("api_snapshot_trace", "last_response", "data", 0, "member_id")
+    assert_equal "[FILTERED]", sync.stats.dig("api_snapshot_trace", "last_response", "data", 0, "access_token")
     assert_match "remote employee ID", result.errors.to_sentence
+    assert_not_includes sync.stats.to_json, "vit_at_bad_snapshot_roster"
   ensure
     ENV[@connection.api_key_reference] = previous_key
   end

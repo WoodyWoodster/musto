@@ -10,6 +10,7 @@ module Vitable
     end
 
     def call
+      snapshot_trace = {}
       connection = @repository.find_connection(@dto.connection_id)
       sync_run = @repository.create_api_snapshot_run(connection:, requested_by: @dto.requested_by)
 
@@ -24,16 +25,16 @@ module Vitable
         return failure(record: sync_run, errors: "#{connection.api_key_reference} is not configured")
       end
 
-      snapshot = build_snapshot(connection)
+      snapshot = build_snapshot(connection, trace: snapshot_trace)
       sync_run = @repository.succeed_api_snapshot_run(connection, sync_run, snapshot)
       recovery = recover_webhook_events(connection, sync_run)
       sync_run = @repository.record_api_snapshot_webhook_recovery(connection, sync_run, recovery)
       success(record: sync_run, value: connection.reload.metadata.fetch("api_snapshot"))
     rescue VitableConnect::Errors::APIError => e
-      @repository.fail_api_snapshot_run(connection, sync_run, e)
+      @repository.fail_api_snapshot_run(connection, sync_run, e, trace: snapshot_trace)
       failure(record: sync_run, errors: "#{e.class}: #{e.message}")
     rescue ArgumentError => e
-      @repository.fail_api_snapshot_run(connection, sync_run, e)
+      @repository.fail_api_snapshot_run(connection, sync_run, e, trace: snapshot_trace)
       failure(record: sync_run, errors: e.message)
     rescue ActiveRecord::RecordInvalid => e
       failure(record: e.record, errors: e.record.errors.full_messages)
@@ -41,13 +42,13 @@ module Vitable
 
     private
 
-    def build_snapshot(connection)
+    def build_snapshot(connection, trace:)
       gateway = @gateway_class.new(connection)
       snapshot_refreshed_at = Time.current
       refreshed_at = snapshot_refreshed_at.iso8601
-      employers = page_data(gateway.list_all_employers, response_label: "Vitable employer list response")
-      groups = page_data(gateway.list_all_groups, response_label: "Vitable group list response")
-      plans = page_data(gateway.list_all_plans, response_label: "Vitable plan list response")
+      employers = list_snapshot_page(trace, step: "employers", response_label: "Vitable employer list response") { gateway.list_all_employers }
+      groups = list_snapshot_page(trace, step: "groups", response_label: "Vitable group list response") { gateway.list_all_groups }
+      plans = list_snapshot_page(trace, step: "plans", response_label: "Vitable plan list response") { gateway.list_all_plans }
       employer_reconciliation = RemoteEmployerSnapshotRepository.new(connection:).reconcile_snapshot(
         remote_employers: employers,
         source: "vitable_api_snapshot",
@@ -59,23 +60,24 @@ module Vitable
         refreshed_at:
       )
       plan_reconciliation = plan_reconciliation_snapshots(connection, plans, refreshed_at:)
-      remote_employee_rosters = remote_employee_rosters(gateway, connection)
+      remote_employee_rosters = remote_employee_rosters(gateway, connection, trace:)
       employee_reconciliation = RemoteEmployeeSnapshotRepository.new(connection:).reconcile_snapshot(
         snapshot_entries: remote_employee_rosters,
         source: "vitable_api_snapshot",
         refreshed_at:
       )
-      employee_enrollments = employee_enrollment_snapshot(gateway, connection)
+      employee_enrollments = employee_enrollment_snapshot(gateway, connection, trace:)
       enrollment_reconciliation = EnrollmentSnapshotRepository.new(connection:).reconcile_snapshot(
         snapshot_entries: employee_enrollments,
         source: "vitable_api_snapshot",
         refreshed_at:
       )
       webhook_event_query = webhook_event_query(connection, high_water_mark: snapshot_refreshed_at)
-      webhook_events = page_data(
-        gateway.list_all_webhook_events(**webhook_event_query),
+      webhook_events = list_snapshot_page(
+        trace,
+        step: "webhook_events",
         response_label: "Vitable webhook event list response"
-      )
+      ) { gateway.list_all_webhook_events(**webhook_event_query) }
 
       {
         "requested_by" => @dto.requested_by,
@@ -185,13 +187,18 @@ module Vitable
       end
     end
 
-    def remote_employee_rosters(gateway, connection)
+    def remote_employee_rosters(gateway, connection, trace:)
       local_remote_employers(connection).map do |employer|
         {
           "local_employer_id" => employer.id,
           "remote_employer_id" => employer.vitable_id,
           "employer_name" => employer.name,
-          "employees" => page_data(gateway.list_all_employer_employees(employer.vitable_id), response_label: "Vitable employer employee list response")
+          "employees" => list_snapshot_page(
+            trace,
+            step: "employer_employees",
+            response_label: "Vitable employer employee list response",
+            resource_id: employer.vitable_id
+          ) { gateway.list_all_employer_employees(employer.vitable_id) }
         }
       rescue VitableConnect::Errors::NotFoundError => e
         {
@@ -205,14 +212,19 @@ module Vitable
       end
     end
 
-    def employee_enrollment_snapshot(gateway, connection)
+    def employee_enrollment_snapshot(gateway, connection, trace:)
       local_remote_employees(connection).map do |employee|
         {
           "local_employee_id" => employee.id,
           "remote_employee_id" => employee.vitable_id,
           "employee_name" => employee.full_name,
           "email" => employee.email,
-          "enrollments" => page_data(gateway.list_all_employee_enrollments(employee.vitable_id), response_label: "Vitable employee enrollment list response")
+          "enrollments" => list_snapshot_page(
+            trace,
+            step: "employee_enrollments",
+            response_label: "Vitable employee enrollment list response",
+            resource_id: employee.vitable_id
+          ) { gateway.list_all_employee_enrollments(employee.vitable_id) }
         }
       rescue VitableConnect::Errors::NotFoundError => e
         {
@@ -269,6 +281,23 @@ module Vitable
       end.deep_stringify_keys
     end
 
+    def list_snapshot_page(trace, step:, response_label:, resource_id: nil)
+      response = yield
+      response_hash = serialize_response(response)
+      trace.replace(
+        {
+          "last_step" => step,
+          "last_resource_id" => resource_id,
+          "last_response" => response_hash,
+          "last_fetched_at" => Time.current.iso8601
+        }.compact
+      )
+
+      RemoteCollectionResponseDto
+        .from_response(response_hash, response_label:)
+        .records
+    end
+
     def page_data(response, response_label:)
       RemoteCollectionResponseDto
         .from_response(serialize_response(response), response_label:)
@@ -276,11 +305,18 @@ module Vitable
     end
 
     def serialize_response(response)
-      return {} if response.blank?
-      return response.deep_to_h.deep_stringify_keys if response.respond_to?(:deep_to_h)
-      return response.to_h.deep_stringify_keys if response.respond_to?(:to_h)
+      serialized =
+        if response.blank?
+          {}
+        elsif response.respond_to?(:deep_to_h)
+          response.deep_to_h
+        elsif response.respond_to?(:to_h)
+          response.to_h
+        else
+          { "value" => response.to_s }
+        end
 
-      { "value" => response.to_s }
+      PayloadRedactor.redact(serialized.deep_stringify_keys)
     end
   end
 end
