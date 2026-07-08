@@ -29,7 +29,7 @@ class IntegrationConnectionsController < ApplicationController
 
     redirect_to(
       result.record ? webhook_event_path(result.record) : integration_connection_path(dto.connection_id),
-      notice: result.success? ? "Sandbox webhook processed." : result.errors.to_sentence
+      notice: result.success? ? "Test event processed." : result.errors.to_sentence
     )
   end
 end

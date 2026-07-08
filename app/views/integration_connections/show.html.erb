@@ -143,19 +143,35 @@
           <%= status_pill(@connection.credentials_missing? ? "needs_credentials" : "ready") %>
         </div>
 
-        <%= form_with url: simulate_webhook_integration_connection_path(@connection.id), method: :post, class: "mt-5 grid gap-4 lg:grid-cols-2" do %>
+        <%= form_with url: simulate_webhook_integration_connection_path(@connection.id), method: :post, class: "mt-5 grid gap-4 lg:grid-cols-2", data: { controller: "vitable-webhook-simulator" } do %>
           <div>
             <%= label_tag :event_name, "Event type", class: "text-xs font-semibold uppercase text-slate-500" %>
             <%= select_tag :event_name,
-              options_for_select(@connection.simulator.event_options.map { |option| [ option.label, option.event_name ] }, @connection.simulator.default_event_name),
-              class: "mt-2 w-full rounded-md border border-slate-200 bg-white px-3 py-3 text-sm font-medium text-slate-950 shadow-sm focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-100" %>
+              options_for_select(
+                @connection.simulator.event_options.map do |option|
+                  [
+                    option.label,
+                    option.event_name,
+                    {
+                      data: {
+                        resource_type: option.resource_type,
+                        resource_id: option.sample_resource_id
+                      }
+                    }
+                  ]
+                end,
+                @connection.simulator.default_event_name
+              ),
+              class: "mt-2 w-full rounded-md border border-slate-200 bg-white px-3 py-3 text-sm font-medium text-slate-950 shadow-sm focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-100",
+              data: { vitable_webhook_simulator_target: "event", action: "change->vitable-webhook-simulator#sync" } %>
           </div>
 
           <div>
             <%= label_tag :resource_type, "Resource type", class: "text-xs font-semibold uppercase text-slate-500" %>
             <%= select_tag :resource_type,
               options_for_select(@connection.simulator.resource_options.map { |resource_type| [ resource_type.humanize, resource_type ] }, @connection.simulator.default_resource_type),
-              class: "mt-2 w-full rounded-md border border-slate-200 bg-white px-3 py-3 text-sm font-medium text-slate-950 shadow-sm focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-100" %>
+              class: "mt-2 w-full rounded-md border border-slate-200 bg-white px-3 py-3 text-sm font-medium text-slate-950 shadow-sm focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-100",
+              data: { vitable_webhook_simulator_target: "resourceType" } %>
           </div>
 
           <div>
@@ -163,6 +179,7 @@
             <%= text_field_tag :resource_id,
               @connection.simulator.default_resource_id,
               class: "mt-2 w-full rounded-md border border-slate-200 bg-white px-3 py-3 font-mono text-sm text-slate-950 shadow-sm focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-100",
+              data: { vitable_webhook_simulator_target: "resourceId" },
               autocomplete: "off" %>
           </div>
 

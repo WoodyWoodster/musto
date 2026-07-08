@@ -14,7 +14,7 @@ module Vitable
 
       new(
         connection_id: ApplicationDto.id_from(attrs),
-        event_id: attrs[:event_id].presence || "wevt_sandbox_#{SecureRandom.hex(8)}",
+        event_id: attrs[:event_id].presence || "wevt_test_#{SecureRandom.hex(8)}",
         event_name: attrs[:event_name].to_s,
         resource_type: attrs[:resource_type].to_s,
         resource_id: attrs[:resource_id].to_s,

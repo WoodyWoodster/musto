@@ -2684,6 +2684,13 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
   end
 
   test "integration connection workspace exposes credential and coverage DTOs" do
+    @employer.update!(
+      vitable_id: "empr_ops_123",
+      settings: @employer.settings.to_h.merge(Vitable::CareGroupRepository::GROUP_ID_KEY => "grp_ops_123")
+    )
+    @employee.update!(vitable_id: "empl_ops_casey")
+    @enrollment.update!(vitable_id: "enrl_ops_primary_care")
+
     detail = Vitable::ConnectionDetailQuery.new.call(@connection.id)
 
     assert_instance_of Vitable::ConnectionDetailDto, detail
@@ -2699,6 +2706,10 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_includes detail.simulator.event_options.map(&:event_name), "employee.deduction_created"
     assert_includes detail.simulator.event_options.map(&:event_name), "group.updated"
     assert_not_includes detail.simulator.event_options.map(&:event_name), "benefit_plan.updated"
+    assert_equal "enrl_ops_primary_care", detail.simulator.default_resource_id
+    assert_equal "empl_ops_casey", detail.simulator.event_options.find { |option| option.resource_type == "employee" }.sample_resource_id
+    assert_equal "empr_ops_123", detail.simulator.event_options.find { |option| option.resource_type == "employer" }.sample_resource_id
+    assert_equal "grp_ops_123", detail.simulator.event_options.find { |option| option.resource_type == "group" }.sample_resource_id
     assert_equal [
       "auth tokens",
       "employers",
@@ -2762,6 +2773,36 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_select "h2", "Connection timeline"
     assert_select "h2", "Webhook queue"
     assert_select "h2", "Connection activity"
+  end
+
+  test "integration connection workspace uses API snapshot ids for webhook composer defaults" do
+    @connection.update!(
+      metadata: {
+        "api_snapshot" => {
+          "employers" => [ { "id" => "empr_snapshot_123", "name" => "Snapshot Employer" } ],
+          "groups" => [ { "id" => "grp_snapshot_123", "name" => "Snapshot Group" } ],
+          "remote_employee_rosters" => [
+            {
+              "remote_employer_id" => "empr_snapshot_123",
+              "employees" => [ { "id" => "empl_snapshot_123", "email" => "casey@example.com" } ]
+            }
+          ],
+          "employee_enrollments" => [
+            {
+              "remote_employee_id" => "empl_snapshot_123",
+              "enrollments" => [ { "id" => "enrl_snapshot_123", "status" => "accepted" } ]
+            }
+          ]
+        }
+      }
+    )
+
+    detail = Vitable::ConnectionDetailQuery.new.call(@connection.id)
+
+    assert_equal "enrl_snapshot_123", detail.simulator.default_resource_id
+    assert_equal "empl_snapshot_123", detail.simulator.event_options.find { |option| option.resource_type == "employee" }.sample_resource_id
+    assert_equal "empr_snapshot_123", detail.simulator.event_options.find { |option| option.resource_type == "employer" }.sample_resource_id
+    assert_equal "grp_snapshot_123", detail.simulator.event_options.find { |option| option.resource_type == "group" }.sample_resource_id
   end
 
   test "refreshes Vitable API snapshot as missing credentials sync run without API key" do

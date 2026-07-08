@@ -131,7 +131,7 @@ module Vitable
       }
     ].freeze
 
-    def self.from_record(record, webhook_events:, sync_runs:, request_logs:)
+    def self.from_record(record, webhook_events:, sync_runs:, request_logs:, simulator_resource_ids: {})
       event_dtos = webhook_events.map { |event| Operations::IntegrationWebhookEventDto.from_record(event) }
       sync_dtos = sync_runs.map { |sync| Operations::SyncRunDto.from_record(sync) }
       request_log_dtos = request_logs.map { |log| Operations::ApiRequestLogDto.from_record(log) }
@@ -158,7 +158,7 @@ module Vitable
         request_logs: request_log_dtos,
         timeline: timeline(webhook_events, sync_runs, request_logs),
         api_snapshot: ApiSnapshotDto.from_metadata(metadata),
-        simulator: WebhookSimulatorDto.default
+        simulator: WebhookSimulatorDto.from_resource_ids(simulator_resource_ids)
       )
     end
 
