@@ -4303,6 +4303,34 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal @employee.email, sync.stats.fetch("payload").fetch("employees").first.fetch("email")
   end
 
+  test "blocks Vitable census sync while manifest holdbacks remain" do
+    @employer.update!(vitable_id: "empr_ops_123")
+    holdback_employee = create_census_holdback_employee
+    Vitable::GenerateCensusManifestCommand.new(dto: Vitable::GenerateCensusManifestDto.new(requested_by: "ops_test")).call
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| raise "gateway should not be called with census holdbacks" }
+    end
+    previous_key = ENV[@connection.api_key_reference]
+    ENV[@connection.api_key_reference] = "vit_apk_test_value"
+
+    result = Vitable::SubmitCensusSyncCommand.new(
+      dto: Vitable::SubmitCensusSyncDto.new(requested_by: "integration_admin"),
+      gateway_class:
+    ).call
+
+    assert_not result.success?
+    assert_nil @employer.reload.settings.fetch("vitable_census_sync_last_submission", nil)
+    sync = @connection.sync_runs.where(operation: "census_sync").recent_first.first
+    assert_equal "blocked", sync.status
+    assert_equal "Resolve census manifest holdbacks before submitting a full-roster Vitable census sync", sync.error_message
+    assert_equal 1, sync.stats.fetch("ready_count")
+    assert_equal 1, sync.stats.fetch("holdback_count")
+    assert_equal holdback_employee.id, @employer.settings.fetch("vitable_census_sync_batch").fetch("holdbacks").first.fetch("employee_id")
+    assert_nil @employee.reload.metadata.fetch("vitable_census_sync_status", nil)
+  ensure
+    ENV[@connection.api_key_reference] = previous_key
+  end
+
   test "successful Vitable census sync stores accepted submission state" do
     @employer.update!(vitable_id: "empr_ops_123")
     Vitable::GenerateCensusManifestCommand.new(dto: Vitable::GenerateCensusManifestDto.new(requested_by: "ops_test")).call

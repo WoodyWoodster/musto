@@ -16,6 +16,7 @@ module Vitable
       sync_run = @repository.create_sync_run(manifest:, requested_by: @dto.requested_by)
 
       return blocked(sync_run, "Remote Vitable employer ID is missing") if @employer.vitable_id.blank?
+      return blocked(sync_run, "Resolve census manifest holdbacks before submitting a full-roster Vitable census sync") if manifest_holdbacks(manifest).any?
       return blocked(sync_run, "Generate at least one ready employee row before submitting census sync") if ready_employees(manifest).empty?
 
       unless @repository.connection.credentials_present?
@@ -40,6 +41,10 @@ module Vitable
 
     def ready_employees(manifest)
       manifest.fetch("api_payload", {}).fetch("employees", [])
+    end
+
+    def manifest_holdbacks(manifest)
+      Array(manifest.fetch("holdbacks", []))
     end
 
     def blocked(sync_run, message)
