@@ -5415,19 +5415,8 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     Benefits::GenerateOffboardingPacketCommand.new(dto: Benefits::GenerateOffboardingPacketDto.new(requested_by: "benefits_admin")).call
     Vitable::GenerateCensusManifestCommand.new(dto: Vitable::GenerateCensusManifestDto.new(requested_by: "ops_test")).call
 
-    response_class = Data.define(:data)
     gateway_class = Class.new do
       define_method(:initialize) { |_connection| raise "gateway should not be called for empty census roster" }
-      define_method(:submit_census_sync) do |employer_id, employees|
-        response_class.new(
-          data: {
-            employer_id:,
-            accepted_at: Time.current,
-            employee_count: employees.count,
-            access_token: "vit_at_census_snapshot_secret"
-          }
-        )
-      end
     end
     previous_key = ENV[@connection.api_key_reference]
     ENV[@connection.api_key_reference] = "vit_apk_test_value"
@@ -5506,10 +5495,12 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       define_method(:submit_census_sync) do |employer_id, employees|
         response_class.new(
           data: {
-            employer_id:,
-            accepted_at: Time.current,
-            employee_count: employees.count,
-            access_token: "vit_at_census_snapshot_secret"
+            census_sync_request: {
+              employer: { id: employer_id },
+              created_at: Time.current,
+              employee_count: employees.count,
+              access_token: "vit_at_census_snapshot_secret"
+            }
           }
         )
       end
@@ -5537,8 +5528,8 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     detail = Vitable::CensusSyncQuery.new.call
     assert_instance_of Vitable::CensusSyncSubmissionDto, detail.latest_submission
     assert_equal "accepted", detail.latest_submission.status
-    sync = @connection.sync_runs.where(operation: "census_sync").recent_first.first
-    assert_equal "[FILTERED]", sync.stats.dig("remote_response", "data", "access_token")
+    sync = result.record.reload
+    assert_equal "[FILTERED]", sync.stats.dig("remote_response", "data", "census_sync_request", "access_token")
     assert_not_includes sync.stats.to_json, "vit_at_census_snapshot_secret"
   ensure
     ENV[@connection.api_key_reference] = previous_key
