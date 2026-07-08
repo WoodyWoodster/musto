@@ -5,15 +5,13 @@ module Vitable
     :raw_payload
   ) do
     def self.from_hash(payload)
-      attributes = payload.to_h.stringify_keys
-      data = attributes.fetch("data", attributes)
-      data = data.fetch("eligibility_policy", data) if data.respond_to?(:fetch)
-      data = data.fetch("benefit_eligibility_policy", data) if data.respond_to?(:fetch)
-      data = data.respond_to?(:to_h) ? data.to_h.stringify_keys : {}
+      attributes = payload.respond_to?(:to_h) ? payload.to_h.stringify_keys : {}
+      data = resource_payload(attributes)
+      employer = nested_payload(data, "employer")
 
       new(
-        remote_policy_id: data.fetch("id", nil) || data.fetch("policy_id", nil),
-        remote_employer_id: data.fetch("employer_id", nil),
+        remote_policy_id: first_present(data["id"], data["policy_id"], data["eligibility_policy_id"], data["benefit_eligibility_policy_id"]),
+        remote_employer_id: first_present(data["employer_id"], data["employer_external_id"], employer["id"], employer["employer_id"]),
         raw_payload: data
       )
     end
@@ -27,5 +25,30 @@ module Vitable
 
       self
     end
+
+    def to_snapshot_hash
+      raw_payload.merge(
+        "id" => remote_policy_id,
+        "employer_id" => remote_employer_id
+      ).compact
+    end
+
+    def self.resource_payload(attributes)
+      %w[data eligibility_policy benefit_eligibility_policy policy resource object].reduce(attributes) do |payload, key|
+        value = payload[key]
+        !value.nil? && value.respond_to?(:to_h) ? value.to_h.stringify_keys : payload
+      end
+    end
+
+    def self.nested_payload(attributes, key)
+      value = attributes[key]
+      value.respond_to?(:to_h) ? value.to_h.stringify_keys : {}
+    end
+
+    def self.first_present(*values)
+      values.compact_blank.first
+    end
+
+    private_class_method :resource_payload, :nested_payload, :first_present
   end
 end

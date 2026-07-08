@@ -4863,27 +4863,39 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
         )
       end
       define_method(:update_employer_settings) do |employer_id, pay_frequency|
-        response_class.new(data: { employer_id:, pay_frequency:, client_secret: "vit_client_secret_snapshot" })
+        response_class.new(
+          data: {
+            employer_settings: {
+              employer_id:,
+              pay_frequency:,
+              client_secret: "vit_client_secret_snapshot"
+            }
+          }
+        )
       end
       define_method(:create_eligibility_policy) do |employer_id, payload|
         response_class.new(
           data: {
-            id: "elig_policy_123",
-            employer_id:,
-            classification: payload.fetch("classification"),
-            waiting_period: payload.fetch("waiting_period"),
-            refresh_token: "vit_rt_policy_snapshot_secret"
+            benefit_eligibility_policy: {
+              policy_id: "elig_policy_123",
+              employer: { id: employer_id },
+              classification: payload.fetch("classification"),
+              waiting_period: payload.fetch("waiting_period"),
+              refresh_token: "vit_rt_policy_snapshot_secret"
+            }
           }
         )
       end
       define_method(:retrieve_eligibility_policy) do |policy_id|
         response_class.new(
           data: {
-            id: policy_id,
-            employer_id: "empr_created_123",
-            classification: "All",
-            waiting_period: "1st of the following month",
-            access_token: "vit_at_policy_readback_secret"
+            eligibility_policy: {
+              id: policy_id,
+              employer: { id: "empr_created_123" },
+              classification: "All",
+              waiting_period: "1st of the following month",
+              access_token: "vit_at_policy_readback_secret"
+            }
           }
         )
       end
@@ -4905,9 +4917,9 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal "remote_submitted", @employer.settings.dig("vitable_eligibility_policy", "status")
     assert_equal "All", @employer.settings.dig("vitable_eligibility_policy", "classification")
     assert_equal "elig_policy_123", @employer.settings.dig("vitable_eligibility_policy", "remote_policy_id")
-    assert_equal "elig_policy_123", @employer.settings.dig("vitable_eligibility_policy", "remote_response", "data", "id")
-    assert_equal "elig_policy_123", @employer.settings.dig("vitable_eligibility_policy", "remote_snapshot", "data", "id")
-    assert_equal "[FILTERED]", @employer.settings.dig("vitable_eligibility_policy", "remote_snapshot", "data", "access_token")
+    assert_equal "elig_policy_123", @employer.settings.dig("vitable_eligibility_policy", "remote_response", "data", "benefit_eligibility_policy", "policy_id")
+    assert_equal "elig_policy_123", @employer.settings.dig("vitable_eligibility_policy", "remote_snapshot", "data", "eligibility_policy", "id")
+    assert_equal "[FILTERED]", @employer.settings.dig("vitable_eligibility_policy", "remote_snapshot", "data", "eligibility_policy", "access_token")
     assert_equal "/v1/benefit-eligibility-policies/elig_policy_123", @employer.settings.dig("vitable_eligibility_policy", "retrieve_endpoint")
     assert_equal "empr_created_123", @employer.settings.dig("vitable_remote_employer", "id")
     assert_equal "org_remote_123", @employer.settings.dig("vitable_remote_employer", "organization_id")
@@ -4919,14 +4931,14 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     sync = @connection.sync_runs.where(operation: "employer_create").recent_first.first
     assert_equal "succeeded", sync.status
     assert_equal "empr_created_123", sync.stats.fetch("remote_employer_id")
-    assert_equal "bi_weekly", sync.stats.dig("remote_response", "settings_response", "data", "pay_frequency")
+    assert_equal "bi_weekly", sync.stats.dig("remote_response", "settings_response", "data", "employer_settings", "pay_frequency")
     assert_equal "remote_submitted", sync.stats.dig("remote_response", "eligibility_policy_submission", "status")
     assert_equal "elig_policy_123", sync.stats.dig("remote_response", "eligibility_policy_submission", "remote_policy_id")
-    assert_equal "elig_policy_123", sync.stats.dig("remote_response", "eligibility_policy_submission", "remote_response", "data", "id")
-    assert_equal "[FILTERED]", sync.stats.dig("remote_response", "eligibility_policy_submission", "remote_snapshot", "data", "access_token")
+    assert_equal "elig_policy_123", sync.stats.dig("remote_response", "eligibility_policy_submission", "remote_response", "data", "benefit_eligibility_policy", "policy_id")
+    assert_equal "[FILTERED]", sync.stats.dig("remote_response", "eligibility_policy_submission", "remote_snapshot", "data", "eligibility_policy", "access_token")
     assert_equal "[FILTERED]", sync.stats.dig("remote_response", "employer_response", "data", "access_token")
-    assert_equal "[FILTERED]", sync.stats.dig("remote_response", "settings_response", "data", "client_secret")
-    assert_equal "[FILTERED]", sync.stats.dig("remote_response", "eligibility_policy_submission", "remote_response", "data", "refresh_token")
+    assert_equal "[FILTERED]", sync.stats.dig("remote_response", "settings_response", "data", "employer_settings", "client_secret")
+    assert_equal "[FILTERED]", sync.stats.dig("remote_response", "eligibility_policy_submission", "remote_response", "data", "benefit_eligibility_policy", "refresh_token")
     assert_not_includes sync.stats.to_json, "vit_at_employer_snapshot_secret"
     assert_not_includes sync.stats.to_json, "vit_client_secret_snapshot"
     assert_not_includes sync.stats.to_json, "vit_at_policy_readback_secret"

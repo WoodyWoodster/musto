@@ -428,10 +428,9 @@ module Vitable
     end
 
     def remote_settings_profile(response_hash)
-      data = response_hash.dig("settings_response", "data")
-      return unless data.respond_to?(:to_h)
+      dto = RemoteEmployerSettingsResponseDto.from_hash(response_hash.fetch("settings_response", {}))
 
-      data.to_h.stringify_keys.slice("pay_frequency").compact.presence
+      dto.to_metadata.presence
     end
 
     def endpoint_sequence_for(mode, eligibility_policy_endpoint)

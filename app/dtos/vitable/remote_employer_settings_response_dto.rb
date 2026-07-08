@@ -4,9 +4,8 @@ module Vitable
     :raw_payload
   ) do
     def self.from_hash(payload)
-      attributes = payload.to_h.stringify_keys
-      data = attributes.fetch("data", attributes)
-      data = data.respond_to?(:to_h) ? data.to_h.stringify_keys : {}
+      attributes = payload.respond_to?(:to_h) ? payload.to_h.stringify_keys : {}
+      data = resource_payload(attributes)
 
       new(
         pay_frequency: data.fetch("pay_frequency", nil)&.to_s,
@@ -22,5 +21,18 @@ module Vitable
 
       self
     end
+
+    def to_metadata
+      raw_payload.slice("pay_frequency").compact
+    end
+
+    def self.resource_payload(attributes)
+      %w[data settings employer_settings resource object].reduce(attributes) do |payload, key|
+        value = payload[key]
+        !value.nil? && value.respond_to?(:to_h) ? value.to_h.stringify_keys : payload
+      end
+    end
+
+    private_class_method :resource_payload
   end
 end
