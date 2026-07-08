@@ -39,6 +39,31 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
     assert_equal "wevt_test_sdk_id_shape", event.payload.fetch("event_id")
   end
 
+  test "accepts a Vitable webhook wrapped in a data envelope" do
+    payload = {
+      data: webhook_payload.merge(
+        event_id: "wevt_test_data_envelope",
+        resource_id: "enrl_data_envelope"
+      )
+    }
+
+    assert_difference "WebhookEvent.count", 1 do
+      post api_v1_webhooks_vitable_path, params: payload, as: :json
+    end
+
+    assert_response :accepted
+    event = WebhookEvent.find_by!(event_id: "wevt_test_data_envelope")
+    assert_equal @connection, event.integration_connection
+    assert_equal "needs_credentials", event.status
+    assert_equal "enrollment.accepted", event.event_name
+    assert_equal "enrollment", event.resource_type
+    assert_equal "enrl_data_envelope", event.resource_id
+    assert_equal "wevt_test_data_envelope", event.payload.fetch("event_id")
+    assert_equal "enrollment.accepted", event.payload.fetch("event_name")
+    assert_equal "enrl_data_envelope", event.payload.fetch("resource_id")
+    assert_equal "wevt_test_data_envelope", event.payload.dig("data", "event_id")
+  end
+
   test "accepts a Vitable webhook that uses occurred_at for the event timestamp" do
     occurred_at = Time.current.change(usec: 0)
     payload = webhook_payload.except(:created_at).merge(

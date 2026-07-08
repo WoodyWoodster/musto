@@ -9,23 +9,54 @@ module Vitable
     :payload
   ) do
     def self.from_payload(payload)
-      attrs = ApplicationDto.coerce_hash(payload).deep_symbolize_keys
+      raw_attrs = ApplicationDto.coerce_hash(payload).deep_symbolize_keys
+      attrs = event_attributes(raw_attrs)
       event_id = attrs[:event_id].presence || attrs[:id].presence
       raise KeyError, "key not found: :event_id" if event_id.blank?
 
       timestamp = attrs[:created_at].presence || attrs[:occurred_at].presence
       occurred_at = parse_time!(timestamp)
       organization_external_id = organization_external_id_from(attrs)
+      event_name = required_attr(attrs, :event_name)
+      resource_type = required_attr(attrs, :resource_type)
+      resource_id = required_attr(attrs, :resource_id)
 
       new(
         event_id:,
         organization_external_id:,
-        event_name: required_attr(attrs, :event_name),
-        resource_type: required_attr(attrs, :resource_type),
-        resource_id: required_attr(attrs, :resource_id),
+        event_name:,
+        resource_type:,
+        resource_id:,
         occurred_at:,
-        payload: attrs.merge(event_id:, organization_id: organization_external_id, created_at: occurred_at.iso8601)
+        payload: raw_attrs.merge(
+          event_id:,
+          organization_id: organization_external_id,
+          event_name:,
+          resource_type:,
+          resource_id:,
+          created_at: occurred_at.iso8601
+        )
       )
+    end
+
+    def self.event_attributes(attrs)
+      return attrs if attrs[:event_id].present? || attrs[:id].present?
+
+      data = attrs[:data]
+      return attrs unless data.respond_to?(:to_h)
+
+      data_attrs = data.to_h.deep_symbolize_keys
+      return attrs unless event_envelope?(data_attrs)
+
+      attrs.merge(data_attrs)
+    end
+
+    def self.event_envelope?(attrs)
+      (attrs[:event_id].present? || attrs[:id].present?) &&
+        attrs[:event_name].present? &&
+        attrs[:resource_type].present? &&
+        attrs[:resource_id].present? &&
+        (attrs[:created_at].present? || attrs[:occurred_at].present?)
     end
 
     def self.organization_external_id_from(attrs)
@@ -60,5 +91,7 @@ module Vitable
         payload:
       }
     end
+
+    private_class_method :event_attributes, :event_envelope?
   end
 end
