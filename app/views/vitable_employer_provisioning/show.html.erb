@@ -11,7 +11,7 @@
 
         <h1 class="mt-5 text-4xl font-semibold text-slate-950">Vitable employer provisioning</h1>
         <p class="mt-3 max-w-3xl text-base leading-7 text-slate-600">
-          Create or update the Vitable employer profile for <%= @provisioning.employer&.name || "your employer portfolio" %>, with legal-entity checks, eligibility policy setup, field review, submission readiness, and activity history before census sync starts.
+          Create or update the Vitable employer profile for <%= @provisioning.employer&.name || "your employer portfolio" %>, with legal-entity checks, remote eligibility policy setup, field review, submission readiness, and activity history before census sync starts.
         </p>
 
         <div class="mt-6 flex flex-wrap gap-3">
@@ -91,7 +91,7 @@
     <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
       <div class="border-b border-slate-100 px-5 py-4">
         <h2 class="text-base font-semibold text-slate-950">Provisioning attempts</h2>
-        <p class="text-sm text-slate-500">Create and settings-update attempts captured with connection readiness state.</p>
+        <p class="text-sm text-slate-500">Employer, settings, and eligibility-policy attempts captured with connection readiness state.</p>
       </div>
       <div class="divide-y divide-slate-100">
         <% @provisioning.sync_runs.each do |sync| %>
@@ -137,8 +137,8 @@
               [ "Phone", @provisioning.payload.phone_number.presence || "Optional", "create.phone_number" ],
               [ "Reference ID", @provisioning.payload.reference_id, "create.reference_id" ],
               [ "Pay frequency", @provisioning.payload.pay_frequency, "settings.pay_frequency" ],
-              [ "Eligibility classification", @provisioning.payload.eligibility_classification, "local_eligibility_profile.classification" ],
-              [ "Eligibility waiting period", @provisioning.payload.eligibility_waiting_period, "local_eligibility_profile.waiting_period" ]
+              [ "Eligibility classification", @provisioning.payload.eligibility_classification, "eligibility_policy.classification" ],
+              [ "Eligibility waiting period", @provisioning.payload.eligibility_waiting_period, "eligibility_policy.waiting_period" ]
             ].each do |label, value, key| %>
               <tr class="hover:bg-slate-50">
                 <td class="px-5 py-4 font-semibold text-slate-950"><%= label %></td>
@@ -190,7 +190,7 @@
     <section class="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
       <div class="border-b border-slate-100 px-5 py-4">
         <h2 class="text-base font-semibold text-slate-950">Employer submission activity</h2>
-        <p class="text-sm text-slate-500">Submission attempts for employer create and settings updates.</p>
+        <p class="text-sm text-slate-500">Submission attempts for employer create, settings updates, and eligibility policy creation.</p>
       </div>
       <div class="divide-y divide-slate-100">
         <% @provisioning.request_logs.each do |log| %>

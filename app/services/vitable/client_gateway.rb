@@ -198,6 +198,20 @@ module Vitable
       end
     end
 
+    def create_eligibility_policy(employer_id, payload)
+      body = eligibility_policy_payload(payload)
+      path = "/v1/employers/#{employer_id}/benefit-eligibility-policies"
+
+      instrument("employer.eligibility_policy.create", :post, path, request_body: body) do
+        client.request(
+          method: :post,
+          path: "v1/employers/#{employer_id}/benefit-eligibility-policies",
+          body:,
+          model: VitableConnect::Internal::Type::Unknown
+        )
+      end
+    end
+
     def create_group(payload)
       body = group_payload(payload)
 
@@ -354,6 +368,10 @@ module Vitable
 
     def group_payload(payload)
       payload.to_h.deep_symbolize_keys.slice(:external_reference_id, :name).compact
+    end
+
+    def eligibility_policy_payload(payload)
+      payload.to_h.deep_symbolize_keys.slice(:classification, :waiting_period).compact
     end
 
     def group_member_payload(member)

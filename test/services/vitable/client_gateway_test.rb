@@ -41,11 +41,34 @@ module Vitable
       assert_equal :semi_monthly, gateway.send(:pay_frequency_value, "semimonthly")
     end
 
-    test "does not expose undocumented eligibility policy writes" do
+    test "submits eligibility policy through authenticated custom request" do
       organization = Organization.create!(name: "Gateway Capability Test", external_id: "org_gateway_capability_test")
       connection = organization.integration_connections.create!(provider: "vitable", environment: "production")
+      gateway = ClientGateway.new(connection)
+      requests = []
+      fake_client = Object.new
+      fake_client.define_singleton_method(:request) do |request|
+        requests << request
+        { data: { id: "elig_policy_123" } }
+      end
+      gateway.define_singleton_method(:client) { fake_client }
 
-      assert_not_respond_to ClientGateway.new(connection), :create_eligibility_policy
+      response = gateway.create_eligibility_policy("empr_123", {
+        "classification" => "All",
+        "waiting_period" => "30 days",
+        "ignored" => true
+      })
+
+      assert_equal "elig_policy_123", response.dig(:data, :id)
+      request = requests.first
+      assert_equal :post, request.fetch(:method)
+      assert_equal "v1/employers/empr_123/benefit-eligibility-policies", request.fetch(:path)
+      assert_equal({ classification: "All", waiting_period: "30 days" }, request.fetch(:body))
+
+      log = connection.api_request_logs.last
+      assert_equal "employer.eligibility_policy.create", log.operation
+      assert_equal "/v1/employers/empr_123/benefit-eligibility-policies", log.path
+      assert_equal "All", log.request_body.fetch("classification")
     end
 
     test "normalizes group member sync payloads for the SDK" do

@@ -15,7 +15,7 @@ module ApplicationHelper
   def status_pill(status)
     normalized = status.to_s
     palette = case normalized
-    when "active", "available", "accepted", "approved", "complete", "completed", "processed", "succeeded", "finalized", "ready", "connected", "verified", "paid", "eligible", "enrolled", "synced", "funded", "delivered", "viewed", "matched", "mapped", "hired", "on_track", "closed", "resolved", "response_ready", "electronic_consented", "certificate_ready", "forecast_ready", "published", "medical_only", "first_aid", "low", "issued", "session_issued"
+    when "active", "available", "accepted", "approved", "complete", "completed", "processed", "succeeded", "finalized", "ready", "connected", "verified", "paid", "eligible", "enrolled", "synced", "funded", "delivered", "viewed", "matched", "mapped", "hired", "on_track", "closed", "resolved", "response_ready", "electronic_consented", "certificate_ready", "forecast_ready", "published", "medical_only", "first_aid", "low", "issued", "session_issued", "remote_submitted", "remote_current", "remote_existing"
       "bg-emerald-50 text-emerald-700 ring-emerald-200"
     when "pending", "requested", "received", "reported", "investigating", "onboarding", "estimated", "open", "running", "in_progress", "in_review", "scheduled", "remote_pending", "sync_queued", "queued", "prenote_sent", "sent", "opened", "reminded", "applied", "screening", "interview", "offer", "self_review", "manager_review", "calibration", "assigned", "withheld"
       "bg-cyan-50 text-cyan-700 ring-cyan-200"

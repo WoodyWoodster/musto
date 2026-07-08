@@ -2,7 +2,9 @@ module Vitable
   class EmployerProvisioningRepository < ApplicationRepository
     PACKET_KEY = "vitable_employer_provisioning_packet"
     PROVISIONING_OPERATIONS = %w[employer_create employer_settings_update].freeze
-    REQUEST_OPERATIONS = %w[employer.create employer.update_settings].freeze
+    REQUEST_OPERATIONS = %w[employer.create employer.update_settings employer.eligibility_policy.create].freeze
+    ELIGIBILITY_CLASSIFICATIONS = [ "All", "Full time", "Part time" ].freeze
+    ELIGIBILITY_WAITING_PERIODS = [ "1st of the following month", "30 days", "60 days", "None" ].freeze
 
     def initialize(employer:)
       @employer = employer
@@ -83,7 +85,7 @@ module Vitable
           "remote_employer_id" => remote_employer_id.presence || @employer.vitable_id
         },
         "vitable_pay_frequency" => packet.fetch("settings_payload", {}).fetch("pay_frequency", nil),
-        "vitable_eligibility_policy" => local_eligibility_profile(packet, synced_at)
+        "vitable_eligibility_policy" => eligibility_policy_profile(packet, response_hash, synced_at)
       )
       @employer.update!(vitable_id: remote_employer_id) if remote_employer_id.present? && @employer.vitable_id.blank?
       @employer.update!(settings:)
@@ -120,6 +122,7 @@ module Vitable
       mode = @employer.vitable_id.present? ? "update_settings" : "create"
       holdbacks = holdbacks_for(mode:, create_payload:, settings_payload:, eligibility_profile:)
       endpoint = mode == "create" ? "/v1/employers" : "/v1/employers/:employer_id/settings"
+      eligibility_policy_endpoint = "/v1/employers/:employer_id/benefit-eligibility-policies"
 
       {
         "packet_id" => "vitable_employer_provisioning_#{@employer.id}_#{Time.current.to_i}",
@@ -128,6 +131,7 @@ module Vitable
         "employer_id" => @employer.id,
         "remote_employer_id" => @employer.vitable_id,
         "endpoint" => endpoint,
+        "endpoint_sequence" => endpoint_sequence_for(mode, eligibility_policy_endpoint),
         "mode" => mode,
         "status" => holdbacks.any? ? "blocked" : "ready",
         "totals" => {
@@ -138,12 +142,12 @@ module Vitable
         "create_payload" => create_payload,
         "settings_payload" => settings_payload,
         "eligibility_policy_payload" => eligibility_profile,
-        "eligibility_policy_endpoint" => "employer.eligibility_policy_created webhook",
-        "eligibility_policy_action" => "local_profile_only",
+        "eligibility_policy_endpoint" => eligibility_policy_endpoint,
+        "eligibility_policy_action" => eligibility_policy_current?(eligibility_profile) ? "skip_remote_current" : "submit",
         "api_payload" => {
           "create" => create_payload,
           "settings" => settings_payload,
-          "local_eligibility_profile" => eligibility_profile
+          "eligibility_policy" => eligibility_profile
         },
         "holdbacks" => holdbacks
       }
@@ -198,6 +202,16 @@ module Vitable
         next if value.present?
 
         holdbacks << holdback(field:, reason_code: "missing_eligibility_profile_field", reason: "#{field.to_s.humanize} is required before the Vitable eligibility profile is ready.")
+      end
+
+      classification = eligibility_profile.fetch("classification", nil)
+      if classification.present? && !ELIGIBILITY_CLASSIFICATIONS.include?(classification)
+        holdbacks << holdback(field: "classification", reason_code: "unsupported_eligibility_classification", reason: "Classification must be one of #{ELIGIBILITY_CLASSIFICATIONS.to_sentence}.")
+      end
+
+      waiting_period = eligibility_profile.fetch("waiting_period", nil)
+      if waiting_period.present? && !ELIGIBILITY_WAITING_PERIODS.include?(waiting_period)
+        holdbacks << holdback(field: "waiting_period", reason_code: "unsupported_eligibility_waiting_period", reason: "Waiting period must be one of #{ELIGIBILITY_WAITING_PERIODS.to_sentence}.")
       end
 
       holdbacks
@@ -276,6 +290,7 @@ module Vitable
         "mode" => packet.fetch("mode"),
         "resource_id" => @employer.vitable_id.presence || "local_employer_#{@employer.id}",
         "endpoint" => packet.fetch("endpoint"),
+        "endpoint_sequence" => packet.fetch("endpoint_sequence", [ packet.fetch("endpoint") ]),
         "payload" => packet.fetch("api_payload", {})
       }
     end
@@ -289,23 +304,47 @@ module Vitable
     end
 
     def extract_remote_employer_id(response_hash)
-      response_hash.dig("data", "id") ||
+      response_hash.dig("employer_response", "data", "id") ||
+        response_hash.dig("employer_response", "data", "employer", "id") ||
+        response_hash.dig("employer_response", "id") ||
         response_hash.dig("data", "employer", "id") ||
+        response_hash.dig("data", "id") ||
+        response_hash.fetch("remote_employer_id", nil) ||
         response_hash.fetch("id", nil)
     end
 
-    def local_eligibility_profile(packet, synced_at)
+    def eligibility_policy_profile(packet, response_hash, synced_at)
       profile = packet.fetch("eligibility_policy_payload", {}).to_h.stringify_keys
       previous = @employer.settings.to_h.fetch("vitable_eligibility_policy", {}).to_h.stringify_keys
+      submission = EmployerEligibilityPolicySubmissionDto.from_hash(response_hash.fetch("eligibility_policy_submission", {}))
 
       previous.merge(
         profile.merge(
-          "status" => "local_ready",
-          "source" => "local_profile",
+          "status" => submission.status,
+          "source" => submission.source,
           "synced_with_employer_at" => synced_at,
+          "submitted_at" => submission.submitted_at&.iso8601,
+          "remote_employer_id" => submission.remote_employer_id.presence || @employer.vitable_id,
+          "remote_response" => submission.remote_response,
+          "endpoint" => submission.endpoint,
           "webhook_event_name" => "employer.eligibility_policy_created"
         )
       ).compact
+    end
+
+    def endpoint_sequence_for(mode, eligibility_policy_endpoint)
+      endpoints = []
+      endpoints << "/v1/employers" if mode == "create"
+      endpoints << "/v1/employers/:employer_id/settings"
+      endpoints << eligibility_policy_endpoint
+      endpoints
+    end
+
+    def eligibility_policy_current?(profile)
+      existing = @employer.settings.to_h.fetch("vitable_eligibility_policy", {}).to_h.stringify_keys
+      existing.fetch("source", nil).in?([ "remote_api", "remote_existing" ]) &&
+        existing.fetch("classification", nil) == profile.fetch("classification", nil) &&
+        existing.fetch("waiting_period", nil) == profile.fetch("waiting_period", nil)
     end
   end
 end

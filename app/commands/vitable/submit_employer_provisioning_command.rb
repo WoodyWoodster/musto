@@ -25,7 +25,7 @@ module Vitable
       response = submit_packet(packet)
       sync_run = @repository.mark_succeeded(sync_run, response, packet:)
       success(record: sync_run, value: response)
-    rescue VitableConnect::Errors::APIError => e
+    rescue ::VitableConnect::Errors::APIError => e
       @repository.mark_failed(sync_run, e)
       failure(record: sync_run, errors: "#{e.class}: #{e.message}")
     rescue ActiveRecord::RecordInvalid => e
@@ -36,15 +36,37 @@ module Vitable
 
     def submit_packet(packet)
       gateway = @gateway_class.new(@repository.connection)
+      remote_employer_id = @employer.vitable_id
+      employer_response = nil
 
       if packet.fetch("mode") == "create"
         employer_response = gateway.create_employer(packet.fetch("create_payload"))
-        remote_employer_id = remote_employer_id_from(employer_response) || @employer.vitable_id
+        remote_employer_id = remote_employer_id_from(employer_response) || remote_employer_id
         @employer.update!(vitable_id: remote_employer_id) if remote_employer_id.present? && @employer.vitable_id.blank?
-        employer_response
-      else
-        gateway.update_employer_settings(@employer.vitable_id, packet.fetch("settings_payload").fetch("pay_frequency"))
       end
+
+      settings_response = gateway.update_employer_settings(remote_employer_id, packet.fetch("settings_payload").fetch("pay_frequency"))
+      policy_submission = submit_eligibility_policy(gateway, remote_employer_id, packet)
+
+      {
+        "remote_employer_id" => remote_employer_id,
+        "employer_response" => serialize_response(employer_response),
+        "settings_response" => serialize_response(settings_response),
+        "eligibility_policy_submission" => policy_submission.to_metadata
+      }
+    end
+
+    def submit_eligibility_policy(gateway, remote_employer_id, packet)
+      payload = packet.fetch("eligibility_policy_payload")
+      submitted_at = Time.current
+      return EmployerEligibilityPolicySubmissionDto.skipped(remote_employer_id:, payload:, submitted_at:) if packet.fetch("eligibility_policy_action") == "skip_remote_current"
+
+      response = gateway.create_eligibility_policy(remote_employer_id, payload)
+      EmployerEligibilityPolicySubmissionDto.submitted(remote_employer_id:, payload:, response:, submitted_at:)
+    rescue ::VitableConnect::Errors::APIStatusError => e
+      raise unless e.status == 422
+
+      EmployerEligibilityPolicySubmissionDto.existing(remote_employer_id:, payload:, error: e, submitted_at:)
     end
 
     def remote_employer_id_from(response)
