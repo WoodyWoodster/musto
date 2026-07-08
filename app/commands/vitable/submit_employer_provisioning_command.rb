@@ -28,6 +28,9 @@ module Vitable
     rescue ::VitableConnect::Errors::APIError => e
       @repository.mark_failed(sync_run, e)
       failure(record: sync_run, errors: "#{e.class}: #{e.message}")
+    rescue ArgumentError => e
+      @repository.mark_failed(sync_run, e)
+      failure(record: sync_run, errors: e.message)
     rescue ActiveRecord::RecordInvalid => e
       failure(record: e.record, errors: e.record.errors.full_messages)
     end
@@ -42,8 +45,11 @@ module Vitable
       if packet.fetch("mode") == "create"
         employer_response = gateway.create_employer(packet.fetch("create_payload"))
         remote_employer_id = remote_employer_id_from(employer_response) || remote_employer_id
-        @employer.update!(vitable_id: remote_employer_id) if remote_employer_id.present? && @employer.vitable_id.blank?
+        raise ArgumentError, "Vitable employer create response did not include a remote employer ID" if remote_employer_id.blank?
+
+        @employer.update!(vitable_id: remote_employer_id) if @employer.vitable_id.blank?
       end
+      raise ArgumentError, "Vitable employer ID is required before employer settings can be updated" if remote_employer_id.blank?
 
       settings_response = gateway.update_employer_settings(remote_employer_id, packet.fetch("settings_payload").fetch("pay_frequency"))
       policy_submission = submit_eligibility_policy(gateway, remote_employer_id, packet)

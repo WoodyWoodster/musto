@@ -3495,6 +3495,33 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     ENV[@connection.api_key_reference] = previous_key
   end
 
+  test "employer provisioning fails before dependent calls when create omits remote id" do
+    prepare_provisioning_profile
+    response_class = Data.define(:data)
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:create_employer) { |payload| response_class.new(data: { name: payload.fetch("name") }) }
+      define_method(:update_employer_settings) { |_employer_id, _pay_frequency| raise "settings should not be called without remote employer ID" }
+      define_method(:create_eligibility_policy) { |_employer_id, _payload| raise "policy should not be called without remote employer ID" }
+    end
+    previous_key = ENV[@connection.api_key_reference]
+    ENV[@connection.api_key_reference] = "vit_apk_test_value"
+
+    result = Vitable::SubmitEmployerProvisioningCommand.new(
+      dto: Vitable::SubmitEmployerProvisioningDto.new(requested_by: "integration_admin"),
+      gateway_class:
+    ).call
+
+    assert result.failure?
+    assert_nil @employer.reload.vitable_id
+    sync = @connection.sync_runs.where(operation: "employer_create").recent_first.first
+    assert_equal "failed", sync.status
+    assert_match "remote employer ID", sync.error_message
+    assert_match "remote employer ID", result.errors.to_sentence
+  ensure
+    ENV[@connection.api_key_reference] = previous_key
+  end
+
   test "successful employer settings command stores pay frequency metadata" do
     prepare_provisioning_profile(remote_id: "empr_ops_123")
     response_class = Data.define(:data)
