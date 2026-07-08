@@ -3330,6 +3330,81 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     ENV[@connection.api_key_reference] = previous_key
   end
 
+  test "Vitable API snapshot refresh fails when employer omits remote employer id" do
+    response_class = Data.define(:data)
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:list_all_employers) do
+        response_class.new(
+          data: [
+            {
+              name: "Ops Employer",
+              legal_name: "Ops Employer LLC",
+              reference_id: "musto_employer_#{Employer.find_by!(name: "Ops Employer").id}",
+              active: true
+            }
+          ]
+        )
+      end
+      define_method(:list_all_groups) { response_class.new(data: []) }
+      define_method(:list_all_plans) { response_class.new(data: []) }
+    end
+    previous_key = ENV[@connection.api_key_reference]
+    ENV[@connection.api_key_reference] = "vit_apk_test_value"
+
+    result = Vitable::RefreshApiSnapshotCommand.new(
+      dto: Vitable::RefreshApiSnapshotDto.new(connection_id: @connection.id, requested_by: "integration_admin"),
+      gateway_class:
+    ).call
+
+    assert result.failure?
+    assert_nil @employer.reload.vitable_id
+    assert_nil @connection.reload.metadata.fetch("api_snapshot", nil)
+    sync = @connection.sync_runs.where(operation: "api_snapshot_refresh").recent_first.first
+    assert_equal "failed", sync.status
+    assert_match "remote employer ID", sync.error_message
+    assert_match "remote employer ID", result.errors.to_sentence
+  ensure
+    ENV[@connection.api_key_reference] = previous_key
+  end
+
+  test "Vitable API snapshot refresh fails when group omits remote group id" do
+    response_class = Data.define(:data)
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:list_all_employers) { response_class.new(data: []) }
+      define_method(:list_all_groups) do
+        response_class.new(
+          data: [
+            {
+              name: "Ops Employer",
+              external_reference_id: "musto_care_group_#{Employer.find_by!(name: "Ops Employer").id}",
+              organization_id: "org_demo_vitable"
+            }
+          ]
+        )
+      end
+      define_method(:list_all_plans) { response_class.new(data: []) }
+    end
+    previous_key = ENV[@connection.api_key_reference]
+    ENV[@connection.api_key_reference] = "vit_apk_test_value"
+
+    result = Vitable::RefreshApiSnapshotCommand.new(
+      dto: Vitable::RefreshApiSnapshotDto.new(connection_id: @connection.id, requested_by: "integration_admin"),
+      gateway_class:
+    ).call
+
+    assert result.failure?
+    assert_nil @employer.reload.settings.to_h.fetch("vitable_care_group_id", nil)
+    assert_nil @connection.reload.metadata.fetch("api_snapshot", nil)
+    sync = @connection.sync_runs.where(operation: "api_snapshot_refresh").recent_first.first
+    assert_equal "failed", sync.status
+    assert_match "remote group ID", sync.error_message
+    assert_match "remote group ID", result.errors.to_sentence
+  ensure
+    ENV[@connection.api_key_reference] = previous_key
+  end
+
   test "Vitable API snapshot refresh records remote employer id conflicts" do
     @employer.update!(vitable_id: "empr_current_ops")
     response_class = Data.define(:data)

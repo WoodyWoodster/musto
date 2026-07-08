@@ -20,6 +20,7 @@ module Vitable
     private
 
     def reconcile_employer(result:, remote_employer:, source:, refreshed_at:)
+      validate_remote_employer_identity!(remote_employer)
       employer, matched_by = employer_for_remote(remote_employer)
       return result.increment(processed_count: 1, unmatched_count: 1) unless employer
 
@@ -116,6 +117,11 @@ module Vitable
 
     def remote_id(remote_employer)
       remote_employer.fetch("id", nil).presence
+    end
+
+    def validate_remote_employer_identity!(remote_employer)
+      reference = remote_reference_id(remote_employer).presence || remote_employer.fetch("name", nil).presence || "unknown employer"
+      raise ArgumentError, "Vitable API snapshot employer #{reference} did not include a remote employer ID" if remote_id(remote_employer).blank?
     end
 
     def remote_reference_id(remote_employer)

@@ -21,6 +21,7 @@ module Vitable
     private
 
     def reconcile_group(result:, remote_group:, source:, refreshed_at:)
+      validate_remote_group_identity!(remote_group)
       employer, matched_by = employer_for_remote(remote_group)
       return result.increment(processed_count: 1, unmatched_count: 1) unless employer
 
@@ -116,6 +117,11 @@ module Vitable
 
     def remote_id(remote_group)
       remote_group.fetch("id", nil).presence
+    end
+
+    def validate_remote_group_identity!(remote_group)
+      reference = remote_reference_id(remote_group).presence || remote_group.fetch("name", nil).presence || "unknown group"
+      raise ArgumentError, "Vitable API snapshot group #{reference} did not include a remote group ID" if remote_id(remote_group).blank?
     end
 
     def remote_reference_id(remote_group)
