@@ -3,7 +3,7 @@ module Vitable
     ACCEPTED_STATUSES = %w[verified not_configured unmatched_organization skipped].freeze
 
     def self.skipped(detail: "Signature verification was not run.")
-      new(status: "skipped", detail:, connection_id: nil, header_name: nil, timestamp: nil, algorithm: "hmac-sha256")
+      new(status: "skipped", detail:, connection_id: nil, header_name: nil, timestamp: nil, algorithm: "hmac-sha512")
     end
 
     def accepted?

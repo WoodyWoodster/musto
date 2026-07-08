@@ -454,6 +454,29 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
     event = WebhookEvent.find_by!(event_id: payload.fetch(:event_id))
     assert_equal "verified", event.metadata.dig("signature_verification", "status")
     assert_equal "X-Vitable-Signature", event.metadata.dig("signature_verification", "header_name")
+    assert_equal "hmac-sha512", event.metadata.dig("signature_verification", "algorithm")
+  ensure
+    ENV.delete("VITABLE_WEBHOOK_SECRET")
+  end
+
+  test "rejects SHA256 webhook signatures when webhook secret is configured" do
+    @connection.update!(webhook_secret_reference: "VITABLE_WEBHOOK_SECRET")
+    ENV["VITABLE_WEBHOOK_SECRET"] = "whsec_test_value"
+    payload = webhook_payload.merge(event_id: "wevt_test_sha256_signature")
+    raw_body = payload.to_json
+    timestamp = "2026-01-23T14:31:00+00:00"
+    signature = OpenSSL::HMAC.hexdigest("SHA256", ENV.fetch("VITABLE_WEBHOOK_SECRET"), "#{timestamp}.#{raw_body}")
+
+    assert_no_difference "WebhookEvent.count" do
+      post api_v1_webhooks_vitable_path,
+        params: payload,
+        headers: signed_headers(timestamp:, signature:, algorithm: "sha256"),
+        as: :json
+    end
+
+    assert_response :unauthorized
+    response_payload = JSON.parse(response.body)
+    assert_equal "signature_invalid", response_payload.fetch("signature")
   ensure
     ENV.delete("VITABLE_WEBHOOK_SECRET")
   end
@@ -510,11 +533,11 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
 
   private
 
-  def signed_headers(timestamp:, signature:)
+  def signed_headers(timestamp:, signature:, algorithm: "sha512")
     {
       "CONTENT_TYPE" => "application/json",
       "X-Vitable-Timestamp" => timestamp,
-      "X-Vitable-Signature" => "sha256=#{signature}"
+      "X-Vitable-Signature" => "#{algorithm}=#{signature}"
     }
   end
 

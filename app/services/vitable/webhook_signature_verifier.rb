@@ -2,6 +2,9 @@ require "openssl"
 
 module Vitable
   class WebhookSignatureVerifier
+    HMAC_DIGEST = "SHA512"
+    METADATA_ALGORITHM = "hmac-sha512"
+    ACCEPTED_SIGNATURE_KEYS = %w[sha512 v1].freeze
     SIGNATURE_HEADERS = [
       "X-Vitable-Signature",
       "Vitable-Signature",
@@ -11,7 +14,7 @@ module Vitable
 
     def self.sign(raw_body:, secret:, timestamp: nil)
       signed_payload = timestamp.present? ? "#{timestamp}.#{raw_body}" : raw_body
-      OpenSSL::HMAC.hexdigest("SHA256", secret, signed_payload)
+      OpenSSL::HMAC.hexdigest(HMAC_DIGEST, secret, signed_payload)
     end
 
     def initialize(repository: IntegrationRepository.new, secret_lookup: ENV)
@@ -73,7 +76,10 @@ module Vitable
       value.to_s.split(",").flat_map do |part|
         normalized = part.strip
         key, candidate = normalized.split("=", 2)
-        [ normalized, candidate, key == "sha256" ? candidate : nil, key == "v1" ? candidate : nil ]
+        next [ normalized ] if candidate.blank?
+        next [ candidate ] if ACCEPTED_SIGNATURE_KEYS.include?(key)
+
+        []
       end.compact.uniq
     end
 
@@ -92,7 +98,7 @@ module Vitable
         connection_id: connection&.id,
         header_name:,
         timestamp:,
-        algorithm: "hmac-sha256"
+        algorithm: METADATA_ALGORITHM
       )
     end
   end
