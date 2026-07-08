@@ -3906,6 +3906,25 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
                 frequency: "bi_weekly"
               }
             ],
+            dependents: [
+              {
+                id: "dep_ops_harper_detail",
+                reference_id: "musto_dependent_#{Dependent.find_by!(first_name: "Harper", last_name: "Ng").id}",
+                first_name: "Harper",
+                last_name: "Ng",
+                relationship: "spouse",
+                date_of_birth: Dependent.find_by!(first_name: "Harper", last_name: "Ng").date_of_birth.iso8601,
+                status: "active"
+              },
+              {
+                id: "dep_ops_avery_detail",
+                first_name: "Avery",
+                last_name: "Ng",
+                relationship: "child",
+                date_of_birth: Date.new(2018, 3, 4).iso8601,
+                status: "active"
+              }
+            ],
             access_token: "vit_at_employee_detail_secret"
           }
         )
@@ -3923,14 +3942,21 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
 
     assert result.success?, result.errors.to_sentence
     @employee.reload
+    @dependent.reload
     @pending_deduction.reload
     snapshot = @connection.reload.metadata.fetch("api_snapshot")
     detail = snapshot.fetch("employee_details").sole
+    created_dependent = @employee.dependents.find_by!(vitable_id: "dep_ops_avery_detail")
 
     assert_equal 1, snapshot.dig("counts", "remote_employee_count")
     assert_equal 1, snapshot.dig("counts", "retrieved_remote_employee_count")
     assert_equal 0, snapshot.dig("counts", "errored_remote_employee_detail_count")
     assert_equal 1, snapshot.dig("counts", "mapped_employee_count")
+    assert_equal 2, snapshot.dig("counts", "remote_employee_dependent_count")
+    assert_equal 2, snapshot.dig("counts", "reconciled_employee_dependent_count")
+    assert_equal 1, snapshot.dig("counts", "created_employee_dependent_count")
+    assert_equal 1, snapshot.dig("counts", "updated_employee_dependent_count")
+    assert_equal 0, snapshot.dig("counts", "employee_dependent_missing_required_count")
     assert_equal 1, snapshot.dig("counts", "remote_employee_deduction_changed_count")
     assert_equal "empl_ops_detail", detail.fetch("remote_employee_id")
     assert_equal "[FILTERED]", detail.dig("response", "data", "access_token")
@@ -3938,12 +3964,20 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal "mem_ops_detail", @employee.metadata.fetch("vitable_member_id")
     assert_equal "musto_employee_#{@employee.id}", @employee.metadata.fetch("vitable_remote_reference_id")
     assert_equal "empl_ops_detail", @employee.metadata.dig("vitable_last_resource_snapshot", "id")
+    assert_equal "dep_ops_harper_detail", @dependent.vitable_id
+    assert_equal "vitable_api_snapshot", @dependent.metadata.fetch("source")
+    assert_equal "dep_ops_harper_detail", @dependent.metadata.dig("vitable_last_resource_snapshot", "id")
+    assert_equal "Avery", created_dependent.first_name
+    assert_equal "eligible", created_dependent.eligibility_status
+    assert_equal "enrolled", created_dependent.enrollment_status
     assert_equal 4500, @pending_deduction.amount_cents
     assert_equal "ready", @pending_deduction.status
     assert_not_includes @employee.metadata.to_json, "vit_at_employee_detail_secret"
 
     dto = Vitable::ConnectionDetailQuery.new.call(@connection.id).api_snapshot
     assert_equal 1, dto.retrieved_remote_employee_count
+    assert_equal 2, dto.reconciled_employee_dependent_count
+    assert_equal 1, dto.created_employee_dependent_count
     assert_equal 0, dto.errored_remote_employee_detail_count
   ensure
     ENV[@connection.api_key_reference] = previous_key

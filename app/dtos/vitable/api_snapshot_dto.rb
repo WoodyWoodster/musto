@@ -55,6 +55,11 @@ module Vitable
     :enrollment_deduction_changed_count,
     :mapped_employee_count,
     :unmatched_remote_employee_count,
+    :remote_employee_dependent_count,
+    :reconciled_employee_dependent_count,
+    :created_employee_dependent_count,
+    :updated_employee_dependent_count,
+    :employee_dependent_missing_required_count,
     :remote_employee_deduction_changed_count,
     :inactive_employee_enrollment_count,
     :inactive_employee_payroll_deduction_count
@@ -122,6 +127,11 @@ module Vitable
         enrollment_deduction_changed_count: counts.fetch("enrollment_deduction_changed_count", 0),
         mapped_employee_count: counts.fetch("mapped_employee_count", employee_enrollments.count),
         unmatched_remote_employee_count: counts.fetch("unmatched_remote_employee_count", 0),
+        remote_employee_dependent_count: counts.fetch("remote_employee_dependent_count", 0),
+        reconciled_employee_dependent_count: counts.fetch("reconciled_employee_dependent_count", 0),
+        created_employee_dependent_count: counts.fetch("created_employee_dependent_count", 0),
+        updated_employee_dependent_count: counts.fetch("updated_employee_dependent_count", 0),
+        employee_dependent_missing_required_count: counts.fetch("employee_dependent_missing_required_count", 0),
         remote_employee_deduction_changed_count: counts.fetch("remote_employee_deduction_changed_count", 0),
         inactive_employee_enrollment_count: counts.fetch("inactive_employee_enrollment_count", 0),
         inactive_employee_payroll_deduction_count: counts.fetch("inactive_employee_payroll_deduction_count", 0)
