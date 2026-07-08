@@ -74,6 +74,9 @@ module Vitable
       return EmployerEligibilityPolicySubmissionDto.skipped(remote_employer_id:, payload:, submitted_at:) if packet.fetch("eligibility_policy_action") == "skip_remote_current"
 
       response = gateway.create_eligibility_policy(remote_employer_id, payload)
+      RemoteEligibilityPolicyResponseDto
+        .from_hash(serialize_response(response))
+        .validate!(expected_employer_id: remote_employer_id)
       EmployerEligibilityPolicySubmissionDto.submitted(remote_employer_id:, payload:, response:, submitted_at:)
     rescue ::VitableConnect::Errors::APIStatusError => e
       raise unless e.status == 422

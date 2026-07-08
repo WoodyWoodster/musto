@@ -3962,6 +3962,66 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     ENV[@connection.api_key_reference] = previous_key
   end
 
+  test "employer provisioning fails when eligibility policy response omits remote policy id" do
+    prepare_provisioning_profile(remote_id: "empr_ops_123")
+    response_class = Data.define(:data)
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:update_employer_settings) do |employer_id, pay_frequency|
+        response_class.new(data: { employer_id:, pay_frequency: })
+      end
+      define_method(:create_eligibility_policy) do |employer_id, payload|
+        response_class.new(data: { employer_id:, classification: payload.fetch("classification") })
+      end
+    end
+    previous_key = ENV[@connection.api_key_reference]
+    ENV[@connection.api_key_reference] = "vit_apk_test_value"
+
+    result = Vitable::SubmitEmployerProvisioningCommand.new(
+      dto: Vitable::SubmitEmployerProvisioningDto.new(requested_by: "integration_admin"),
+      gateway_class:
+    ).call
+
+    assert result.failure?
+    assert_nil @employer.reload.settings.to_h.fetch("vitable_eligibility_policy", nil)
+    sync = @connection.sync_runs.where(operation: "employer_settings_update").recent_first.first
+    assert_equal "failed", sync.status
+    assert_match "remote policy ID", sync.error_message
+    assert_match "remote policy ID", result.errors.to_sentence
+  ensure
+    ENV[@connection.api_key_reference] = previous_key
+  end
+
+  test "employer provisioning fails when eligibility policy response employer differs from submitted employer" do
+    prepare_provisioning_profile(remote_id: "empr_ops_123")
+    response_class = Data.define(:data)
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:update_employer_settings) do |employer_id, pay_frequency|
+        response_class.new(data: { employer_id:, pay_frequency: })
+      end
+      define_method(:create_eligibility_policy) do |_employer_id, payload|
+        response_class.new(data: { id: "elig_policy_123", employer_id: "empr_other_456", classification: payload.fetch("classification") })
+      end
+    end
+    previous_key = ENV[@connection.api_key_reference]
+    ENV[@connection.api_key_reference] = "vit_apk_test_value"
+
+    result = Vitable::SubmitEmployerProvisioningCommand.new(
+      dto: Vitable::SubmitEmployerProvisioningDto.new(requested_by: "integration_admin"),
+      gateway_class:
+    ).call
+
+    assert result.failure?
+    assert_nil @employer.reload.settings.to_h.fetch("vitable_eligibility_policy", nil)
+    sync = @connection.sync_runs.where(operation: "employer_settings_update").recent_first.first
+    assert_equal "failed", sync.status
+    assert_match "expected empr_ops_123", sync.error_message
+    assert_match "expected empr_ops_123", result.errors.to_sentence
+  ensure
+    ENV[@connection.api_key_reference] = previous_key
+  end
+
   test "employer provisioning records existing remote eligibility policy on duplicate policy response" do
     prepare_provisioning_profile(remote_id: "empr_ops_123")
     response_class = Data.define(:data)
