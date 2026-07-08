@@ -214,10 +214,7 @@ module Vitable
     def reconcile_webhook_event_resource(remote_resource)
       expected_organization_id = webhook_event_connection_organization_id
       validate_remote_webhook_event_identity!(remote_resource)
-      dto = RemoteWebhookEventDto.from_remote_event(
-        remote_resource,
-        default_organization_id: expected_organization_id
-      )
+      dto = RemoteWebhookEventDto.from_remote_event(remote_resource)
       return reconciliation_result(status: "skipped", remote_resource:, warnings: [ "Fetched webhook event response did not include a complete Vitable event." ]) unless dto
       return webhook_event_organization_mismatch_result(remote_resource, dto, expected_organization_id) if webhook_event_organization_mismatch?(dto, expected_organization_id)
 

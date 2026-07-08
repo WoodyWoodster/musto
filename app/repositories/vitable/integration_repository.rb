@@ -734,10 +734,7 @@ module Vitable
       expected_organization_id = connection.organization.external_id.presence
 
       remote_events.each do |remote_event|
-        dto = RemoteWebhookEventDto.from_remote_event(
-          remote_event,
-          default_organization_id: expected_organization_id
-        )
+        dto = RemoteWebhookEventDto.from_remote_event(remote_event)
 
         if dto.blank?
           skipped_events << skipped_remote_webhook_event(remote_event, reason: "incomplete_event")

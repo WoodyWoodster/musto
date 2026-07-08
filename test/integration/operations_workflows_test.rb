@@ -3056,6 +3056,13 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
         created_at: 1.minute.ago.iso8601
       },
       {
+        id: "wevt_missing_org",
+        event_name: "employee.eligibility_granted",
+        resource_type: "employee",
+        resource_id: "empl_missing_org",
+        created_at: 90.seconds.ago.iso8601
+      },
+      {
         id: "wevt_incomplete_remote",
         event_name: "employee.updated"
       }
@@ -3104,7 +3111,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal 1, snapshot.dig("counts", "remote_employer_count")
     assert_equal 1, snapshot.dig("counts", "remote_group_count")
     assert_equal 2, snapshot.dig("counts", "remote_plan_count")
-    assert_equal 4, snapshot.dig("counts", "remote_webhook_event_count")
+    assert_equal 5, snapshot.dig("counts", "remote_webhook_event_count")
     assert_equal 1, snapshot.dig("counts", "imported_webhook_event_count")
     assert_equal 1, snapshot.dig("counts", "existing_webhook_event_count")
     assert_equal 1, snapshot.dig("counts", "webhook_recovery_candidate_count")
@@ -3113,9 +3120,12 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal 0, snapshot.dig("counts", "skipped_webhook_recovery_count")
     assert_equal 1, snapshot.dig("counts", "remote_employee_enrollment_count")
     assert_equal @employee.id, snapshot.fetch("employee_enrollments").first.fetch("local_employee_id")
-    assert_equal 2, snapshot.dig("webhook_event_ingestion", "skipped_count")
+    assert_equal 3, snapshot.dig("webhook_event_ingestion", "skipped_count")
     assert_includes snapshot.dig("webhook_event_ingestion", "skipped_event_ids"), "wevt_incomplete_remote"
+    assert_includes snapshot.dig("webhook_event_ingestion", "skipped_event_ids"), "wevt_missing_org"
     assert_includes snapshot.dig("webhook_event_ingestion", "skipped_event_ids"), "wevt_other_org"
+    skipped_missing_org = snapshot.dig("webhook_event_ingestion", "skipped_events").find { |event| event.fetch("event_id") == "wevt_missing_org" }
+    assert_equal "incomplete_event", skipped_missing_org.fetch("reason")
     skipped_other_org = snapshot.dig("webhook_event_ingestion", "skipped_events").find { |event| event.fetch("event_id") == "wevt_other_org" }
     assert_equal "organization_mismatch", skipped_other_org.fetch("reason")
     assert_equal "org_other_vitable", skipped_other_org.fetch("organization_id")
@@ -3141,7 +3151,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     sync = @connection.sync_runs.where(operation: "api_snapshot_refresh").recent_first.first
     assert_equal 1, sync.stats.dig("webhook_event_ingestion", "created_count")
     assert_equal 1, sync.stats.dig("webhook_event_ingestion", "existing_count")
-    assert_equal 2, sync.stats.dig("webhook_event_ingestion", "skipped_count")
+    assert_equal 3, sync.stats.dig("webhook_event_ingestion", "skipped_count")
     assert_equal 1, sync.stats.dig("webhook_event_recovery", "processed_count")
     assert_includes sync.stats.dig("webhook_event_recovery", "processed_event_ids"), "wevt_remote_123"
 

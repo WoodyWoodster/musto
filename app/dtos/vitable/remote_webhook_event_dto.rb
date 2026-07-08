@@ -8,11 +8,11 @@ module Vitable
     :occurred_at,
     :raw_payload
   ) do
-    def self.from_remote_event(remote_event, default_organization_id:)
+    def self.from_remote_event(remote_event)
       attributes = remote_event.to_h.stringify_keys
       event_id = attributes["event_id"].presence || attributes["id"].presence
       occurred_at = parse_time(attributes["created_at"].presence || attributes["occurred_at"].presence)
-      organization_id = attributes["organization_id"].presence || default_organization_id
+      organization_id = attributes["organization_id"].presence
 
       return if [ event_id, organization_id, attributes["event_name"], attributes["resource_type"], attributes["resource_id"], occurred_at ].any?(&:blank?)
 
