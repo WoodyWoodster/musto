@@ -4433,6 +4433,52 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal "/v1/groups/:group_id/members/sync", manifest.fetch("endpoint")
   end
 
+  test "Vitable care member manifest normalizes group sync API fields" do
+    prepare_care_group_profile(remote_group_id: "grp_ops_123")
+    location = @employer.work_locations.find_by!(name: "Ops HQ")
+    location.update!(state: "pa", postal_code: " 19106-1234 ")
+    @employee.update!(
+      email: " CASEY@EXAMPLE.COM ",
+      metadata: @employee.metadata.to_h.merge("phone" => "+1 (555) 123-4567")
+    )
+
+    post generate_vitable_care_member_manifest_path, params: { requested_by: "integration_admin" }
+
+    manifest = @employer.reload.settings.fetch("vitable_care_member_sync_manifest")
+    member_payload = manifest.fetch("api_payload").fetch("members").first
+
+    assert_equal "ready", manifest.fetch("status")
+    assert_equal "casey@example.com", member_payload.fetch("email")
+    assert_equal "5551234567", member_payload.fetch("phone")
+    assert_equal "PA", member_payload.fetch("address").fetch("state")
+    assert_equal "19106-1234", member_payload.fetch("address").fetch("zipcode")
+    assert_empty manifest.fetch("holdbacks")
+  end
+
+  test "Vitable care member manifest holds back invalid group sync API fields" do
+    prepare_care_group_profile(remote_group_id: "grp_ops_123")
+    location = @employer.work_locations.find_by!(name: "Ops HQ")
+    location.update!(state: "Pennsylvania", postal_code: "191")
+    @employee.update!(
+      email: "casey",
+      metadata: @employee.metadata.to_h.merge("phone" => "555123")
+    )
+
+    post generate_vitable_care_member_manifest_path, params: { requested_by: "integration_admin" }
+
+    manifest = @employer.reload.settings.fetch("vitable_care_member_sync_manifest")
+    holdback = manifest.fetch("holdbacks").first
+
+    assert_equal "blocked", manifest.fetch("status")
+    assert_equal 0, manifest.fetch("totals").fetch("ready_count")
+    assert_equal "invalid_api_contract_fields", holdback.fetch("reason_code")
+    assert_includes holdback.fetch("reason"), "email"
+    assert_includes holdback.fetch("reason"), "phone"
+    assert_includes holdback.fetch("reason"), "address state"
+    assert_includes holdback.fetch("reason"), "address ZIP"
+    assert_empty manifest.fetch("api_payload").fetch("members")
+  end
+
   test "submits care member sync as missing credentials sync run without API key" do
     prepare_care_group_profile(remote_group_id: "grp_ops_123")
     Vitable::GenerateCareMemberSyncCommand.new(dto: Vitable::GenerateCareMemberSyncDto.new(requested_by: "ops_test")).call
