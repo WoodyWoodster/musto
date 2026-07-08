@@ -159,6 +159,52 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
     ENV.delete("VITABLE_CONNECT_API_KEY")
   end
 
+  test "direct webhook event fetches import the remote event ledger row" do
+    ENV["VITABLE_CONNECT_API_KEY"] = "vit_apk_test_value"
+    occurred_at = Time.current.change(usec: 0)
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:fetch_resource) do |_resource_type, resource_id|
+        {
+          data: {
+            id: resource_id,
+            organization_id: "org_webhook_test",
+            event_name: "group.updated",
+            resource_type: "group",
+            resource_id: "grp_remote_imported",
+            created_at: occurred_at.iso8601
+          }
+        }
+      end
+    end
+
+    assert_difference "WebhookEvent.count", 1 do
+      result = Vitable::FetchResourceCommand.new(
+        dto: Vitable::FetchResourceDto.new(connection_id: @connection.id, resource_type: "webhook_event", resource_id: "wevt_remote_imported"),
+        gateway_class:
+      ).call
+
+      assert result.success?
+    end
+
+    event = WebhookEvent.find_by!(event_id: "wevt_remote_imported")
+    sync_run = @connection.sync_runs.where(operation: "fetch", resource_type: "webhook_event").recent_first.first
+
+    assert_equal @connection.id, event.integration_connection_id
+    assert_equal "group.updated", event.event_name
+    assert_equal "group", event.resource_type
+    assert_equal "grp_remote_imported", event.resource_id
+    assert_equal occurred_at.to_i, event.occurred_at.to_i
+    assert_equal "received", event.status
+    assert_equal "vitable_resource_fetch", event.metadata.dig("remote_webhook_event_snapshot", "source")
+    assert_equal "matched", sync_run.stats.dig("resource_reconciliation", "status")
+    assert_equal "WebhookEvent", sync_run.stats.dig("resource_reconciliation", "local_record_type")
+    assert_equal event.id, sync_run.stats.dig("resource_reconciliation", "local_record_id")
+    assert_equal "created_from_event_id", sync_run.stats.dig("resource_reconciliation", "matched_by")
+  ensure
+    ENV.delete("VITABLE_CONNECT_API_KEY")
+  end
+
   test "reconciles employee deduction webhooks into payroll deductions" do
     employer = @organization.employers.create!(name: "Deduction Employer", status: "active")
     employee = employer.employees.create!(

@@ -23,6 +23,8 @@ module Vitable
         reconcile_employer_resource(remote_resource)
       when "group"
         reconcile_group_resource(remote_resource)
+      when "webhook_event"
+        reconcile_webhook_event_resource(remote_resource)
       else
         reconciliation_result(status: "skipped", remote_resource:, warnings: [ "#{@event.resource_type} webhooks are stored as snapshots only." ])
       end
@@ -198,6 +200,39 @@ module Vitable
         local_record: employer,
         matched_by:,
         applied_changes: settings_updates.keys.map { |key| "settings.#{key}" }
+      )
+    end
+
+    def reconcile_webhook_event_resource(remote_resource)
+      dto = RemoteWebhookEventDto.from_remote_event(
+        remote_resource,
+        default_organization_id: @event.integration_connection&.organization&.external_id
+      )
+      return reconciliation_result(status: "skipped", remote_resource:, warnings: [ "Fetched webhook event response did not include a complete Vitable event." ]) unless dto
+
+      webhook_event = WebhookEvent.find_or_initialize_by(event_id: dto.event_id)
+      was_new_record = webhook_event.new_record?
+      timestamp = Time.current.iso8601
+      metadata = webhook_event.metadata.to_h.merge(
+        "remote_webhook_event_snapshot" => {
+          "source" => "vitable_resource_fetch",
+          "fetched_at" => timestamp,
+          "resource_id" => @event.resource_id
+        }.compact
+      )
+
+      webhook_event.assign_attributes(dto.to_event_attributes)
+      webhook_event.integration_connection ||= @event.integration_connection
+      webhook_event.status = "received" if webhook_event.status.blank?
+      webhook_event.metadata = metadata
+      webhook_event.save!
+
+      reconciliation_result(
+        status: "matched",
+        remote_resource:,
+        local_record: webhook_event,
+        matched_by: was_new_record ? "created_from_event_id" : "event_id",
+        applied_changes: [ was_new_record ? "webhook_events.created" : "webhook_events.updated", "metadata.remote_webhook_event_snapshot" ]
       )
     end
 
