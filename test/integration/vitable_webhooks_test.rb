@@ -223,6 +223,43 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
     ENV.delete("VITABLE_CONNECT_API_KEY")
   end
 
+  test "direct webhook event fetches skip events for another organization" do
+    ENV["VITABLE_CONNECT_API_KEY"] = "vit_apk_test_value"
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:fetch_resource) do |_resource_type, resource_id|
+        {
+          data: {
+            id: resource_id,
+            organization_id: "org_other_vitable",
+            event_name: "group.updated",
+            resource_type: "group",
+            resource_id: "grp_other",
+            created_at: Time.current.iso8601
+          }
+        }
+      end
+    end
+
+    assert_no_difference "WebhookEvent.count" do
+      result = Vitable::FetchResourceCommand.new(
+        dto: Vitable::FetchResourceDto.new(connection_id: @connection.id, resource_type: "webhook_event", resource_id: "wevt_other_org"),
+        gateway_class:
+      ).call
+
+      assert result.success?
+    end
+
+    sync_run = @connection.sync_runs.where(operation: "fetch", resource_type: "webhook_event").recent_first.first
+    warnings = sync_run.stats.dig("resource_reconciliation", "warnings")
+
+    assert_equal "skipped", sync_run.stats.dig("resource_reconciliation", "status")
+    assert_match "org_other_vitable", warnings.join(" ")
+    assert_nil WebhookEvent.find_by(event_id: "wevt_other_org")
+  ensure
+    ENV.delete("VITABLE_CONNECT_API_KEY")
+  end
+
   test "reconciles employee deduction webhooks into payroll deductions" do
     employer = @organization.employers.create!(name: "Deduction Employer", status: "active")
     employee = employer.employees.create!(
