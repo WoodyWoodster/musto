@@ -26,6 +26,10 @@ module Vitable
       response_hash = serialize_response(response)
       response_dto = WidgetTokenResponseDto.from_response(response_hash, issued_at: Time.current)
       raise ArgumentError, "Vitable widget token response did not include an access token" if response_dto.access_token.blank?
+      response_dto.validate_bound_entity!(
+        expected_type: @dto.bound_entity_type,
+        expected_id: context.fetch(:remote_id)
+      )
 
       sync_run = @repository.mark_succeeded(sync_run, response_dto)
       success(record: sync_run, value: response_dto)

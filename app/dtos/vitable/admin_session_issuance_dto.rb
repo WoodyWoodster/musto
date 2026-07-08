@@ -44,6 +44,19 @@ module Vitable
       status == "issued" && expires_at.present? && expires_at > at
     end
 
+    def validate_bound_entity!(expected_type:, expected_id:, response_label: "Vitable admin token response")
+      return self if bound_entity.blank?
+
+      if bound_entity.fetch("type", nil).to_s != expected_type.to_s
+        raise ArgumentError, "#{response_label} returned bound entity type #{bound_entity.fetch("type", nil)}, expected #{expected_type}"
+      end
+      if expected_id.present? && bound_entity.fetch("id", nil).to_s != expected_id.to_s
+        raise ArgumentError, "#{response_label} returned bound entity ID #{bound_entity.fetch("id", nil)}, expected #{expected_id}"
+      end
+
+      self
+    end
+
     def to_metadata
       {
         "status" => status,
