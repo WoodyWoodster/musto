@@ -3116,6 +3116,48 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     ENV[@connection.api_key_reference] = previous_key
   end
 
+  test "Vitable API snapshot refresh fails when employee enrollment omits remote enrollment id" do
+    @employee.update!(vitable_id: "empl_ops_casey")
+    response_class = Data.define(:data)
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:list_all_employers) { response_class.new(data: []) }
+      define_method(:list_all_groups) { response_class.new(data: []) }
+      define_method(:list_all_plans) { response_class.new(data: []) }
+      define_method(:list_all_webhook_events) { response_class.new(data: []) }
+      define_method(:list_all_employee_enrollments) do |employee_id|
+        response_class.new(
+          data: [
+            {
+              employee_id:,
+              benefit: { id: "bprd_remote_dental", name: "Dental", category: "Dental" },
+              status: "enrolled",
+              coverage_start: Date.current.beginning_of_month,
+              employee_deduction_in_cents: 4500
+            }
+          ]
+        )
+      end
+    end
+    previous_key = ENV[@connection.api_key_reference]
+    ENV[@connection.api_key_reference] = "vit_apk_test_value"
+
+    result = Vitable::RefreshApiSnapshotCommand.new(
+      dto: Vitable::RefreshApiSnapshotDto.new(connection_id: @connection.id, requested_by: "integration_admin"),
+      gateway_class:
+    ).call
+
+    assert result.failure?
+    assert_nil @pending_enrollment.reload.vitable_id
+    assert_nil @connection.reload.metadata.fetch("api_snapshot", nil)
+    sync = @connection.sync_runs.where(operation: "api_snapshot_refresh").recent_first.first
+    assert_equal "failed", sync.status
+    assert_match "remote enrollment ID", sync.error_message
+    assert_match "remote enrollment ID", result.errors.to_sentence
+  ensure
+    ENV[@connection.api_key_reference] = previous_key
+  end
+
   test "Vitable API snapshot refresh maps remote roster employees before enrollment reads" do
     @employee.update!(employment_status: "terminated")
     response_class = Data.define(:data)
