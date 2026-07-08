@@ -4494,6 +4494,31 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     ENV[@connection.api_key_reference] = previous_key
   end
 
+  test "care group submit fails when create response omits remote group id" do
+    prepare_care_group_profile
+    response_class = Data.define(:data)
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:create_group) { |payload| response_class.new(data: { name: payload.fetch("name") }) }
+    end
+    previous_key = ENV[@connection.api_key_reference]
+    ENV[@connection.api_key_reference] = "vit_apk_test_value"
+
+    result = Vitable::SubmitCareGroupCommand.new(
+      dto: Vitable::SubmitCareGroupDto.new(requested_by: "integration_admin"),
+      gateway_class:
+    ).call
+
+    assert result.failure?
+    assert_nil @employer.reload.settings.to_h.fetch("vitable_care_group_id", nil)
+    sync = @connection.sync_runs.where(operation: "care_group_upsert").recent_first.first
+    assert_equal "failed", sync.status
+    assert_match "remote group ID", sync.error_message
+    assert_match "remote group ID", result.errors.to_sentence
+  ensure
+    ENV[@connection.api_key_reference] = previous_key
+  end
+
   test "generates a Vitable care member manifest through command action" do
     prepare_care_group_profile(remote_group_id: "grp_ops_123")
     create_care_member_holdback_employee
