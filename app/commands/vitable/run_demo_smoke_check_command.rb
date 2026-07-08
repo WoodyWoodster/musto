@@ -42,10 +42,12 @@ module Vitable
       checked_at = Time.current
       auth_response = gateway.issue_access_token
       employers = page_data(gateway.list_all_employers)
+      employer_token_response = employer_access_token(gateway, employers.first)
       groups = page_data(gateway.list_all_groups)
       plans = page_data(gateway.list_all_plans)
       webhook_events = page_data(gateway.list_all_webhook_events)
       employees = employer_employees(gateway, employers.first)
+      employee_token_response = employee_access_token(gateway, employees.first)
       enrollments = employee_enrollments(gateway, employees.first)
       retrieved_employer = retrieve_sample(gateway, :retrieve_employer, employers.first)
       retrieved_group = retrieve_sample(gateway, :retrieve_group, groups.first)
@@ -55,7 +57,7 @@ module Vitable
         base_url: connection.effective_api_base_url || "https://api.vitablehealth.com",
         checked_at:,
         sdk_version: VitableConnect::VERSION,
-        checks: checks_for(auth_response:, employers:, groups:, plans:, webhook_events:, employees:, enrollments:, retrieved_employer:, retrieved_group:),
+        checks: checks_for(auth_response:, employer_token_response:, employee_token_response:, employers:, groups:, plans:, webhook_events:, employees:, enrollments:, retrieved_employer:, retrieved_group:),
         counts: {
           "employers" => employers.count,
           "groups" => groups.count,
@@ -74,6 +76,18 @@ module Vitable
         }.compact,
         warnings: warnings_for(plans:, employees:, enrollments:)
       )
+    end
+
+    def employer_access_token(gateway, employer)
+      return unless sample_id(employer)
+
+      gateway.issue_employer_access_token(sample_id(employer))
+    end
+
+    def employee_access_token(gateway, employee)
+      return unless sample_id(employee)
+
+      gateway.issue_employee_access_token(sample_id(employee))
     end
 
     def employer_employees(gateway, employer)
@@ -100,9 +114,11 @@ module Vitable
       false
     end
 
-    def checks_for(auth_response:, employers:, groups:, plans:, webhook_events:, employees:, enrollments:, retrieved_employer:, retrieved_group:)
+    def checks_for(auth_response:, employer_token_response:, employee_token_response:, employers:, groups:, plans:, webhook_events:, employees:, enrollments:, retrieved_employer:, retrieved_group:)
       [
         check("auth.issue_access_token", token_issued?(auth_response)),
+        check("auth.issue_employer_access_token", token_issued?(employer_token_response), skipped: employers.empty?),
+        check("auth.issue_employee_access_token", token_issued?(employee_token_response), skipped: employees.empty?),
         check("employer.list", true, count: employers.count),
         check("employer.retrieve", retrieved_employer, skipped: employers.empty?),
         check("employer.list_employees", true, count: employees.count, skipped: employers.empty?),

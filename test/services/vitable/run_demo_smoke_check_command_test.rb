@@ -35,6 +35,8 @@ module Vitable
       assert_equal "demo_smoke_check", sync_run.operation
       assert_equal "active", @connection.status
       assert_equal "https://api.demo.vitablehealth.com", snapshot.fetch("base_url")
+      assert_equal "ready", snapshot.fetch("checks").find { |check| check.fetch("name") == "auth.issue_employer_access_token" }.fetch("status")
+      assert_equal "ready", snapshot.fetch("checks").find { |check| check.fetch("name") == "auth.issue_employee_access_token" }.fetch("status")
       assert_equal 1, snapshot.dig("counts", "employers")
       assert_equal 1, snapshot.dig("counts", "groups")
       assert_equal 0, snapshot.dig("counts", "plans")
@@ -66,10 +68,13 @@ module Vitable
 
     def successful_gateway_class
       access_token_response = Data.define(:access_token)
+      bound_token_response = Data.define(:access_token, :expires_in, :bound_entity)
 
       Class.new do
         define_method(:initialize) { |_connection| }
         define_method(:issue_access_token) { access_token_response.new(access_token: "vit_at_secret_value") }
+        define_method(:issue_employer_access_token) { |employer_id| bound_token_response.new(access_token: "vit_at_employer_secret", expires_in: 3_600, bound_entity: { type: "employer", id: employer_id }) }
+        define_method(:issue_employee_access_token) { |employee_id| bound_token_response.new(access_token: "vit_at_employee_secret", expires_in: 3_600, bound_entity: { type: "employee", id: employee_id }) }
         define_method(:list_all_employers) { { data: [ { id: "empr_demo_123", name: "Demo Employer" } ] } }
         define_method(:retrieve_employer) { |employer_id| { data: { id: employer_id, name: "Demo Employer" } } }
         define_method(:list_all_employer_employees) { |_employer_id| { data: [ { id: "empl_demo_123", email: "casey@example.com" } ] } }

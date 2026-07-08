@@ -1,7 +1,7 @@
 require "json"
 
 namespace :vitable do
-  desc "Run a read-only smoke check against the configured Vitable demo API"
+  desc "Run a demo smoke check against the configured Vitable API"
   task demo_smoke: :environment do
     dto = Vitable::RunDemoSmokeCheckDto.from_env
     result = Vitable::RunDemoSmokeCheckCommand.new(dto:).call
