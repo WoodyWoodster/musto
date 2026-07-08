@@ -14,6 +14,8 @@ module Vitable
       remote_resource = response_resource(@response_hash)
       return reconciliation_result(status: "skipped", warnings: [ "Fetched resource response did not include attributes." ]) if remote_resource.blank?
 
+      validate_remote_resource_identity!(remote_resource)
+
       case @event.resource_type
       when "employee"
         reconcile_employee_resource(remote_resource)
@@ -431,6 +433,17 @@ module Vitable
 
     def remote_resource_id(remote_resource)
       remote_resource.fetch("id", nil).presence || @event.resource_id
+    end
+
+    def validate_remote_resource_identity!(remote_resource)
+      return unless @event.resource_type.in?(%w[employee enrollment employer group])
+
+      reference = remote_resource.fetch("reference_id", nil).presence ||
+        remote_resource.fetch("external_reference_id", nil).presence ||
+        remote_resource.fetch("email", nil).presence ||
+        remote_resource.fetch("name", nil).presence ||
+        @event.resource_id
+      raise ArgumentError, "Vitable #{@event.resource_type} resource #{reference} did not include a remote resource ID" if remote_resource.fetch("id", nil).blank?
     end
 
     def remote_employee_id(remote_resource)

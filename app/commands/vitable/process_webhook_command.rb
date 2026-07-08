@@ -8,6 +8,7 @@ module Vitable
     end
 
     def call
+      event = nil
       dto = WebhookEventDto.from_payload(@payload)
       connection = @repository.connection_for_organization_external_id(dto.organization_external_id)
       event = @repository.persist_event(dto, connection, signature_verification: @signature_verification)
@@ -42,6 +43,11 @@ module Vitable
         failure(record: event, value: fetch_result.value, errors: fetch_result.errors)
       end
     rescue KeyError, ArgumentError => e
+      if event
+        @repository.mark_failed(event, e.message)
+        return failure(record: event, errors: e.message)
+      end
+
       failure(errors: "Invalid Vitable webhook payload: #{e.message}")
     end
 

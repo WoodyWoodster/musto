@@ -151,6 +151,46 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
     ENV.delete("VITABLE_CONNECT_API_KEY")
   end
 
+  test "fails fetched employee webhook reconciliation when response omits remote resource id" do
+    employer = @organization.employers.create!(name: "Webhook Employer", status: "active")
+    employee = employer.employees.create!(first_name: "Casey", last_name: "Nguyen", email: "casey@example.com")
+    ENV["VITABLE_CONNECT_API_KEY"] = "vit_apk_test_value"
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:fetch_resource) do |_resource_type, _resource_id|
+        {
+          data: {
+            reference_id: "musto_employee_#{Employee.find_by!(email: "casey@example.com").id}",
+            email: "casey@example.com",
+            status: "active",
+            member_id: "mem_remote_casey"
+          }
+        }
+      end
+    end
+
+    result = Vitable::ProcessWebhookCommand.new(
+      payload: webhook_payload.merge(
+        event_id: "wevt_test_employee_missing_resource_id",
+        event_name: "employee.eligibility_granted",
+        resource_type: "employee",
+        resource_id: "empl_remote_casey"
+      ),
+      gateway_class:
+    ).call
+
+    assert result.failure?
+    event = WebhookEvent.find_by!(event_id: "wevt_test_employee_missing_resource_id")
+
+    assert_equal "failed", event.status
+    assert_match "remote resource ID", event.error_message
+    assert_match "remote resource ID", result.errors.to_sentence
+    assert_nil employee.reload.vitable_id
+    assert_nil employee.metadata.fetch("vitable_member_id", nil)
+  ensure
+    ENV.delete("VITABLE_CONNECT_API_KEY")
+  end
+
   test "stores unsupported Vitable webhook resource types as payload-only snapshots" do
     ENV["VITABLE_CONNECT_API_KEY"] = "vit_apk_test_value"
     gateway_class = Class.new do
