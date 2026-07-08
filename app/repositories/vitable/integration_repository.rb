@@ -447,26 +447,29 @@ module Vitable
     end
 
     def succeed_api_snapshot_run(connection, sync_run, snapshot)
-      refreshed_at = Time.current
+      completed_at = Time.current
+      refreshed_at = api_snapshot_refreshed_at(snapshot, fallback: completed_at)
       webhook_ingestion = ingest_remote_webhook_events(connection, snapshot.fetch("webhook_events", []), refreshed_at:)
       snapshot = snapshot.merge("webhook_event_ingestion" => webhook_ingestion)
       counts = snapshot_counts(snapshot)
       connection.update!(
         status: "active",
-        last_synced_at: refreshed_at,
+        last_synced_at: completed_at,
         metadata: connection.metadata.to_h.merge(
           "api_snapshot" => snapshot.merge(
             "refreshed_at" => refreshed_at.iso8601,
+            "completed_at" => completed_at.iso8601,
             "counts" => counts
           )
         )
       )
       sync_run.update!(
         status: "succeeded",
-        completed_at: refreshed_at,
+        completed_at: completed_at,
         error_message: nil,
         stats: sync_run.stats.to_h.merge(counts).merge(
           "refreshed_at" => refreshed_at.iso8601,
+          "completed_at" => completed_at.iso8601,
           "webhook_event_ingestion" => webhook_ingestion
         )
       )
@@ -576,6 +579,16 @@ module Vitable
     end
 
     private
+
+    def api_snapshot_refreshed_at(snapshot, fallback:)
+      value = snapshot.to_h.fetch("refreshed_at", nil)
+      return fallback if value.blank?
+      return value if value.respond_to?(:iso8601) && !value.is_a?(String)
+
+      Time.iso8601(value.to_s)
+    rescue ArgumentError
+      fallback
+    end
 
     def webhook_delivery_payloads_from_response(response_hash, expected_webhook_event_id:)
       data = response_hash.fetch("data", [])

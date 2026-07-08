@@ -3073,7 +3073,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       define_method(:list_all_employers) { response_class.new(data: [ { id: "empr_ops_123", name: "Atlas Global Services" } ]) }
       define_method(:list_all_groups) { response_class.new(data: [ { id: "grp_ops_123", name: "Atlas Care Group" } ]) }
       define_method(:list_all_plans) { response_class.new(data: [ { id: "plan_dpc", name: "Direct Primary Care" }, { id: "plan_mec", name: "MEC" } ]) }
-      define_method(:list_all_webhook_events) { response_class.new(data: remote_webhook_events) }
+      define_method(:list_all_webhook_events) { |**_filters| response_class.new(data: remote_webhook_events) }
       define_method(:list_all_employee_enrollments) do |employee_id|
         response_class.new(
           data: [
@@ -3189,18 +3189,26 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     previous_key = ENV[@connection.api_key_reference]
     ENV[@connection.api_key_reference] = "vit_apk_test_value"
 
+    before_refresh = Time.current
     result = Vitable::RefreshApiSnapshotCommand.new(
       dto: Vitable::RefreshApiSnapshotDto.new(connection_id: @connection.id, requested_by: "integration_admin"),
       gateway_class:
     ).call
+    after_refresh = Time.current
 
     assert result.success?
     assert_equal 1, webhook_filters.count
     expected_created_after = previous_refreshed_at - Vitable::RefreshApiSnapshotCommand::WEBHOOK_EVENT_LOOKBACK
+    created_before = webhook_filters.first.fetch(:created_before)
     assert_equal expected_created_after.to_i, webhook_filters.first.fetch(:created_after).to_i
+    assert_operator created_before, :>=, before_refresh
+    assert_operator created_before, :<=, after_refresh
 
     snapshot = @connection.reload.metadata.fetch("api_snapshot")
     assert_equal expected_created_after.iso8601, snapshot.dig("webhook_event_query", "created_after")
+    assert_equal created_before.iso8601, snapshot.dig("webhook_event_query", "created_before")
+    assert_equal created_before.iso8601, snapshot.fetch("refreshed_at")
+    assert snapshot.fetch("completed_at").present?
     assert_equal 0, snapshot.dig("counts", "remote_webhook_event_count")
   ensure
     ENV[@connection.api_key_reference] = previous_key
@@ -3216,7 +3224,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       define_method(:list_all_employers) { response_class.new(data: [ { id: "empr_ops_123", name: "Atlas Global Services" } ]) }
       define_method(:list_all_groups) { response_class.new(data: []) }
       define_method(:list_all_plans) { response_class.new(data: [ { id: "bprd_remote_dental", name: "Dental" } ]) }
-      define_method(:list_all_webhook_events) { response_class.new(data: []) }
+      define_method(:list_all_webhook_events) { |**_filters| response_class.new(data: []) }
       define_method(:list_all_employee_enrollments) do |employee_id|
         response_class.new(
           data: [
@@ -3285,7 +3293,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       define_method(:list_all_employers) { response_class.new(data: []) }
       define_method(:list_all_groups) { response_class.new(data: []) }
       define_method(:list_all_plans) { response_class.new(data: []) }
-      define_method(:list_all_webhook_events) { response_class.new(data: []) }
+      define_method(:list_all_webhook_events) { |**_filters| response_class.new(data: []) }
       define_method(:list_all_employee_enrollments) do |employee_id|
         response_class.new(
           data: [
@@ -3374,7 +3382,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
         )
       end
       define_method(:list_all_plans) { response_class.new(data: []) }
-      define_method(:list_all_webhook_events) { response_class.new(data: []) }
+      define_method(:list_all_webhook_events) { |**_filters| response_class.new(data: []) }
       define_method(:list_all_employer_employees) do |employer_id|
         response_class.new(
           data: [
@@ -3610,7 +3618,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       end
       define_method(:list_all_groups) { response_class.new(data: []) }
       define_method(:list_all_plans) { response_class.new(data: []) }
-      define_method(:list_all_webhook_events) { response_class.new(data: []) }
+      define_method(:list_all_webhook_events) { |**_filters| response_class.new(data: []) }
       define_method(:list_all_employer_employees) { |_employer_id| response_class.new(data: []) }
       define_method(:list_all_employee_enrollments) { |_employee_id| response_class.new(data: []) }
     end
@@ -4412,7 +4420,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       end
       define_method(:list_all_groups) { response_class.new(data: []) }
       define_method(:list_all_plans) { response_class.new(data: []) }
-      define_method(:list_all_webhook_events) { response_class.new(data: []) }
+      define_method(:list_all_webhook_events) { |**_filters| response_class.new(data: []) }
       define_method(:list_all_employer_employees) do |employer_id|
         response_class.new(
           data: [

@@ -43,8 +43,8 @@ module Vitable
 
     def build_snapshot(connection)
       gateway = @gateway_class.new(connection)
-      refreshed_at = Time.current.iso8601
-      webhook_event_query = webhook_event_query(connection)
+      snapshot_refreshed_at = Time.current
+      refreshed_at = snapshot_refreshed_at.iso8601
       employers = page_data(gateway.list_all_employers, response_label: "Vitable employer list response")
       groups = page_data(gateway.list_all_groups, response_label: "Vitable group list response")
       plans = page_data(gateway.list_all_plans, response_label: "Vitable plan list response")
@@ -71,9 +71,15 @@ module Vitable
         source: "vitable_api_snapshot",
         refreshed_at:
       )
+      webhook_event_query = webhook_event_query(connection, high_water_mark: snapshot_refreshed_at)
+      webhook_events = page_data(
+        gateway.list_all_webhook_events(**webhook_event_query),
+        response_label: "Vitable webhook event list response"
+      )
 
       {
         "requested_by" => @dto.requested_by,
+        "refreshed_at" => refreshed_at,
         "employers" => employers,
         "employer_reconciliation" => employer_reconciliation.to_metadata,
         "groups" => groups,
@@ -81,7 +87,7 @@ module Vitable
         "plans" => plans,
         "plan_reconciliation" => plan_reconciliation,
         "webhook_event_query" => webhook_event_query_metadata(webhook_event_query),
-        "webhook_events" => page_data(gateway.list_all_webhook_events(**webhook_event_query), response_label: "Vitable webhook event list response"),
+        "webhook_events" => webhook_events,
         "remote_employee_rosters" => remote_employee_rosters,
         "employee_reconciliation" => employee_reconciliation.to_metadata,
         "employee_enrollments" => employee_enrollments,
@@ -240,11 +246,12 @@ module Vitable
         .select { |employee| employee.vitable_id.present? }
     end
 
-    def webhook_event_query(connection)
+    def webhook_event_query(connection, high_water_mark:)
       previous_refreshed_at = previous_api_snapshot_refreshed_at(connection)
-      return {} unless previous_refreshed_at
+      query = { created_before: high_water_mark }
+      return query unless previous_refreshed_at
 
-      { created_after: previous_refreshed_at - WEBHOOK_EVENT_LOOKBACK }
+      query.merge(created_after: previous_refreshed_at - WEBHOOK_EVENT_LOOKBACK)
     end
 
     def previous_api_snapshot_refreshed_at(connection)
