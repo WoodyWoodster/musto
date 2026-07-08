@@ -50,13 +50,14 @@ module Vitable
       groups = list_snapshot_page(trace, step: "groups", response_label: "Vitable group list response") { gateway.list_all_groups }
       plans = list_snapshot_page(trace, step: "plans", response_label: "Vitable plan list response") { gateway.list_all_plans }
       employer_details = remote_employer_details(gateway, connection, trace:)
+      group_details = remote_group_details(gateway, connection, groups, trace:)
       employer_reconciliation = RemoteEmployerSnapshotRepository.new(connection:).reconcile_snapshot(
         remote_employers: employer_reconciliation_snapshots(employers, employer_details),
         source: "vitable_api_snapshot",
         refreshed_at:
       )
       group_reconciliation = RemoteGroupSnapshotRepository.new(connection:).reconcile_snapshot(
-        remote_groups: groups,
+        remote_groups: group_reconciliation_snapshots(groups, group_details),
         source: "vitable_api_snapshot",
         refreshed_at:
       )
@@ -93,6 +94,7 @@ module Vitable
         "employer_details" => employer_details,
         "employer_reconciliation" => employer_reconciliation.to_metadata,
         "groups" => groups,
+        "group_details" => group_details,
         "group_reconciliation" => group_reconciliation.to_metadata,
         "plans" => plans,
         "plan_reconciliation" => plan_reconciliation,
@@ -255,6 +257,75 @@ module Vitable
       return if remote_id == expected_remote_id
 
       raise ArgumentError, "Vitable employer retrieve response returned remote employer ID #{remote_id}, expected #{expected_remote_id}"
+    end
+
+    def remote_group_details(gateway, connection, groups, trace:)
+      return [] unless gateway.respond_to?(:retrieve_group)
+
+      remote_group_ids(groups, connection).map do |group_id|
+        response_hash = retrieve_snapshot_resource(
+          trace,
+          step: "group",
+          response_label: "Vitable group retrieve response",
+          resource_id: group_id
+        ) { gateway.retrieve_group(group_id) }
+        dto = RemoteResourceResponseDto
+          .from_response(response_hash, resource_type: "group", resource_id: group_id)
+          .validate!
+        validate_retrieved_group!(dto.attributes, expected_remote_id: group_id)
+
+        {
+          "remote_group_id" => group_id,
+          "group" => dto.attributes,
+          "response" => response_hash
+        }
+      rescue VitableConnect::Errors::NotFoundError => e
+        {
+          "remote_group_id" => group_id,
+          "error_class" => e.class.name,
+          "error_message" => PayloadRedactor.error_message(e)
+        }
+      end
+    end
+
+    def group_reconciliation_snapshots(groups, group_details)
+      detail_records_by_id = group_details.each_with_object({}) do |entry, index|
+        group = entry.to_h.fetch("group", nil)
+        next unless group.respond_to?(:to_h)
+
+        group = group.to_h.stringify_keys
+        remote_id = group.fetch("id", nil).presence
+        index[remote_id] = group if remote_id.present?
+      end
+
+      merged = groups.map do |group|
+        group = group.to_h.stringify_keys
+        remote_id = group.fetch("id", nil).presence
+        detail_records_by_id.delete(remote_id) || group
+      end
+
+      merged + detail_records_by_id.values
+    end
+
+    def remote_group_ids(groups, connection)
+      (
+        groups.filter_map { |group| group.to_h.stringify_keys.fetch("id", nil).presence } +
+        local_group_ids(connection)
+      ).uniq
+    end
+
+    def local_group_ids(connection)
+      local_employers(connection).filter_map do |employer|
+        employer.settings.to_h.stringify_keys.fetch(CareGroupRepository::GROUP_ID_KEY, nil).presence
+      end
+    end
+
+    def validate_retrieved_group!(remote_group, expected_remote_id:)
+      remote_id = remote_group.to_h.stringify_keys.fetch("id", nil).presence
+      raise ArgumentError, "Vitable group retrieve response did not include a remote group ID" if remote_id.blank?
+      return if remote_id == expected_remote_id
+
+      raise ArgumentError, "Vitable group retrieve response returned remote group ID #{remote_id}, expected #{expected_remote_id}"
     end
 
     def remote_employee_rosters(gateway, connection, trace:)
