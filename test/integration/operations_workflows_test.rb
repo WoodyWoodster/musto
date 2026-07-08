@@ -4976,6 +4976,9 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     sync = @connection.sync_runs.where(operation: "embedded_enrollment_token").recent_first.first
     assert_equal "failed", sync.status
     assert_match "expires_in", sync.error_message
+    assert_equal "ArgumentError", sync.stats.fetch("error_class")
+    assert_equal "[FILTERED]", sync.stats.dig("token_response", "access_token")
+    assert_equal "Bearer", sync.stats.dig("token_response", "token_type")
     assert_match "expires_in", result.errors.to_sentence
     assert_not_includes sync.stats.to_json, "vit_at_secret_value"
   ensure
@@ -5009,6 +5012,9 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     sync = @connection.sync_runs.where(operation: "embedded_enrollment_token").recent_first.first
     assert_equal "failed", sync.status
     assert_match "expected empl_ops_casey", sync.error_message
+    assert_equal "ArgumentError", sync.stats.fetch("error_class")
+    assert_equal "empl_ops_wrong", sync.stats.dig("token_response", "bound_entity", "id")
+    assert_equal "[FILTERED]", sync.stats.dig("token_response", "access_token")
     assert_match "expected empl_ops_casey", result.errors.to_sentence
     assert_not_includes sync.stats.to_json, "vit_at_wrong_employee_secret"
   ensure
@@ -5189,6 +5195,9 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     sync = @connection.sync_runs.where(operation: "embedded_admin_token").recent_first.first
     assert_equal "failed", sync.status
     assert_match "expected Bearer", sync.error_message
+    assert_equal "ArgumentError", sync.stats.fetch("error_class")
+    assert_equal "Basic", sync.stats.dig("token_response", "token_type")
+    assert_equal "[FILTERED]", sync.stats.dig("token_response", "access_token")
     assert_match "expected Bearer", result.errors.to_sentence
     assert_not_includes sync.stats.to_json, "vit_at_secret_value"
   ensure
@@ -5222,6 +5231,9 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     sync = @connection.sync_runs.where(operation: "embedded_admin_token").recent_first.first
     assert_equal "failed", sync.status
     assert_match "expected empr_ops_123", sync.error_message
+    assert_equal "ArgumentError", sync.stats.fetch("error_class")
+    assert_equal "empr_ops_wrong", sync.stats.dig("token_response", "bound_entity", "id")
+    assert_equal "[FILTERED]", sync.stats.dig("token_response", "access_token")
     assert_match "expected empr_ops_123", result.errors.to_sentence
     assert_not_includes sync.stats.to_json, "vit_at_wrong_employer_secret"
   ensure

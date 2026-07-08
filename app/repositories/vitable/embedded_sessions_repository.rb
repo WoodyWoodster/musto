@@ -152,12 +152,26 @@ module Vitable
       sync_run
     end
 
-    def mark_token_failed(sync_run, error)
-      sync_run&.update!(
+    def mark_token_failed(sync_run, error, response: nil)
+      return unless sync_run
+
+      completed_at = Time.current
+      stats = sync_run.stats.to_h.merge("error_class" => error.class.name)
+
+      if response
+        response_hash = serialize_response(response)
+        stats = stats.merge(
+          "response_class" => response.class.name,
+          "token_response" => token_summary(response_hash),
+          "fetched_at" => completed_at.iso8601
+        )
+      end
+
+      sync_run.update!(
         status: "failed",
-        completed_at: Time.current,
+        completed_at:,
         error_message: error.message,
-        stats: sync_run.stats.to_h.merge("error_class" => error.class.name)
+        stats:
       )
       sync_run
     end
