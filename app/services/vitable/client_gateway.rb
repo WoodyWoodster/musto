@@ -62,9 +62,18 @@ module Vitable
     ].freeze
     WEBHOOK_EVENT_NAMES = VitableConnect::WebhookEventListParams::EventName.values.map(&:to_s).freeze
     WEBHOOK_RESOURCE_TYPES = VitableConnect::WebhookEventListParams::ResourceType.values.map(&:to_s).freeze
+    WEBHOOK_PAYLOAD_ONLY_RESOURCE_TYPES = (WEBHOOK_RESOURCE_TYPES - RETRIEVABLE_RESOURCE_TYPES).freeze
 
     def self.retrievable_resource_type?(resource_type)
       RETRIEVABLE_RESOURCE_TYPES.include?(resource_type.to_s)
+    end
+
+    def self.webhook_resource_type?(resource_type)
+      WEBHOOK_RESOURCE_TYPES.include?(resource_type.to_s)
+    end
+
+    def self.payload_only_webhook_resource_type?(resource_type)
+      WEBHOOK_PAYLOAD_ONLY_RESOURCE_TYPES.include?(resource_type.to_s)
     end
 
     def initialize(connection, repository: IntegrationRepository.new)

@@ -26,7 +26,11 @@ module Vitable
       end
 
       unless retrievable_resource_type?(event.resource_type)
-        reconciliation = @repository.snapshot_only_webhook_reconciliation(event)
+        reconciliation = @repository.snapshot_only_webhook_reconciliation(
+          event,
+          known_payload_only_resource_type: payload_only_webhook_resource_type?(event.resource_type),
+          known_webhook_resource_type: webhook_resource_type?(event.resource_type)
+        )
         @repository.mark_processed(event, reconciliation:)
         return success(record: event, value: "snapshot_only")
       end
@@ -57,6 +61,18 @@ module Vitable
       return true unless @gateway_class.respond_to?(:retrievable_resource_type?)
 
       @gateway_class.retrievable_resource_type?(resource_type)
+    end
+
+    def webhook_resource_type?(resource_type)
+      return false unless @gateway_class.respond_to?(:webhook_resource_type?)
+
+      @gateway_class.webhook_resource_type?(resource_type)
+    end
+
+    def payload_only_webhook_resource_type?(resource_type)
+      return false unless @gateway_class.respond_to?(:payload_only_webhook_resource_type?)
+
+      @gateway_class.payload_only_webhook_resource_type?(resource_type)
     end
   end
 end

@@ -238,6 +238,14 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
         false
       end
 
+      def self.webhook_resource_type?(resource_type)
+        resource_type == "payroll_deduction"
+      end
+
+      def self.payload_only_webhook_resource_type?(resource_type)
+        resource_type == "payroll_deduction"
+      end
+
       define_method(:initialize) { |_connection| }
       define_method(:fetch_resource) { |_resource_type, _resource_id| raise "gateway should not fetch payload-only resources" }
     end
@@ -264,8 +272,50 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
     assert_not_nil event.processed_at
     assert_equal "skipped", reconciliation.fetch("status")
     assert_equal "payroll_deduction", reconciliation.fetch("resource_type")
-    assert_match "does not expose a retrieve endpoint", reconciliation.fetch("warnings").join(" ")
+    assert_match "listed by the installed SDK", reconciliation.fetch("warnings").join(" ")
     assert_nil event.metadata.fetch("resource_snapshot", nil)
+  ensure
+    ENV.delete("VITABLE_CONNECT_API_KEY")
+  end
+
+  test "stores unknown unsupported Vitable webhook resource types with explicit diagnostics" do
+    ENV["VITABLE_CONNECT_API_KEY"] = "vit_apk_test_value"
+    gateway_class = Class.new do
+      def self.retrievable_resource_type?(_resource_type)
+        false
+      end
+
+      def self.webhook_resource_type?(_resource_type)
+        false
+      end
+
+      def self.payload_only_webhook_resource_type?(_resource_type)
+        false
+      end
+
+      define_method(:initialize) { |_connection| }
+      define_method(:fetch_resource) { |_resource_type, _resource_id| raise "gateway should not fetch unknown resources" }
+    end
+
+    result = Vitable::ProcessWebhookCommand.new(
+      payload: webhook_payload.merge(
+        event_id: "wevt_test_unknown_resource_snapshot_only",
+        event_name: "benefit_plan.updated",
+        resource_type: "benefit_plan",
+        resource_id: "bpln_remote_snapshot_only"
+      ),
+      gateway_class:
+    ).call
+
+    assert result.success?
+    assert_equal "snapshot_only", result.value
+    event = WebhookEvent.find_by!(event_id: "wevt_test_unknown_resource_snapshot_only")
+    reconciliation = event.metadata.fetch("resource_reconciliation")
+
+    assert_equal "processed", event.status
+    assert_equal "skipped", reconciliation.fetch("status")
+    assert_equal "benefit_plan", reconciliation.fetch("resource_type")
+    assert_match "does not list it as a filterable webhook resource type", reconciliation.fetch("warnings").join(" ")
   ensure
     ENV.delete("VITABLE_CONNECT_API_KEY")
   end

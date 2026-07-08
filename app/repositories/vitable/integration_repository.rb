@@ -95,7 +95,7 @@ module Vitable
       )
     end
 
-    def snapshot_only_webhook_reconciliation(event)
+    def snapshot_only_webhook_reconciliation(event, known_payload_only_resource_type: false, known_webhook_resource_type: false)
       WebhookResourceReconciliationDto.new(
         status: "skipped",
         resource_type: event.resource_type,
@@ -105,9 +105,20 @@ module Vitable
         matched_by: nil,
         applied_changes: [],
         warnings: [
-          "Vitable SDK does not expose a retrieve endpoint for #{event.resource_type}; event was stored from the webhook payload only."
+          snapshot_only_webhook_warning(event, known_payload_only_resource_type:, known_webhook_resource_type:)
         ]
       )
+    end
+
+    def snapshot_only_webhook_warning(event, known_payload_only_resource_type:, known_webhook_resource_type:)
+      if known_payload_only_resource_type
+        return "Vitable webhook resource type #{event.resource_type} is listed by the installed SDK but has no retrieve endpoint; event was stored from the webhook payload only."
+      end
+      if known_webhook_resource_type
+        return "Vitable SDK does not expose a retrieve endpoint for #{event.resource_type}; event was stored from the webhook payload only."
+      end
+
+      "Vitable SDK does not expose a retrieve endpoint for #{event.resource_type}, and the installed SDK does not list it as a filterable webhook resource type; event was stored from the webhook payload only."
     end
 
     def reconcile_webhook_resource(event, response)

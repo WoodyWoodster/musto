@@ -36,6 +36,14 @@ module Vitable
       assert_empty missing_catalog_operations
     end
 
+    test "classifies SDK webhook resources without retrieve endpoints as payload only" do
+      assert_equal %w[dependent payroll_deduction plan_year], ClientGateway::WEBHOOK_PAYLOAD_ONLY_RESOURCE_TYPES.sort
+      assert ClientGateway.webhook_resource_type?("payroll_deduction")
+      assert ClientGateway.payload_only_webhook_resource_type?("payroll_deduction")
+      assert_not ClientGateway.payload_only_webhook_resource_type?("employee")
+      assert_not ClientGateway.webhook_resource_type?("benefit_plan")
+    end
+
     test "redacts sensitive values from serialized responses" do
       organization = Organization.create!(name: "Gateway Test", external_id: "org_gateway_test")
       connection = organization.integration_connections.create!(provider: "vitable", environment: "production")
