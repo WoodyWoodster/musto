@@ -106,6 +106,7 @@ module Vitable
         operations: %w[enrollment.retrieve],
         resource_fetch_fragments: %w[/enrollments/],
         fetch_resource_types: %w[enrollment],
+        snapshot_count_key: "retrieved_remote_enrollment_count",
         event_resource_types: %w[enrollment]
       },
       {

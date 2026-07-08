@@ -3811,6 +3811,75 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     ENV[@connection.api_key_reference] = previous_key
   end
 
+  test "Vitable API snapshot refresh enriches employee enrollments from detail responses" do
+    @employee.update!(vitable_id: "empl_ops_casey")
+    answered_at = Time.current.change(usec: 0)
+    coverage_start = Date.current.beginning_of_month
+    response_class = Data.define(:data)
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:list_all_employers) { response_class.new(data: []) }
+      define_method(:list_all_groups) { response_class.new(data: []) }
+      define_method(:list_all_plans) { response_class.new(data: [ { id: "bprd_remote_dental", name: "Dental" } ]) }
+      define_method(:list_all_webhook_events) { |**_filters| response_class.new(data: []) }
+      define_method(:list_all_employee_enrollments) do |_employee_id|
+        response_class.new(data: [ { id: "enrl_remote_dental_detail" } ])
+      end
+      define_method(:retrieve_enrollment) do |enrollment_id|
+        response_class.new(
+          data: {
+            id: enrollment_id,
+            employee_id: "empl_ops_casey",
+            benefit: { id: "bprd_remote_dental", name: "Dental", category: "Dental" },
+            status: "enrolled",
+            answered_at:,
+            coverage_start:,
+            employee_deduction_in_cents: 4500,
+            employer_contribution_in_cents: 500,
+            access_token: "vit_at_enrollment_detail_secret"
+          }
+        )
+      end
+    end
+    previous_key = ENV[@connection.api_key_reference]
+    ENV[@connection.api_key_reference] = "vit_apk_test_value"
+
+    result = Vitable::RefreshApiSnapshotCommand.new(
+      dto: Vitable::RefreshApiSnapshotDto.new(connection_id: @connection.id, requested_by: "integration_admin"),
+      gateway_class:
+    ).call
+
+    assert result.success?, result.errors.to_sentence
+    @pending_plan.reload
+    @pending_enrollment.reload
+    @pending_deduction.reload
+    snapshot = @connection.reload.metadata.fetch("api_snapshot")
+    detail = snapshot.fetch("enrollment_details").sole
+
+    assert_equal 1, snapshot.dig("counts", "remote_employee_enrollment_count")
+    assert_equal 1, snapshot.dig("counts", "retrieved_remote_enrollment_count")
+    assert_equal 0, snapshot.dig("counts", "errored_remote_enrollment_detail_count")
+    assert_equal 1, snapshot.dig("counts", "reconciled_enrollment_count")
+    assert_equal 1, snapshot.dig("counts", "updated_enrollment_count")
+    assert_equal "enrl_remote_dental_detail", detail.fetch("remote_enrollment_id")
+    assert_equal "[FILTERED]", detail.dig("response", "data", "access_token")
+    assert_equal "bprd_remote_dental", @pending_plan.vitable_id
+    assert_equal "enrl_remote_dental_detail", @pending_enrollment.vitable_id
+    assert_equal "accepted", @pending_enrollment.status
+    assert_equal answered_at.to_i, @pending_enrollment.accepted_at.to_i
+    assert_equal coverage_start, @pending_enrollment.effective_on
+    assert_equal 4500, @pending_enrollment.metadata.fetch("vitable_employee_deduction_cents")
+    assert_equal 4500, @pending_deduction.amount_cents
+    assert_equal "ready", @pending_deduction.status
+    assert_not_includes @pending_enrollment.metadata.to_json, "vit_at_enrollment_detail_secret"
+
+    dto = Vitable::ConnectionDetailQuery.new.call(@connection.id).api_snapshot
+    assert_equal 1, dto.retrieved_remote_enrollment_count
+    assert_equal 0, dto.errored_remote_enrollment_detail_count
+  ensure
+    ENV[@connection.api_key_reference] = previous_key
+  end
+
   test "Vitable API snapshot keeps granted enrollments pending for employee election" do
     @employee.update!(vitable_id: "empl_ops_casey")
     response_class = Data.define(:data)

@@ -76,8 +76,9 @@ module Vitable
         refreshed_at:
       )
       employee_enrollments = employee_enrollment_snapshot(gateway, connection, trace:)
+      enrollment_details = remote_enrollment_details(gateway, employee_enrollments, trace:)
       enrollment_reconciliation = EnrollmentSnapshotRepository.new(connection:).reconcile_snapshot(
-        snapshot_entries: employee_enrollments,
+        snapshot_entries: enrollment_reconciliation_snapshots(employee_enrollments, enrollment_details),
         source: "vitable_api_snapshot",
         refreshed_at:
       )
@@ -107,6 +108,7 @@ module Vitable
         "employee_details" => employee_details,
         "employee_reconciliation" => employee_reconciliation.to_metadata,
         "employee_enrollments" => employee_enrollments,
+        "enrollment_details" => enrollment_details,
         "enrollment_reconciliation" => enrollment_reconciliation.to_metadata
       }
     end
@@ -482,6 +484,79 @@ module Vitable
           "error_message" => PayloadRedactor.error_message(e)
         }
       end
+    end
+
+    def remote_enrollment_details(gateway, employee_enrollments, trace:)
+      return [] unless gateway.respond_to?(:retrieve_enrollment)
+
+      remote_enrollment_ids(employee_enrollments).map do |enrollment_id|
+        response_hash = retrieve_snapshot_resource(
+          trace,
+          step: "enrollment",
+          response_label: "Vitable enrollment retrieve response",
+          resource_id: enrollment_id
+        ) { gateway.retrieve_enrollment(enrollment_id) }
+        dto = RemoteResourceResponseDto
+          .from_response(response_hash, resource_type: "enrollment", resource_id: enrollment_id)
+          .validate!
+        validate_retrieved_enrollment!(dto.attributes, expected_remote_id: enrollment_id)
+
+        {
+          "remote_enrollment_id" => enrollment_id,
+          "enrollment" => dto.attributes,
+          "response" => response_hash
+        }
+      rescue VitableConnect::Errors::NotFoundError => e
+        {
+          "remote_enrollment_id" => enrollment_id,
+          "error_class" => e.class.name,
+          "error_message" => PayloadRedactor.error_message(e)
+        }
+      end
+    end
+
+    def enrollment_reconciliation_snapshots(employee_enrollments, enrollment_details)
+      detail_records_by_id = enrollment_details.each_with_object({}) do |entry, index|
+        enrollment = entry.to_h.fetch("enrollment", nil)
+        next unless enrollment.respond_to?(:to_h)
+
+        enrollment = enrollment.to_h.stringify_keys
+        remote_id = remote_enrollment_id(enrollment)
+        index[remote_id] = enrollment if remote_id.present?
+      end
+
+      employee_enrollments.map do |entry|
+        entry = entry.to_h.stringify_keys
+        enrollments = entry.fetch("enrollments", []).map do |enrollment|
+          enrollment = enrollment.to_h.stringify_keys
+          remote_id = remote_enrollment_id(enrollment)
+          detail = detail_records_by_id.delete(remote_id)
+          detail.present? ? enrollment.merge(detail.compact) : enrollment
+        end
+
+        entry.merge("enrollments" => enrollments)
+      end
+    end
+
+    def remote_enrollment_ids(employee_enrollments)
+      employee_enrollments.flat_map do |entry|
+        entry.to_h.fetch("enrollments", []).filter_map do |enrollment|
+          remote_enrollment_id(enrollment)
+        end
+      end.uniq
+    end
+
+    def remote_enrollment_id(enrollment)
+      enrollment.to_h.stringify_keys.fetch("id", nil).presence ||
+        enrollment.to_h.stringify_keys.fetch("enrollment_id", nil).presence
+    end
+
+    def validate_retrieved_enrollment!(remote_enrollment, expected_remote_id:)
+      remote_id = remote_enrollment_id(remote_enrollment)
+      raise ArgumentError, "Vitable enrollment retrieve response did not include a remote enrollment ID" if remote_id.blank?
+      return if remote_id == expected_remote_id
+
+      raise ArgumentError, "Vitable enrollment retrieve response returned remote enrollment ID #{remote_id}, expected #{expected_remote_id}"
     end
 
     def local_remote_employers(connection)

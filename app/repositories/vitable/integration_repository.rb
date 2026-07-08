@@ -1092,6 +1092,8 @@ module Vitable
         "inactive_employee_enrollment_count" => employee_lifecycle.fetch("inactive_enrollment_count", 0),
         "inactive_employee_payroll_deduction_count" => employee_lifecycle.fetch("inactive_payroll_deduction_count", 0),
         "remote_employee_enrollment_count" => snapshot.fetch("employee_enrollments", []).sum { |entry| entry.fetch("enrollments", []).count },
+        "retrieved_remote_enrollment_count" => snapshot.fetch("enrollment_details", []).count { |entry| entry.to_h.fetch("enrollment", nil).present? },
+        "errored_remote_enrollment_detail_count" => snapshot.fetch("enrollment_details", []).count { |entry| entry.to_h.fetch("error_class", nil).present? },
         "reconciled_enrollment_count" => enrollment_reconciliation.fetch("matched_count", 0),
         "created_enrollment_count" => enrollment_reconciliation.fetch("created_count", 0),
         "updated_enrollment_count" => enrollment_reconciliation.fetch("updated_count", 0),
