@@ -280,6 +280,32 @@ module Vitable
       assert_raises(ArgumentError) { gateway.fetch_resource("benefit_plan", "bpln_123") }
     end
 
+    test "logs typed retrieve operations for Vitable resources" do
+      organization = Organization.create!(name: "Gateway Retrieve Logs Test", external_id: "org_gateway_retrieve_logs_test")
+      connection = organization.integration_connections.create!(provider: "vitable", environment: "production")
+      gateway = ClientGateway.new(connection)
+
+      employees = Object.new
+      employees.define_singleton_method(:retrieve) { |id| { data: { id: } } }
+      employers = Object.new
+      employers.define_singleton_method(:retrieve) { |id| { data: { id: } } }
+      enrollments = Object.new
+      enrollments.define_singleton_method(:retrieve) { |id| { data: { id: } } }
+      fake_client = Object.new
+      fake_client.define_singleton_method(:employees) { employees }
+      fake_client.define_singleton_method(:employers) { employers }
+      fake_client.define_singleton_method(:enrollments) { enrollments }
+      gateway.define_singleton_method(:client) { fake_client }
+
+      gateway.retrieve_employee("empl_123")
+      gateway.retrieve_employer("empr_123")
+      gateway.retrieve_enrollment("enrl_123")
+
+      logs = connection.api_request_logs.order(:id)
+      assert_equal %w[employee.retrieve employer.retrieve enrollment.retrieve], logs.map(&:operation)
+      assert_equal [ "/v1/employees/empl_123", "/v1/employers/empr_123", "/v1/enrollments/enrl_123" ], logs.map(&:path)
+    end
+
     test "targets the Vitable demo base URL for demo connections" do
       ENV["VITABLE_TEST_API_KEY"] = "vit_apk_test"
       organization = Organization.create!(name: "Gateway Demo Test", external_id: "org_gateway_demo_test")

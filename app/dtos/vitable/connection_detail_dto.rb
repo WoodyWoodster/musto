@@ -34,7 +34,7 @@ module Vitable
         resource_type: "employers",
         method: "GET/POST",
         fetch_path: "/v1/employers",
-        operations: %w[employer.list employer.create],
+        operations: %w[employer.list employer.create employer.retrieve],
         sync_operations: %w[employer_create api_snapshot_refresh demo_smoke_check],
         resource_fetch_fragments: %w[/employers/],
         fetch_resource_types: %w[employer],
@@ -74,7 +74,7 @@ module Vitable
         resource_type: "employees",
         method: "GET",
         fetch_path: "/v1/employees/:id",
-        operations: %w[resource.fetch],
+        operations: %w[employee.retrieve],
         resource_fetch_fragments: %w[/employees/],
         fetch_resource_types: %w[employee],
         event_resource_types: %w[employee]
@@ -91,7 +91,7 @@ module Vitable
         resource_type: "enrollments",
         method: "GET",
         fetch_path: "/v1/enrollments/:id",
-        operations: %w[resource.fetch],
+        operations: %w[enrollment.retrieve],
         resource_fetch_fragments: %w[/enrollments/],
         fetch_resource_types: %w[enrollment],
         event_resource_types: %w[enrollment]

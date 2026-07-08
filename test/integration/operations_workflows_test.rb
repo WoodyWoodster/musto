@@ -2904,7 +2904,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal "pending", groups_coverage.status
 
     employer_fetch_log = @connection.api_request_logs.create!(
-      operation: "resource.fetch",
+      operation: "employer.retrieve",
       method: "GET",
       path: "/v1/employers/empr_ops_123",
       status_code: 200,

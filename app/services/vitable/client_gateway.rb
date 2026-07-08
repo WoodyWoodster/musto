@@ -67,19 +67,19 @@ module Vitable
     end
 
     def retrieve_employee(employee_id)
-      instrument("resource.fetch", :get, "/v1/employees/#{employee_id}") do
+      instrument("employee.retrieve", :get, "/v1/employees/#{employee_id}") do
         client.employees.retrieve(employee_id)
       end
     end
 
     def retrieve_employer(employer_id)
-      instrument("resource.fetch", :get, "/v1/employers/#{employer_id}") do
+      instrument("employer.retrieve", :get, "/v1/employers/#{employer_id}") do
         client.employers.retrieve(employer_id)
       end
     end
 
     def retrieve_enrollment(enrollment_id)
-      instrument("resource.fetch", :get, "/v1/enrollments/#{enrollment_id}") do
+      instrument("enrollment.retrieve", :get, "/v1/enrollments/#{enrollment_id}") do
         client.enrollments.retrieve(enrollment_id)
       end
     end
