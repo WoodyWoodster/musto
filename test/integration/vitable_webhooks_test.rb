@@ -120,6 +120,45 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
     ENV.delete("VITABLE_CONNECT_API_KEY")
   end
 
+  test "direct resource fetches reconcile fetched employee state" do
+    employer = @organization.employers.create!(name: "Direct Fetch Employer", status: "active")
+    employee = employer.employees.create!(first_name: "Drew", last_name: "Miller", email: "drew.fetch@example.com")
+    ENV["VITABLE_CONNECT_API_KEY"] = "vit_apk_test_value"
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:fetch_resource) do |_resource_type, resource_id|
+        {
+          data: {
+            id: resource_id,
+            reference_id: "musto_employee_#{Employee.find_by!(email: "drew.fetch@example.com").id}",
+            email: "drew.fetch@example.com",
+            status: "active",
+            member_id: "mem_direct_drew"
+          }
+        }
+      end
+    end
+
+    result = Vitable::FetchResourceCommand.new(
+      dto: Vitable::FetchResourceDto.new(connection_id: @connection.id, resource_type: "employee", resource_id: "empl_direct_drew"),
+      gateway_class:
+    ).call
+
+    assert result.success?
+    employee.reload
+    sync_run = @connection.sync_runs.where(operation: "fetch", resource_type: "employee").recent_first.first
+
+    assert_equal "empl_direct_drew", employee.vitable_id
+    assert_equal "active", employee.metadata.fetch("vitable_remote_status")
+    assert_equal "mem_direct_drew", employee.metadata.fetch("vitable_member_id")
+    assert_equal "matched", sync_run.stats.dig("resource_reconciliation", "status")
+    assert_equal "Employee", sync_run.stats.dig("resource_reconciliation", "local_record_type")
+    assert_equal employee.id, sync_run.stats.dig("resource_reconciliation", "local_record_id")
+    assert_equal "reference_id", sync_run.stats.dig("resource_reconciliation", "matched_by")
+  ensure
+    ENV.delete("VITABLE_CONNECT_API_KEY")
+  end
+
   test "reconciles employee deduction webhooks into payroll deductions" do
     employer = @organization.employers.create!(name: "Deduction Employer", status: "active")
     employee = employer.employees.create!(

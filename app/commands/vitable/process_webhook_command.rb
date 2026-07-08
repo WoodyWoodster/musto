@@ -25,7 +25,7 @@ module Vitable
       end
 
       fetch_dto = FetchResourceDto.from_event(connection:, event:)
-      fetch_result = FetchResourceCommand.new(dto: fetch_dto, repository: @repository, gateway_class: @gateway_class).call
+      fetch_result = FetchResourceCommand.new(dto: fetch_dto, repository: @repository, gateway_class: @gateway_class, reconcile: false).call
       if fetch_result.success?
         reconciliation = @repository.reconcile_webhook_resource(event, fetch_result.value)
         @repository.annotate_sync_run_reconciliation(fetch_result.record, reconciliation)

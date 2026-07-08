@@ -100,6 +100,22 @@ module Vitable
       WebhookReconciliationRepository.new(event:, response_hash:).call
     end
 
+    def reconcile_fetched_resource(connection:, resource_type:, resource_id:, response:)
+      response_hash = serialize_response(response)
+      event = WebhookEvent.new(
+        event_id: "resource_fetch_#{resource_type}_#{resource_id}",
+        organization_external_id: connection.organization.external_id.presence || "organization_#{connection.organization_id}",
+        event_name: "resource.fetch",
+        resource_type:,
+        resource_id:,
+        occurred_at: Time.current,
+        status: "processed",
+        integration_connection: connection
+      )
+
+      WebhookReconciliationRepository.new(event:, response_hash:).call
+    end
+
     def mark_processed(event, response: nil, reconciliation: nil)
       processed_at = Time.current
       attributes = {
