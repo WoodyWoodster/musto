@@ -424,25 +424,7 @@ module Vitable
       data = response_hash.dig("employer_response", "data")
       return unless data.respond_to?(:to_h)
 
-      attributes = data.to_h.stringify_keys
-      attributes = attributes.fetch("employer", attributes).to_h.stringify_keys if attributes.fetch("employer", nil).respond_to?(:to_h)
-      address = attributes.fetch("address", nil)
-
-      attributes.slice(
-        "id",
-        "organization_id",
-        "name",
-        "legal_name",
-        "ein",
-        "reference_id",
-        "email",
-        "phone_number",
-        "active",
-        "created_at",
-        "updated_at"
-      ).merge(
-        "address" => address.respond_to?(:to_h) ? address.to_h.stringify_keys.slice("address_line_1", "address_line_2", "city", "state", "zipcode").compact : nil
-      ).compact.presence
+      RemoteEmployerDto.from_hash(data).summary.presence
     end
 
     def remote_settings_profile(response_hash)

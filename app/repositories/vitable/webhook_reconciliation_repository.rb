@@ -147,10 +147,11 @@ module Vitable
     end
 
     def reconcile_employer_resource(remote_resource)
+      dto = RemoteEmployerDto.from_hash(remote_resource)
       employer, matched_by = employer_match_for(remote_resource)
       return reconciliation_result(status: "unmatched", remote_resource:, warnings: [ "No local employer matched this Vitable resource." ]) unless employer
 
-      remote_id = remote_resource_id(remote_resource)
+      remote_id = dto.remote_employer_id.presence || remote_resource_id(remote_resource)
       return remote_id_conflict_result(remote_resource, employer, matched_by) if remote_id_conflict?(employer, remote_id)
 
       timestamp = Time.current.iso8601
@@ -162,13 +163,14 @@ module Vitable
         applied_changes << "vitable_id"
       end
 
-      settings_updates = {
-        "vitable_remote_status" => remote_resource.fetch("status", nil),
-        "vitable_last_refreshed_at" => timestamp,
+      settings_updates = dto.settings_metadata(
+        source: "vitable_webhook_resource",
+        refreshed_at: timestamp,
+        matched_by:
+      ).merge(
         "vitable_last_webhook_event_id" => @event.event_id,
-        "vitable_last_webhook_event_name" => @event.event_name,
-        "vitable_remote_employer" => remote_resource_summary(remote_resource, %w[id reference_id external_reference_id name legal_name status])
-      }.merge(employer_event_settings(remote_resource, timestamp)).compact
+        "vitable_last_webhook_event_name" => @event.event_name
+      ).merge(employer_event_settings(remote_resource, timestamp)).compact
 
       update_attributes[:settings] = employer.settings.to_h.stringify_keys.merge(settings_updates)
       applied_changes.concat(settings_updates.keys.map { |key| "settings.#{key}" })

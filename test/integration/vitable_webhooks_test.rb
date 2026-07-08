@@ -2043,9 +2043,17 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
         {
           data: {
             id: resource_id,
-            reference_id: "musto_employer_#{Employer.find_by!(name: "Policy Employer").id}",
+            external_reference_id: "musto_employer_#{Employer.find_by!(name: "Policy Employer").id}",
+            organization_external_id: "org_remote_policy",
             name: "Policy Employer",
-            status: "active"
+            active: true,
+            phone: "2155550133",
+            address: {
+              street1: "44 Chestnut Street",
+              city: "Philadelphia",
+              state: "PA",
+              zip_code: "19106"
+            }
           }
         }
       end
@@ -2068,6 +2076,11 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
 
     assert_equal "empr_remote_policy", employer.vitable_id
     assert_equal "active", employer.settings.fetch("vitable_remote_status")
+    assert_equal "musto_employer_#{employer.id}", employer.settings.fetch("vitable_remote_reference_id")
+    assert_equal "org_remote_policy", employer.settings.fetch("vitable_remote_organization_id")
+    assert_equal "2155550133", employer.settings.dig("vitable_remote_employer", "phone_number")
+    assert_equal "44 Chestnut Street", employer.settings.dig("vitable_remote_employer", "address", "address_line_1")
+    assert_equal "19106", employer.settings.dig("vitable_remote_employer", "address", "zipcode")
     assert_equal "wevt_test_employer_reconcile", employer.settings.fetch("vitable_eligibility_policy_last_event").fetch("event_id")
     assert_equal "matched", reconciliation.fetch("status")
     assert_equal "Employer", reconciliation.fetch("local_record_type")

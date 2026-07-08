@@ -47,7 +47,7 @@ module Vitable
       if packet.fetch("mode") == "create"
         employer_response = gateway.create_employer(packet.fetch("create_payload"))
         response["employer_response"] = serialize_response(employer_response)
-        employer_dto = RemoteEmployerResponseDto
+        employer_dto = RemoteEmployerDto
           .from_hash(response.fetch("employer_response"))
           .validate_create!(expected_reference_id: packet.dig("create_payload", "reference_id"))
         remote_employer_id = employer_dto.remote_employer_id

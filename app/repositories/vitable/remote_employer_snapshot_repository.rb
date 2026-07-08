@@ -20,16 +20,16 @@ module Vitable
     private
 
     def reconcile_employer(result:, remote_employer:, source:, refreshed_at:)
-      validate_remote_employer_identity!(remote_employer)
-      employer, matched_by = employer_for_remote(remote_employer)
+      dto = RemoteEmployerDto.from_hash(remote_employer).validate_identity!(response_label: "Vitable API snapshot employer")
+      employer, matched_by = employer_for_remote(dto)
       return result.increment(processed_count: 1, unmatched_count: 1) unless employer
 
-      if remote_id_conflict?(employer, remote_id(remote_employer))
+      if remote_id_conflict?(employer, dto.remote_employer_id)
         record_conflict(employer, remote_employer, matched_by:, source:, refreshed_at:)
         return result.increment(processed_count: 1, conflict_count: 1)
       end
 
-      changed = update_employer(employer, remote_employer, matched_by:, source:, refreshed_at:)
+      changed = update_employer(employer, dto, matched_by:, source:, refreshed_at:)
       result.increment(
         processed_count: 1,
         matched_count: 1,
@@ -38,22 +38,14 @@ module Vitable
       )
     end
 
-    def update_employer(employer, remote_employer, matched_by:, source:, refreshed_at:)
-      settings = employer.settings.to_h.stringify_keys.merge(
-        "vitable_remote_status" => remote_status(remote_employer),
-        "vitable_remote_reference_id" => remote_reference_id(remote_employer),
-        "vitable_remote_organization_id" => remote_employer.fetch("organization_id", nil),
-        "vitable_last_refreshed_at" => refreshed_at,
-        "vitable_last_snapshot_source" => source,
-        "vitable_last_snapshot_matched_by" => matched_by,
-        "vitable_remote_employer" => remote_employer_summary(remote_employer)
-      ).compact
+    def update_employer(employer, dto, matched_by:, source:, refreshed_at:)
+      settings = employer.settings.to_h.stringify_keys.merge(dto.settings_metadata(source:, refreshed_at:, matched_by:))
       settings.delete(CONFLICT_KEY)
 
       attributes = {
         settings:
       }
-      attributes[:vitable_id] = remote_id(remote_employer) if employer.vitable_id.blank? && remote_id(remote_employer).present?
+      attributes[:vitable_id] = dto.remote_employer_id if employer.vitable_id.blank? && dto.remote_employer_id.present?
 
       employer.assign_attributes(attributes)
       changed = employer.has_changes_to_save?
@@ -75,17 +67,17 @@ module Vitable
       )
     end
 
-    def employer_for_remote(remote_employer)
-      id = remote_id(remote_employer)
+    def employer_for_remote(dto)
+      id = dto.remote_employer_id
       if id.present?
         employer = employer_scope.find_by(vitable_id: id)
         return [ employer, "vitable_id" ] if employer
       end
 
-      employer = employer_from_reference_id(remote_reference_id(remote_employer))
+      employer = employer_from_reference_id(dto.reference_id)
       return [ employer, "reference_id" ] if employer
 
-      employer = employer_from_name(remote_employer)
+      employer = employer_from_name(dto)
       return [ employer, "name" ] if employer
 
       [ nil, nil ]
@@ -98,10 +90,10 @@ module Vitable
       employer_scope.find_by(id: value.delete_prefix("musto_employer_").to_i)
     end
 
-    def employer_from_name(remote_employer)
+    def employer_from_name(dto)
       names = [
-        remote_employer.fetch("legal_name", nil),
-        remote_employer.fetch("name", nil)
+        dto.legal_name,
+        dto.name
       ].filter_map { |value| value.to_s.strip.downcase.presence }.uniq
       return if names.empty?
 
@@ -113,30 +105,6 @@ module Vitable
 
     def remote_id_conflict?(employer, id)
       employer.vitable_id.present? && id.present? && employer.vitable_id != id
-    end
-
-    def remote_id(remote_employer)
-      remote_employer.fetch("id", nil).presence
-    end
-
-    def validate_remote_employer_identity!(remote_employer)
-      reference = remote_reference_id(remote_employer).presence || remote_employer.fetch("name", nil).presence || "unknown employer"
-      raise ArgumentError, "Vitable API snapshot employer #{reference} did not include a remote employer ID" if remote_id(remote_employer).blank?
-    end
-
-    def remote_reference_id(remote_employer)
-      remote_employer.fetch("reference_id", nil).presence || remote_employer.fetch("external_reference_id", nil).presence
-    end
-
-    def remote_status(remote_employer)
-      return "active" if remote_employer.fetch("active", nil) == true
-      return "inactive" if remote_employer.fetch("active", nil) == false
-
-      remote_employer.fetch("status", nil)
-    end
-
-    def remote_employer_summary(remote_employer)
-      remote_employer.slice("id", "organization_id", "name", "legal_name", "ein", "reference_id", "email", "phone_number", "active")
     end
 
     def employer_scope

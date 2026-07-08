@@ -3512,6 +3512,13 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
             email: "benefits@example.com",
             phone_number: "4155550142",
             active: true,
+            address: {
+              line1: "214 Market Street",
+              line2: "Suite 300",
+              city: "San Francisco",
+              state: "CA",
+              postal_code: "94105"
+            },
             access_token: "vit_at_employer_detail_secret"
           }
         )
@@ -3541,6 +3548,8 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal "4155550142", detail.dig("employer", "phone_number")
     assert_equal "[FILTERED]", detail.dig("response", "data", "access_token")
     assert_equal "4155550142", @employer.reload.settings.dig("vitable_remote_employer", "phone_number")
+    assert_equal "214 Market Street", @employer.settings.dig("vitable_remote_employer", "address", "address_line_1")
+    assert_equal "94105", @employer.settings.dig("vitable_remote_employer", "address", "zipcode")
     assert_equal "org_remote_123", @employer.settings.fetch("vitable_remote_organization_id")
     assert_not_includes @employer.settings.to_json, "vit_at_employer_detail_secret"
 
