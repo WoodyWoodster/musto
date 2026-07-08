@@ -175,6 +175,23 @@ module Vitable
       )
     end
 
+    def record_connection_request_success(connection, operation:, method:, path:)
+      observed_at = Time.current
+      connection.update!(
+        status: "active",
+        last_synced_at: observed_at,
+        metadata: connection.metadata.to_h.merge(
+          "last_successful_request" => {
+            "operation" => operation,
+            "method" => method.to_s.upcase,
+            "path" => path,
+            "observed_at" => observed_at.iso8601
+          }
+        )
+      )
+      connection
+    end
+
     def replay_payload(event)
       (event.payload || {}).merge(
         event_id: event.event_id,

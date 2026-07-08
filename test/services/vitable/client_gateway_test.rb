@@ -114,6 +114,32 @@ module Vitable
       assert_equal "All", log.request_body.fetch("classification")
     end
 
+    test "marks the connection active after any successful Vitable request" do
+      organization = Organization.create!(name: "Gateway Status Test", external_id: "org_gateway_status_test")
+      connection = organization.integration_connections.create!(
+        provider: "vitable",
+        environment: "production",
+        status: "needs_credentials"
+      )
+      gateway = ClientGateway.new(connection)
+      auth = Object.new
+      auth.define_singleton_method(:issue_access_token) do |_params|
+        { access_token: "vit_at_status_secret", expires_in: 3_600 }
+      end
+      fake_client = Object.new
+      fake_client.define_singleton_method(:auth) { auth }
+      gateway.define_singleton_method(:client) { fake_client }
+
+      gateway.issue_access_token
+
+      connection.reload
+      assert_equal "active", connection.status
+      assert_not_nil connection.last_synced_at
+      assert_equal "auth.issue_access_token", connection.metadata.dig("last_successful_request", "operation")
+      assert_equal "POST", connection.metadata.dig("last_successful_request", "method")
+      assert_equal "/v1/auth/access-tokens", connection.metadata.dig("last_successful_request", "path")
+    end
+
     test "issues employer-bound access tokens for admin widgets" do
       organization = Organization.create!(name: "Gateway Employer Token Test", external_id: "org_gateway_employer_token_test")
       connection = organization.integration_connections.create!(provider: "vitable", environment: "production")

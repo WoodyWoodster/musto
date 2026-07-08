@@ -2,8 +2,9 @@ require "vitable_connect"
 
 module Vitable
   class ClientGateway
-    def initialize(connection)
+    def initialize(connection, repository: IntegrationRepository.new)
       @connection = connection
+      @repository = repository
     end
 
     def issue_access_token
@@ -281,6 +282,7 @@ module Vitable
       started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
       response = yield
       log_request(operation:, method:, path:, request_body:, response:, duration_ms: duration_since(started_at))
+      @repository.record_connection_request_success(@connection, operation:, method:, path:)
       response
     rescue VitableConnect::Errors::APIStatusError => e
       log_request(operation:, method:, path:, request_body:, error: e, status_code: e.status, duration_ms: duration_since(started_at))
