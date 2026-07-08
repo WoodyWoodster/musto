@@ -1042,13 +1042,17 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
           resource_type: "plan_year",
           resource_id: "pyear_remote_payload",
           data: {
-            employer_id: "empr_plan_year_payload",
-            year: 2027,
-            starts_on: "2027-01-01",
-            ends_on: "2027-12-31",
-            open_enrollment_starts_on: "2026-10-15",
-            open_enrollment_ends_on: "2026-11-05",
-            status: "active"
+            employerId: "empr_plan_year_payload",
+            employerReferenceId: "musto_employer_#{employer.id}",
+            planYear: {
+              id: "pyear_remote_payload",
+              coverageYear: 2027,
+              startDate: "2027-01-01",
+              endDate: "2027-12-31",
+              openEnrollmentStartDate: "2026-10-15",
+              openEnrollmentEndDate: "2026-11-05",
+              state: "active"
+            }
           }
         ),
         gateway_class:
