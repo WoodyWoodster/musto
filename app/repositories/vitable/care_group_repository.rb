@@ -239,24 +239,11 @@ module Vitable
 
     def mark_member_sync_succeeded(sync_run, response)
       response_hash = serialize_response(response)
-      data = response_hash.fetch("data", response_hash)
-      accepted_at = data.fetch("accepted_at", nil)
-      request_id = data.fetch("request_id", nil)
-      group_id = data.fetch("group_id", nil)
-      raise ArgumentError, "Vitable care member sync response did not include a remote request ID" if request_id.blank?
-      raise ArgumentError, "Vitable care member sync response did not include a remote group ID" if group_id.blank?
-      raise ArgumentError, "Vitable care member sync response did not include accepted_at" if accepted_at.blank?
+      dto = RemoteCareMemberSyncResponseDto.from_hash(response_hash).validate_submit!(expected_group_id: remote_group_id)
+      synced_at = Time.current
 
       merge_settings(
-        MEMBER_SYNC_REQUEST_KEY => {
-          "request_id" => request_id,
-          "group_id" => group_id,
-          "accepted_at" => accepted_at,
-          "completed_at" => data.fetch("completed_at", nil),
-          "results" => data.fetch("results", nil),
-          "status" => data.fetch("completed_at", nil).present? ? "complete" : "processing",
-          "refreshed_at" => Time.current.iso8601
-        }.compact
+        MEMBER_SYNC_REQUEST_KEY => dto.to_request_state(refreshed_at: synced_at)
       )
 
       sync_run.update!(
@@ -265,9 +252,9 @@ module Vitable
         error_message: nil,
         stats: sync_run.stats.to_h.merge(
           "remote_response" => response_hash,
-          "remote_group_id" => group_id,
-          "remote_request_id" => request_id,
-          "remote_accepted_at" => accepted_at
+          "remote_group_id" => dto.group_id,
+          "remote_request_id" => dto.request_id,
+          "remote_accepted_at" => dto.accepted_at
         )
       )
       sync_run
@@ -275,29 +262,22 @@ module Vitable
 
     def mark_member_sync_refresh_succeeded(sync_run, response)
       response_hash = serialize_response(response)
-      data = response_hash.fetch("data", response_hash)
       previous = latest_member_sync_request.to_h
-      request_id = data.fetch("request_id", nil)
-      group_id = data.fetch("group_id", nil)
-      accepted_at = data.fetch("accepted_at", nil)
-      raise ArgumentError, "Vitable care member sync refresh response did not include a remote request ID" if request_id.blank?
-      raise ArgumentError, "Vitable care member sync refresh response did not include a remote group ID" if group_id.blank?
-      raise ArgumentError, "Vitable care member sync refresh response did not include accepted_at" if accepted_at.blank?
+      dto = RemoteCareMemberSyncResponseDto
+        .from_hash(response_hash)
+        .validate_refresh!(
+          expected_group_id: remote_group_id,
+          expected_request_id: previous.fetch("request_id", nil)
+        )
+      data = dto.raw_payload
 
       results = member_sync_results(data)
       reconciliation = reconcile_member_sync_results(data, results:)
 
       merge_settings(
         MEMBER_SYNC_REQUEST_KEY => previous.merge(
-          "request_id" => request_id,
-          "group_id" => group_id,
-          "accepted_at" => accepted_at,
-          "completed_at" => data.fetch("completed_at", nil),
-          "results" => data.fetch("results", nil),
-          "status" => data.fetch("completed_at", nil).present? ? "complete" : "processing",
-          "reconciliation" => reconciliation.to_h,
-          "refreshed_at" => Time.current.iso8601
-        ).compact
+          dto.to_request_state(refreshed_at: Time.current).merge("reconciliation" => reconciliation.to_h)
+        )
       )
 
       sync_run.update!(
