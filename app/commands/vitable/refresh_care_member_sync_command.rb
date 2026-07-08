@@ -8,6 +8,7 @@ module Vitable
     end
 
     def call
+      response = nil
       return failure(errors: "No employer is available for Vitable care member sync") unless @employer
       return failure(errors: "No Vitable connection is available for care member sync") unless @repository.connection
 
@@ -29,7 +30,7 @@ module Vitable
       @repository.mark_failed(sync_run, e)
       failure(record: sync_run, errors: "#{e.class}: #{e.message}")
     rescue ArgumentError => e
-      @repository.mark_failed(sync_run, e)
+      @repository.mark_failed(sync_run, e, response:)
       failure(record: sync_run, errors: e.message)
     rescue ActiveRecord::RecordInvalid => e
       failure(record: e.record, errors: e.record.errors.full_messages)

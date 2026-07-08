@@ -5345,7 +5345,9 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     response_class = Data.define(:data)
     gateway_class = Class.new do
       define_method(:initialize) { |_connection| }
-      define_method(:create_group) { |payload| response_class.new(data: { name: payload.fetch("name") }) }
+      define_method(:create_group) do |payload|
+        response_class.new(data: { name: payload.fetch("name"), api_key: "vit_apk_bad_group_response" })
+      end
     end
     previous_key = ENV[@connection.api_key_reference]
     ENV[@connection.api_key_reference] = "vit_apk_test_value"
@@ -5360,7 +5362,11 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     sync = @connection.sync_runs.where(operation: "care_group_upsert").recent_first.first
     assert_equal "failed", sync.status
     assert_match "remote group ID", sync.error_message
+    assert_equal "ArgumentError", sync.stats.fetch("error_class")
+    assert_equal @employer.name, sync.stats.dig("remote_response", "data", "name")
+    assert_equal "[FILTERED]", sync.stats.dig("remote_response", "data", "api_key")
     assert_match "remote group ID", result.errors.to_sentence
+    assert_not_includes sync.stats.to_json, "vit_apk_bad_group_response"
   ensure
     ENV[@connection.api_key_reference] = previous_key
   end
@@ -5643,7 +5649,8 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
             group_id: "grp_ops_wrong",
             request_id: "grpmsr_ops_wrong_group",
             accepted_at: Time.current,
-            member_count: members.count
+            member_count: members.count,
+            refresh_token: "vit_rt_wrong_group_response"
           }
         )
       end
@@ -5661,7 +5668,11 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     sync = @connection.sync_runs.where(operation: "care_member_sync_submit").recent_first.first
     assert_equal "failed", sync.status
     assert_match "expected grp_ops_123", sync.error_message
+    assert_equal "ArgumentError", sync.stats.fetch("error_class")
+    assert_equal "grp_ops_wrong", sync.stats.dig("remote_response", "data", "group_id")
+    assert_equal "[FILTERED]", sync.stats.dig("remote_response", "data", "refresh_token")
     assert_match "expected grp_ops_123", result.errors.to_sentence
+    assert_not_includes sync.stats.to_json, "vit_rt_wrong_group_response"
   ensure
     ENV[@connection.api_key_reference] = previous_key
   end
@@ -5919,6 +5930,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
             request_id:,
             accepted_at: 1.minute.ago,
             completed_at: Time.current,
+            client_secret: "client_secret_bad_failure_response",
             results: {
               added_group_member_ids: [],
               removed_group_member_ids: [],
@@ -5954,7 +5966,11 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     sync = @connection.sync_runs.where(operation: "care_member_sync_refresh").recent_first.first
     assert_equal "failed", sync.status
     assert_match "failure 1 did not include reason", sync.error_message
+    assert_equal "ArgumentError", sync.stats.fetch("error_class")
+    assert_equal "grpmsr_ops_bad_failure", sync.stats.dig("remote_response", "data", "request_id")
+    assert_equal "[FILTERED]", sync.stats.dig("remote_response", "data", "client_secret")
     assert_match "failure 1 did not include reason", refresh_result.errors.to_sentence
+    assert_not_includes sync.stats.to_json, "client_secret_bad_failure_response"
   ensure
     ENV[@connection.api_key_reference] = previous_key
   end
