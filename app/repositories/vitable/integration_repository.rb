@@ -174,6 +174,45 @@ module Vitable
       event.update!(status: "received", processed_at: nil, error_message: nil)
     end
 
+    def create_webhook_replay_run(event:, requested_by:)
+      event.integration_connection.sync_runs.create!(
+        resource_type: "webhook_event",
+        operation: "webhook_replay",
+        status: "running",
+        started_at: Time.current,
+        stats: {
+          "requested_by" => requested_by,
+          "resource_id" => event.event_id,
+          "webhook_event_id" => event.id,
+          "webhook_resource_type" => event.resource_type,
+          "webhook_resource_id" => event.resource_id,
+          "previous_status" => event.status,
+          "previous_processed_at" => event.processed_at&.iso8601
+        }.compact
+      )
+    end
+
+    def finish_webhook_replay_run(sync_run, event:, result:)
+      status = event.status == "needs_credentials" ? "needs_credentials" : "succeeded"
+      sync_run.update!(
+        status:,
+        completed_at: Time.current,
+        error_message: status == "succeeded" ? nil : event.error_message,
+        stats: webhook_replay_stats(sync_run, event, result:)
+      )
+      sync_run
+    end
+
+    def fail_webhook_replay_run(sync_run, event:, errors:)
+      sync_run&.update!(
+        status: "failed",
+        completed_at: Time.current,
+        error_message: Array(errors).join(", "),
+        stats: webhook_replay_stats(sync_run, event, errors:)
+      )
+      sync_run
+    end
+
     def related_sync_runs(event, limit: 12)
       return [] unless event.integration_connection
 
@@ -412,6 +451,18 @@ module Vitable
     end
 
     private
+
+    def webhook_replay_stats(sync_run, event, result: nil, errors: [])
+      stats = sync_run.stats.to_h.merge(
+        "final_status" => event.status,
+        "processed_at" => event.processed_at&.iso8601,
+        "replayed_at" => Time.current.iso8601
+      ).compact
+
+      stats["result"] = serialize_response(result.value) if result
+      stats["errors"] = Array(errors) if Array(errors).any?
+      stats
+    end
 
     def bootstrap_demo_smoke_connection(environment:, api_key_reference:)
       organization = Organization.first_or_create!(

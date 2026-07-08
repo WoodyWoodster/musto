@@ -3903,13 +3903,22 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
   test "replays webhook event through command action" do
     @webhook_event.update!(status: "failed", error_message: "boom", processed_at: 1.hour.ago)
 
-    post replay_webhook_event_path(@webhook_event)
+    assert_difference -> { @connection.sync_runs.where(operation: "webhook_replay").count }, 1 do
+      post replay_webhook_event_path(@webhook_event)
+    end
 
     assert_redirected_to webhook_event_path(@webhook_event)
     @webhook_event.reload
     assert_equal "needs_credentials", @webhook_event.status
     assert_nil @webhook_event.processed_at
     assert_match "not configured", @webhook_event.error_message
+    sync = @connection.sync_runs.where(operation: "webhook_replay").recent_first.first
+    assert_equal "needs_credentials", sync.status
+    assert_equal "operations_console", sync.stats.fetch("requested_by")
+    assert_equal "failed", sync.stats.fetch("previous_status")
+    assert_equal "needs_credentials", sync.stats.fetch("final_status")
+    assert_equal @webhook_event.event_id, sync.stats.fetch("resource_id")
+    assert_match @connection.api_key_reference, sync.error_message
   end
 
   test "accepts an enrollment and readies payroll deductions" do

@@ -120,7 +120,7 @@ module Vitable
         method: "GET",
         fetch_path: "/v1/webhook-events",
         operations: %w[webhook_event.list webhook_event.retrieve webhook_event.list_deliveries],
-        sync_operations: %w[webhook_delivery_refresh api_snapshot_refresh demo_smoke_check],
+        sync_operations: %w[webhook_replay webhook_delivery_refresh api_snapshot_refresh demo_smoke_check],
         snapshot_count_key: "remote_webhook_event_count"
       }
     ].freeze

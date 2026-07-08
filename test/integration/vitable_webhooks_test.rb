@@ -433,6 +433,84 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
     ENV.delete("VITABLE_CONNECT_API_KEY")
   end
 
+  test "replay command audits successful credential-present reprocessing" do
+    employer = @organization.employers.create!(name: "Replay Employer", status: "active")
+    employee = employer.employees.create!(
+      first_name: "Casey",
+      last_name: "Replay",
+      email: "casey.replay@example.com",
+      vitable_id: "empl_replay_casey"
+    )
+    plan = employer.benefit_plans.create!(
+      name: "Replay Primary Care",
+      category: "direct_primary_care",
+      carrier: "Vitable",
+      vitable_id: "bprd_replay_care"
+    )
+    enrollment = employee.enrollments.create!(
+      benefit_plan: plan,
+      status: "pending",
+      vitable_id: "enrl_test_123"
+    )
+    event = @connection.webhook_events.create!(
+      event_id: "wevt_test_replay_success",
+      organization_external_id: @organization.external_id,
+      event_name: "enrollment.accepted",
+      resource_type: "enrollment",
+      resource_id: "enrl_test_123",
+      occurred_at: Time.current,
+      status: "failed",
+      processed_at: 1.hour.ago,
+      error_message: "stale failure",
+      payload: webhook_payload.merge(event_id: "wevt_test_replay_success")
+    )
+    ENV["VITABLE_CONNECT_API_KEY"] = "vit_apk_test_value"
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:fetch_resource) do |_resource_type, resource_id|
+        {
+          data: {
+            id: resource_id,
+            employee_id: "empl_replay_casey",
+            benefit: {
+              id: "bprd_replay_care",
+              name: "Replay Primary Care",
+              category: "Medical"
+            },
+            status: "enrolled",
+            answered_at: Time.current,
+            coverage_start: Date.current,
+            employee_deduction_in_cents: 7900,
+            access_token: "vit_at_never_store"
+          }
+        }
+      end
+    end
+
+    result = Vitable::ReplayWebhookEventCommand.new(
+      dto: Vitable::ReplayWebhookEventDto.new(webhook_event_id: event.id, requested_by: "integration_admin"),
+      gateway_class:
+    ).call
+
+    assert result.success?
+    assert_equal "processed", event.reload.status
+    assert_not_nil event.processed_at
+    assert_nil event.error_message
+    assert_equal "accepted", enrollment.reload.status
+    replay_run = @connection.sync_runs.where(operation: "webhook_replay").recent_first.first
+    fetch_run = @connection.sync_runs.where(operation: "fetch", resource_type: "enrollment").recent_first.first
+    assert_equal "succeeded", replay_run.status
+    assert_equal "integration_admin", replay_run.stats.fetch("requested_by")
+    assert_equal "failed", replay_run.stats.fetch("previous_status")
+    assert_equal "processed", replay_run.stats.fetch("final_status")
+    assert_equal event.event_id, replay_run.stats.fetch("resource_id")
+    assert_equal "[FILTERED]", replay_run.stats.dig("result", "data", "access_token")
+    assert_equal "succeeded", fetch_run.status
+    assert_equal "enrl_test_123", fetch_run.stats.fetch("resource_id")
+  ensure
+    ENV.delete("VITABLE_CONNECT_API_KEY")
+  end
+
   test "accepts a signed Vitable webhook when webhook secret is configured" do
     @connection.update!(webhook_secret_reference: "VITABLE_WEBHOOK_SECRET")
     ENV["VITABLE_WEBHOOK_SECRET"] = "whsec_test_value"
