@@ -3901,7 +3901,8 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
           data: {
             id: "empr_created_wrong_reference",
             name: payload.fetch("name"),
-            reference_id: "musto_employer_wrong"
+            reference_id: "musto_employer_wrong",
+            access_token: "vit_at_wrong_employer_reference"
           }
         )
       end
@@ -3921,7 +3922,11 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     sync = @connection.sync_runs.where(operation: "employer_create").recent_first.first
     assert_equal "failed", sync.status
     assert_match "expected musto_employer_#{@employer.id}", sync.error_message
+    assert_equal "ArgumentError", sync.stats.fetch("error_class")
+    assert_equal "musto_employer_wrong", sync.stats.dig("remote_response", "employer_response", "data", "reference_id")
+    assert_equal "[FILTERED]", sync.stats.dig("remote_response", "employer_response", "data", "access_token")
     assert_match "expected musto_employer_#{@employer.id}", result.errors.to_sentence
+    assert_not_includes sync.stats.to_json, "vit_at_wrong_employer_reference"
   ensure
     ENV[@connection.api_key_reference] = previous_key
   end
@@ -3964,7 +3969,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     gateway_class = Class.new do
       define_method(:initialize) { |_connection| }
       define_method(:update_employer_settings) do |employer_id, _pay_frequency|
-        response_class.new(data: { employer_id:, pay_frequency: "monthly" })
+        response_class.new(data: { employer_id:, pay_frequency: "monthly", client_secret: "client_secret_bad_settings" })
       end
       define_method(:create_eligibility_policy) { |_employer_id, _payload| raise "policy should not be called with mismatched settings response" }
     end
@@ -3982,7 +3987,11 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     sync = @connection.sync_runs.where(operation: "employer_settings_update").recent_first.first
     assert_equal "failed", sync.status
     assert_match "expected bi_weekly", sync.error_message
+    assert_equal "ArgumentError", sync.stats.fetch("error_class")
+    assert_equal "monthly", sync.stats.dig("remote_response", "settings_response", "data", "pay_frequency")
+    assert_equal "[FILTERED]", sync.stats.dig("remote_response", "settings_response", "data", "client_secret")
     assert_match "expected bi_weekly", result.errors.to_sentence
+    assert_not_includes sync.stats.to_json, "client_secret_bad_settings"
   ensure
     ENV[@connection.api_key_reference] = previous_key
   end
@@ -4026,7 +4035,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
         response_class.new(data: { employer_id:, pay_frequency: })
       end
       define_method(:create_eligibility_policy) do |_employer_id, payload|
-        response_class.new(data: { id: "elig_policy_123", employer_id: "empr_other_456", classification: payload.fetch("classification") })
+        response_class.new(data: { id: "elig_policy_123", employer_id: "empr_other_456", classification: payload.fetch("classification"), refresh_token: "vit_rt_bad_policy_response" })
       end
     end
     previous_key = ENV[@connection.api_key_reference]
@@ -4042,7 +4051,11 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     sync = @connection.sync_runs.where(operation: "employer_settings_update").recent_first.first
     assert_equal "failed", sync.status
     assert_match "expected empr_ops_123", sync.error_message
+    assert_equal "ArgumentError", sync.stats.fetch("error_class")
+    assert_equal "empr_other_456", sync.stats.dig("remote_response", "eligibility_policy_response", "data", "employer_id")
+    assert_equal "[FILTERED]", sync.stats.dig("remote_response", "eligibility_policy_response", "data", "refresh_token")
     assert_match "expected empr_ops_123", result.errors.to_sentence
+    assert_not_includes sync.stats.to_json, "vit_rt_bad_policy_response"
   ensure
     ENV[@connection.api_key_reference] = previous_key
   end
