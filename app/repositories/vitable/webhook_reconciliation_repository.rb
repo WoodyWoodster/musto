@@ -530,7 +530,7 @@ module Vitable
     def apply_enrollment_payroll_deductions(enrollment, local_status, remote_resource, timestamp)
       return [] unless local_status.present?
 
-      dto = RemoteEnrollmentDto.from_hash(remote_resource)
+      dto = RemoteEnrollmentDto.from_hash(enrollment_resource_with_event_status(remote_resource))
       return [] unless dto.active_deduction? || enrollment.payroll_deductions.exists?
 
       result = PayrollDeductionRepository.new.sync_employee_deductions(
@@ -541,6 +541,12 @@ module Vitable
         reconciled_at: timestamp
       )
       result.changed_ids.map { |id| "payroll_deductions.#{id}" }
+    end
+
+    def enrollment_resource_with_event_status(remote_resource)
+      remote_resource.merge(
+        "status" => remote_resource.fetch("status", nil).presence || @event.event_name.to_s.split(".").last
+      )
     end
 
     def employee_event_metadata(remote_resource, timestamp)

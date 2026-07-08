@@ -111,10 +111,10 @@ module Vitable
     end
 
     def employee_deduction_amount(enrollment)
+      return 0 unless accepted?
       return employee_deduction_cents if employee_deduction_cents.present?
-      return enrollment.benefit_plan.monthly_premium_cents if accepted?
 
-      0
+      enrollment.benefit_plan.monthly_premium_cents
     end
 
     def deduction_status

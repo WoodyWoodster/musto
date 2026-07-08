@@ -1358,6 +1358,132 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
     ENV.delete("VITABLE_CONNECT_API_KEY")
   end
 
+  test "uses enrollment event action for deduction sync when resource omits status" do
+    employer = @organization.employers.create!(name: "Event Status Enrollment Employer", status: "active")
+    employee = employer.employees.create!(
+      first_name: "Morgan",
+      last_name: "Eventstatus",
+      email: "morgan.eventstatus@example.com",
+      vitable_id: "empl_remote_morgan"
+    )
+    plan = employer.benefit_plans.create!(
+      name: "Vitable Event Care",
+      category: "direct_primary_care",
+      carrier: "Vitable",
+      vitable_id: "bprd_remote_event_care"
+    )
+    enrollment = employee.enrollments.create!(benefit_plan: plan, status: "pending")
+    ENV["VITABLE_CONNECT_API_KEY"] = "vit_apk_test_value"
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:fetch_resource) do |_resource_type, resource_id|
+        {
+          data: {
+            id: resource_id,
+            employee_id: "empl_remote_morgan",
+            benefit: {
+              id: "bprd_remote_event_care",
+              name: "Vitable Event Care"
+            },
+            employee_deduction_in_cents: 8_100
+          }
+        }
+      end
+    end
+
+    result = Vitable::ProcessWebhookCommand.new(
+      payload: webhook_payload.merge(
+        event_id: "wevt_test_enrollment_accepted_without_status",
+        event_name: "enrollment.accepted",
+        resource_type: "enrollment",
+        resource_id: "enrl_remote_event_status"
+      ),
+      gateway_class:
+    ).call
+
+    assert result.success?
+    deduction = employer.payroll_runs.sole.payroll_deductions.sole
+
+    assert_equal "accepted", enrollment.reload.status
+    assert_equal 8_100, deduction.amount_cents
+    assert_equal "ready", deduction.status
+    assert_equal "enrollment.accepted", deduction.metadata.fetch("last_webhook_event_name")
+  ensure
+    ENV.delete("VITABLE_CONNECT_API_KEY")
+  end
+
+  test "uses waived enrollment event action to zero deductions when resource omits status" do
+    employer = @organization.employers.create!(name: "Waived Event Enrollment Employer", status: "active")
+    employee = employer.employees.create!(
+      first_name: "Quinn",
+      last_name: "Waived",
+      email: "quinn.waived@example.com",
+      vitable_id: "empl_remote_quinn"
+    )
+    plan = employer.benefit_plans.create!(
+      name: "Vitable Waived Care",
+      category: "direct_primary_care",
+      carrier: "Vitable",
+      vitable_id: "bprd_remote_waived_care"
+    )
+    enrollment = employee.enrollments.create!(
+      benefit_plan: plan,
+      status: "accepted",
+      accepted_at: 1.week.ago,
+      vitable_id: "enrl_remote_waived"
+    )
+    payroll_run = employer.payroll_runs.create!(
+      period_start_on: Date.current.beginning_of_month,
+      period_end_on: Date.current.end_of_month,
+      pay_date: Date.current.end_of_month,
+      gross_pay_cents: 0,
+      status: "estimated"
+    )
+    deduction = payroll_run.payroll_deductions.create!(
+      employee:,
+      enrollment:,
+      code: "VITABLE_WAIVED_CARE",
+      amount_cents: 8_100,
+      status: "ready"
+    )
+    ENV["VITABLE_CONNECT_API_KEY"] = "vit_apk_test_value"
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:fetch_resource) do |_resource_type, resource_id|
+        {
+          data: {
+            id: resource_id,
+            employee_id: "empl_remote_quinn",
+            benefit: {
+              id: "bprd_remote_waived_care",
+              name: "Vitable Waived Care"
+            },
+            employee_deduction_in_cents: 8_100
+          }
+        }
+      end
+    end
+
+    result = Vitable::ProcessWebhookCommand.new(
+      payload: webhook_payload.merge(
+        event_id: "wevt_test_enrollment_waived_without_status",
+        event_name: "enrollment.waived",
+        resource_type: "enrollment",
+        resource_id: "enrl_remote_waived"
+      ),
+      gateway_class:
+    ).call
+
+    assert result.success?
+    assert_equal "waived", enrollment.reload.status
+    assert_nil enrollment.accepted_at
+    assert_equal 0, deduction.reload.amount_cents
+    assert_equal "waived", deduction.status
+    assert_equal "enrollment.waived", deduction.metadata.fetch("last_webhook_event_name")
+  ensure
+    ENV.delete("VITABLE_CONNECT_API_KEY")
+  end
+
   test "reconciles terminated enrollment resources as inactive and stops payroll deductions" do
     employer = @organization.employers.create!(name: "Terminated Enrollment Employer", status: "active")
     employee = employer.employees.create!(
