@@ -1,3 +1,5 @@
+require "vitable_connect"
+
 module Benefits
   class RefreshVitablePlanMappingsCommand < ApplicationCommand
     def initialize(dto:, employer_repository: Employers::EmployerRepository.new, repository: nil, gateway_class: Vitable::ClientGateway)

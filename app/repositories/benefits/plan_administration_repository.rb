@@ -124,14 +124,9 @@ module Benefits
     def mark_mapping_succeeded(sync_run, response)
       response_hash = serialize_response(response)
       remote_plans = response_hash.fetch("data", []).map { |payload| payload.to_h.stringify_keys }
-      mapping = reconcile_remote_plans(remote_plans)
       refreshed_at = Time.current.iso8601
-      snapshot = mapping.merge(
-        "refreshed_at" => refreshed_at,
-        "remote_plans" => remote_plans
-      )
+      snapshot = reconcile_remote_plan_snapshot(remote_plans:, refreshed_at:, source: "plans.list")
 
-      @employer.update!(settings: @employer.settings.to_h.merge(REMOTE_SNAPSHOT_KEY => snapshot))
       sync_run.update!(
         status: "succeeded",
         completed_at: Time.current,
@@ -139,13 +134,25 @@ module Benefits
         stats: sync_run.stats.to_h.merge(
           "remote_response" => response_hash,
           "remote_plan_count" => remote_plans.count,
-          "mapped_plan_count" => mapping.fetch("mapped_plan_count"),
-          "unmatched_remote_count" => mapping.fetch("unmatched_remote_plans").count,
-          "unmatched_local_count" => mapping.fetch("unmatched_local_plans").count,
+          "mapped_plan_count" => snapshot.fetch("mapped_plan_count"),
+          "unmatched_remote_count" => snapshot.fetch("unmatched_remote_plans").count,
+          "unmatched_local_count" => snapshot.fetch("unmatched_local_plans").count,
           "refreshed_at" => refreshed_at
         )
       )
       sync_run
+    end
+
+    def reconcile_remote_plan_snapshot(remote_plans:, refreshed_at: Time.current.iso8601, source: "plans.list")
+      remote_plans = Array(remote_plans).map { |payload| payload.to_h.stringify_keys }
+      mapping = reconcile_remote_plans(remote_plans, matched_at: refreshed_at, source:)
+      snapshot = mapping.merge(
+        "refreshed_at" => refreshed_at,
+        "remote_plans" => remote_plans
+      )
+
+      @employer.update!(settings: @employer.settings.to_h.merge(REMOTE_SNAPSHOT_KEY => snapshot))
+      snapshot
     end
 
     def mark_mapping_failed(sync_run, error)
@@ -192,7 +199,7 @@ module Benefits
       }
     end
 
-    def reconcile_remote_plans(remote_plans)
+    def reconcile_remote_plans(remote_plans, matched_at:, source:)
       local_plans = plans.to_a
       mapped = []
       ambiguous = []
@@ -202,7 +209,7 @@ module Benefits
         candidates = local_matches_for(remote_plan, local_plans)
         if candidates.one?
           plan = candidates.first
-          apply_remote_plan_mapping(plan, remote_plan)
+          apply_remote_plan_mapping(plan, remote_plan, matched_at:, source:)
           mapped << mapping_line(plan, remote_plan)
         elsif candidates.many?
           ambiguous << {
@@ -250,16 +257,15 @@ module Benefits
       category ? local_plans.select { |plan| plan.category == category } : []
     end
 
-    def apply_remote_plan_mapping(plan, remote_plan)
-      mapped_at = Time.current.iso8601
+    def apply_remote_plan_mapping(plan, remote_plan, matched_at:, source:)
       plan.update!(
         vitable_id: remote_plan.fetch("id"),
         metadata: plan.metadata.to_h.merge(
           "vitable_plan_mapping" => {
             "remote_plan_id" => remote_plan.fetch("id"),
             "remote_plan_name" => remote_plan.fetch("name"),
-            "matched_at" => mapped_at,
-            "matched_by" => "plans.list"
+            "matched_at" => matched_at,
+            "matched_by" => source
           }
         )
       )

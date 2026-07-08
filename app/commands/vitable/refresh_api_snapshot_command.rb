@@ -37,11 +37,13 @@ module Vitable
       gateway = @gateway_class.new(connection)
       refreshed_at = Time.current.iso8601
       employers = page_data(gateway.list_all_employers)
+      plans = page_data(gateway.list_all_plans)
       employer_reconciliation = RemoteEmployerSnapshotRepository.new(connection:).reconcile_snapshot(
         remote_employers: employers,
         source: "vitable_api_snapshot",
         refreshed_at:
       )
+      plan_reconciliation = plan_reconciliation_snapshots(connection, plans, refreshed_at:)
       remote_employee_rosters = remote_employee_rosters(gateway, connection)
       employee_reconciliation = RemoteEmployeeSnapshotRepository.new(connection:).reconcile_snapshot(
         snapshot_entries: remote_employee_rosters,
@@ -60,13 +62,33 @@ module Vitable
         "employers" => employers,
         "employer_reconciliation" => employer_reconciliation.to_metadata,
         "groups" => page_data(gateway.list_all_groups),
-        "plans" => page_data(gateway.list_all_plans),
+        "plans" => plans,
+        "plan_reconciliation" => plan_reconciliation,
         "webhook_events" => page_data(gateway.list_all_webhook_events),
         "remote_employee_rosters" => remote_employee_rosters,
         "employee_reconciliation" => employee_reconciliation.to_metadata,
         "employee_enrollments" => employee_enrollments,
         "enrollment_reconciliation" => enrollment_reconciliation.to_metadata
       }
+    end
+
+    def plan_reconciliation_snapshots(connection, remote_plans, refreshed_at:)
+      local_employers(connection).map do |employer|
+        snapshot = Benefits::PlanAdministrationRepository.new(employer:).reconcile_remote_plan_snapshot(
+          remote_plans:,
+          refreshed_at:,
+          source: "vitable_api_snapshot"
+        )
+
+        {
+          "local_employer_id" => employer.id,
+          "employer_name" => employer.name,
+          "mapped_plan_count" => snapshot.fetch("mapped_plan_count", 0),
+          "unmatched_remote_count" => snapshot.fetch("unmatched_remote_plans", []).count,
+          "unmatched_local_count" => snapshot.fetch("unmatched_local_plans", []).count,
+          "ambiguous_remote_count" => snapshot.fetch("ambiguous_remote_plans", []).count
+        }
+      end
     end
 
     def remote_employee_rosters(gateway, connection)
@@ -111,10 +133,14 @@ module Vitable
     end
 
     def local_remote_employers(connection)
+      local_employers(connection)
+        .where.not(vitable_id: [ nil, "" ])
+    end
+
+    def local_employers(connection)
       Employer
         .joins(:organization)
         .where(organization: connection.organization)
-        .where.not(vitable_id: [ nil, "" ])
     end
 
     def local_remote_employees(connection)

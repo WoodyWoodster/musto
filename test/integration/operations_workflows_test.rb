@@ -2839,7 +2839,6 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
 
   test "Vitable API snapshot refresh reconciles employee enrollments and payroll deductions" do
     @employee.update!(vitable_id: "empl_ops_casey")
-    @pending_plan.update!(vitable_id: "bprd_remote_dental")
     answered_at = Time.current.change(usec: 0)
     coverage_start = Date.current.beginning_of_month
     response_class = Data.define(:data)
@@ -2875,10 +2874,13 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     ).call
 
     assert result.success?
+    @pending_plan.reload
     @pending_enrollment.reload
     @pending_deduction.reload
     snapshot = @connection.reload.metadata.fetch("api_snapshot")
 
+    assert_equal "bprd_remote_dental", @pending_plan.vitable_id
+    assert_equal "vitable_api_snapshot", @pending_plan.metadata.dig("vitable_plan_mapping", "matched_by")
     assert_equal "enrl_remote_dental", @pending_enrollment.vitable_id
     assert_equal "accepted", @pending_enrollment.status
     assert_equal answered_at.to_i, @pending_enrollment.accepted_at.to_i
@@ -2890,12 +2892,16 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal "ready", @pending_deduction.status
     assert_equal "vitable_api_snapshot", @pending_deduction.metadata.fetch("source")
     assert_equal "enrl_remote_dental", @pending_deduction.metadata.fetch("raw_payload").fetch("enrollment_id")
+    assert_equal 1, snapshot.dig("counts", "mapped_plan_count")
+    assert_equal 2, snapshot.dig("counts", "unmatched_local_plan_count")
+    assert_equal 1, snapshot.fetch("plan_reconciliation").first.fetch("mapped_plan_count")
     assert_equal 1, snapshot.dig("counts", "reconciled_enrollment_count")
     assert_equal 1, snapshot.dig("counts", "updated_enrollment_count")
     assert_equal 1, snapshot.dig("counts", "enrollment_deduction_changed_count")
     assert_equal 0, snapshot.dig("counts", "enrollment_missing_plan_count")
 
     detail = Vitable::ConnectionDetailQuery.new.call(@connection.id)
+    assert_equal 1, detail.api_snapshot.mapped_plan_count
     assert_equal 1, detail.api_snapshot.reconciled_enrollment_count
     assert_equal 1, detail.api_snapshot.enrollment_deduction_changed_count
   ensure
