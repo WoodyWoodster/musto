@@ -66,6 +66,12 @@ module Vitable
         event_name: "employer.eligibility_policy_created",
         resource_type: "employer",
         sample_resource_id: "empr_sandbox_atlas"
+      ),
+      WebhookSimulationEventOptionDto.new(
+        label: "Group updated",
+        event_name: "group.updated",
+        resource_type: "group",
+        sample_resource_id: "grp_sandbox_care"
       )
     ].freeze
 

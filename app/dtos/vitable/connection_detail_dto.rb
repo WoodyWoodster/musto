@@ -106,7 +106,8 @@ module Vitable
         fetch_path: "/v1/groups",
         operations: %w[group.list group.retrieve group.create group.update],
         sync_operations: %w[care_group_upsert api_snapshot_refresh demo_smoke_check],
-        snapshot_count_key: "remote_group_count"
+        snapshot_count_key: "remote_group_count",
+        event_resource_types: %w[group]
       },
       {
         resource_type: "group member sync",

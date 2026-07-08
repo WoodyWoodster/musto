@@ -2694,9 +2694,10 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_instance_of Vitable::ApiSnapshotDto, detail.api_snapshot
     assert_instance_of Vitable::WebhookSimulatorDto, detail.simulator
     assert_instance_of Vitable::WebhookSimulationEventOptionDto, detail.simulator.event_options.first
-    assert_equal 11, detail.simulator.event_options.count
-    assert_equal %w[enrollment employee employer], detail.simulator.resource_options
+    assert_equal 12, detail.simulator.event_options.count
+    assert_equal %w[enrollment employee employer group], detail.simulator.resource_options
     assert_includes detail.simulator.event_options.map(&:event_name), "employee.deduction_created"
+    assert_includes detail.simulator.event_options.map(&:event_name), "group.updated"
     assert_not_includes detail.simulator.event_options.map(&:event_name), "benefit_plan.updated"
     assert_equal [
       "auth tokens",
@@ -2715,6 +2716,24 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     ], detail.endpoint_coverage.map(&:resource_type)
     employee_coverage = detail.endpoint_coverage.find { |coverage| coverage.resource_type == "employees" }
     assert_operator employee_coverage.activity_count, :>=, 2
+    groups_coverage = detail.endpoint_coverage.find { |coverage| coverage.resource_type == "groups" }
+    assert_equal "pending", groups_coverage.status
+
+    group_event = @connection.webhook_events.create!(
+      event_id: "wevt_ops_group_updated",
+      organization_external_id: @organization.external_id,
+      event_name: "group.updated",
+      resource_type: "group",
+      resource_id: "grp_ops_123",
+      occurred_at: Time.current,
+      status: "processed",
+      processed_at: Time.current,
+      payload: { "event_id" => "wevt_ops_group_updated" }
+    )
+    detail_with_group_event = Vitable::ConnectionDetailQuery.new.call(@connection.id)
+    groups_coverage = detail_with_group_event.endpoint_coverage.find { |coverage| coverage.resource_type == "groups" }
+    assert_equal "ready", groups_coverage.status
+    assert_equal group_event.created_at.to_i, groups_coverage.last_seen_at.to_i
     assert_equal @sync_run.id, detail.sync_runs.first.id
     assert_equal @request_log.id, detail.request_logs.first.id
     assert_not detail.webhook_secret_present
