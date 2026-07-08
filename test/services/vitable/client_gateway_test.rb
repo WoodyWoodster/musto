@@ -6,17 +6,22 @@ module Vitable
       ignored_subresources = {
         VitableConnect::Resources::Groups => %i[members]
       }
+      client_resource_classes = installed_client_resource_classes
+      documented_resource_classes = ClientGateway::SDK_METHOD_COVERAGE.map { |entry| entry.fetch(:resource_class) }
+      undocumented_resource_classes = client_resource_classes.select do |resource_class|
+        endpoint_methods_for(resource_class, ignored_subresources:).any?
+      end - documented_resource_classes
       documented_methods = ClientGateway::SDK_METHOD_COVERAGE.flat_map do |entry|
         entry.fetch(:sdk_methods).map { |method_name| [ entry.fetch(:resource_class).name, method_name.to_s ] }
       end
-      installed_methods = ClientGateway::SDK_METHOD_COVERAGE.flat_map do |entry|
-        resource_class = entry.fetch(:resource_class)
-        ignored = ignored_subresources.fetch(resource_class, [])
-        (resource_class.public_instance_methods(false) - [ :initialize ] - ignored).map do |method_name|
-          [ resource_class.name, method_name.to_s ]
-        end
+      installed_methods = (
+        client_resource_classes +
+        (documented_resource_classes - client_resource_classes)
+      ).flat_map do |resource_class|
+        endpoint_methods_for(resource_class, ignored_subresources:).map { |method_name| [ resource_class.name, method_name.to_s ] }
       end
 
+      assert_empty undocumented_resource_classes
       assert_equal installed_methods.sort, documented_methods.sort
     end
 
@@ -450,6 +455,20 @@ module Vitable
       assert_nil connection.sdk_environment
     ensure
       ENV.delete("VITABLE_TEST_API_KEY")
+    end
+
+    private
+
+    def installed_client_resource_classes
+      client = VitableConnect::Client.new(api_key: "vit_apk_test")
+      VitableConnect::Client
+        .public_instance_methods(false)
+        .excluding(:api_key)
+        .map { |reader| client.public_send(reader).class }
+    end
+
+    def endpoint_methods_for(resource_class, ignored_subresources:)
+      resource_class.public_instance_methods(false) - [ :initialize ] - ignored_subresources.fetch(resource_class, [])
     end
   end
 end
