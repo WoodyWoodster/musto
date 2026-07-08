@@ -346,6 +346,62 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
     ENV.delete("VITABLE_CONNECT_API_KEY")
   end
 
+  test "direct resource fetch fails when response omits resource attributes" do
+    ENV["VITABLE_CONNECT_API_KEY"] = "vit_apk_test_value"
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:fetch_resource) { |_resource_type, _resource_id| { data: {} } }
+    end
+
+    result = Vitable::FetchResourceCommand.new(
+      dto: Vitable::FetchResourceDto.new(connection_id: @connection.id, resource_type: "employee", resource_id: "empl_direct_missing_attrs"),
+      gateway_class:
+    ).call
+
+    assert result.failure?
+    sync_run = @connection.sync_runs.where(operation: "fetch", resource_type: "employee").recent_first.first
+
+    assert_equal "failed", sync_run.status
+    assert_match "resource attributes", sync_run.error_message
+    assert_match "resource attributes", result.errors.to_sentence
+  ensure
+    ENV.delete("VITABLE_CONNECT_API_KEY")
+  end
+
+  test "direct resource fetch fails when retrieve response returns a data array" do
+    ENV["VITABLE_CONNECT_API_KEY"] = "vit_apk_test_value"
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:fetch_resource) do |_resource_type, resource_id|
+        {
+          data: [
+            {
+              id: resource_id,
+              reference_id: "musto_employee_999",
+              email: "array-response@example.com",
+              status: "active",
+              member_id: "mem_array_response"
+            }
+          ]
+        }
+      end
+    end
+
+    result = Vitable::FetchResourceCommand.new(
+      dto: Vitable::FetchResourceDto.new(connection_id: @connection.id, resource_type: "employee", resource_id: "empl_direct_array"),
+      gateway_class:
+    ).call
+
+    assert result.failure?
+    sync_run = @connection.sync_runs.where(operation: "fetch", resource_type: "employee").recent_first.first
+
+    assert_equal "failed", sync_run.status
+    assert_match "data array", sync_run.error_message
+    assert_match "single resource object", result.errors.to_sentence
+  ensure
+    ENV.delete("VITABLE_CONNECT_API_KEY")
+  end
+
   test "employee deactivated webhooks terminate the local HRIS employee" do
     employer = @organization.employers.create!(name: "Deactivation Employer", status: "active")
     employee = employer.employees.create!(first_name: "Dana", last_name: "Inactive", email: "dana.inactive@example.com")

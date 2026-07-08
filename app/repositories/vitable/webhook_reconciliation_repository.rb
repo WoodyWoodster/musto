@@ -281,11 +281,10 @@ module Vitable
     end
 
     def response_resource(response_hash)
-      resource = response_hash.fetch("data", response_hash)
-      resource = resource.first if resource.is_a?(Array)
-      return {} unless resource.respond_to?(:to_h)
-
-      resource.to_h.stringify_keys
+      RemoteResourceResponseDto
+        .from_response(response_hash, resource_type: @event.resource_type, resource_id: @event.resource_id)
+        .validate!
+        .attributes
     end
 
     def employee_match_for(remote_resource)
