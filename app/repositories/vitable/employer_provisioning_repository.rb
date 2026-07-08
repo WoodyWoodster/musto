@@ -2,7 +2,7 @@ module Vitable
   class EmployerProvisioningRepository < ApplicationRepository
     PACKET_KEY = "vitable_employer_provisioning_packet"
     PROVISIONING_OPERATIONS = %w[employer_create employer_settings_update].freeze
-    REQUEST_OPERATIONS = %w[employer.create employer.update_settings employer.eligibility_policy.create].freeze
+    REQUEST_OPERATIONS = %w[employer.create employer.update_settings employer.eligibility_policy.create eligibility_policy.retrieve].freeze
     ELIGIBILITY_CLASSIFICATIONS = [ "All", "Full time", "Part time" ].freeze
     ELIGIBILITY_WAITING_PERIODS = [ "1st of the following month", "30 days", "60 days", "None" ].freeze
     VITABLE_PAY_FREQUENCIES = %w[weekly bi_weekly semi_monthly monthly].freeze
@@ -141,6 +141,7 @@ module Vitable
       holdbacks = holdbacks_for(mode:, create_payload:, settings_payload:, eligibility_profile:)
       endpoint = mode == "create" ? "/v1/employers" : "/v1/employers/:employer_id/settings"
       eligibility_policy_endpoint = "/v1/employers/:employer_id/benefit-eligibility-policies"
+      eligibility_policy_retrieval_endpoint = "/v1/benefit-eligibility-policies/:id"
 
       {
         "packet_id" => "vitable_employer_provisioning_#{@employer.id}_#{Time.current.to_i}",
@@ -161,6 +162,7 @@ module Vitable
         "settings_payload" => settings_payload,
         "eligibility_policy_payload" => eligibility_profile,
         "eligibility_policy_endpoint" => eligibility_policy_endpoint,
+        "eligibility_policy_retrieval_endpoint" => eligibility_policy_retrieval_endpoint,
         "eligibility_policy_action" => eligibility_policy_current?(eligibility_profile) ? "skip_remote_current" : "submit",
         "api_payload" => {
           "create" => create_payload,
@@ -408,8 +410,11 @@ module Vitable
           "synced_with_employer_at" => synced_at,
           "submitted_at" => submission.submitted_at&.iso8601,
           "remote_employer_id" => submission.remote_employer_id.presence || @employer.vitable_id,
+          "remote_policy_id" => submission.remote_policy_id,
           "remote_response" => submission.remote_response,
+          "remote_snapshot" => submission.remote_snapshot.presence,
           "endpoint" => submission.endpoint,
+          "retrieve_endpoint" => submission.retrieve_endpoint,
           "webhook_event_name" => "employer.eligibility_policy_created"
         )
       ).compact
@@ -452,6 +457,7 @@ module Vitable
       endpoints << "/v1/employers" if mode == "create"
       endpoints << "/v1/employers/:employer_id/settings"
       endpoints << eligibility_policy_endpoint
+      endpoints << "/v1/benefit-eligibility-policies/:id"
       endpoints
     end
 

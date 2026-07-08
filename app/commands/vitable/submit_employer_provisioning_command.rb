@@ -66,6 +66,7 @@ module Vitable
       policy_submission = submit_eligibility_policy(gateway, remote_employer_id, packet, response:)
 
       response.delete("eligibility_policy_response")
+      response.delete("eligibility_policy_retrieval_response")
       response["employer_response"] ||= {}
       response.merge(
         "eligibility_policy_submission" => policy_submission.to_metadata
@@ -79,10 +80,23 @@ module Vitable
 
       policy_response = gateway.create_eligibility_policy(remote_employer_id, payload)
       response["eligibility_policy_response"] = serialize_response(policy_response)
-      RemoteEligibilityPolicyResponseDto
+      policy_dto = RemoteEligibilityPolicyResponseDto
         .from_hash(response.fetch("eligibility_policy_response"))
         .validate!(expected_employer_id: remote_employer_id)
-      EmployerEligibilityPolicySubmissionDto.submitted(remote_employer_id:, payload:, response: policy_response, submitted_at:)
+
+      retrieval_response = gateway.retrieve_eligibility_policy(policy_dto.remote_policy_id)
+      response["eligibility_policy_retrieval_response"] = serialize_response(retrieval_response)
+      RemoteEligibilityPolicyResponseDto
+        .from_hash(response.fetch("eligibility_policy_retrieval_response"))
+        .validate!(expected_employer_id: remote_employer_id)
+
+      EmployerEligibilityPolicySubmissionDto.submitted(
+        remote_employer_id:,
+        payload:,
+        response: policy_response,
+        retrieval_response:,
+        submitted_at:
+      )
     rescue ::VitableConnect::Errors::APIStatusError => e
       raise unless e.status == 422
 

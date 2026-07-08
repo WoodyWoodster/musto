@@ -341,7 +341,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       response_channel: "secure_message",
       summary: "Wage-hour response is ready for submission."
     )
-    @connection = @organization.integration_connections.create!(provider: "vitable", environment: "production", webhook_secret_reference: "VITABLE_WEBHOOK_SECRET")
+    @connection = @organization.integration_connections.create!(provider: "vitable", environment: "demo", webhook_secret_reference: "VITABLE_WEBHOOK_SECRET")
     @sync_run = @connection.sync_runs.create!(
       resource_type: "employee",
       operation: "fetch",
@@ -3821,8 +3821,10 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal [
       "/v1/employers",
       "/v1/employers/:employer_id/settings",
-      "/v1/employers/:employer_id/benefit-eligibility-policies"
+      "/v1/employers/:employer_id/benefit-eligibility-policies",
+      "/v1/benefit-eligibility-policies/:id"
     ], packet.fetch("endpoint_sequence")
+    assert_equal "/v1/benefit-eligibility-policies/:id", packet.fetch("eligibility_policy_retrieval_endpoint")
     assert_empty packet.fetch("holdbacks")
   end
 
@@ -3910,7 +3912,11 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
 
   test "successful employer provisioning command stores remote id and remote eligibility policy" do
     prepare_provisioning_profile
-    Vitable::GenerateEmployerProvisioningCommand.new(dto: Vitable::GenerateEmployerProvisioningDto.new(requested_by: "ops_test")).call
+    employer_repository = employer_repository_for_current_employer
+    Vitable::GenerateEmployerProvisioningCommand.new(
+      dto: Vitable::GenerateEmployerProvisioningDto.new(requested_by: "ops_test"),
+      employer_repository:
+    ).call
     response_class = Data.define(:data)
     gateway_class = Class.new do
       define_method(:initialize) { |_connection| }
@@ -3947,23 +3953,39 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
           }
         )
       end
+      define_method(:retrieve_eligibility_policy) do |policy_id|
+        response_class.new(
+          data: {
+            id: policy_id,
+            employer_id: "empr_created_123",
+            classification: "All",
+            waiting_period: "1st of the following month",
+            access_token: "vit_at_policy_readback_secret"
+          }
+        )
+      end
     end
     previous_key = ENV[@connection.api_key_reference]
     ENV[@connection.api_key_reference] = "vit_apk_test_value"
-    assert Vitable::EmployerProvisioningQuery.new.call.submittable?
+    assert Vitable::EmployerProvisioningQuery.new(employer_repository:).call.submittable?
 
     result = Vitable::SubmitEmployerProvisioningCommand.new(
       dto: Vitable::SubmitEmployerProvisioningDto.new(requested_by: "integration_admin"),
+      employer_repository:,
       gateway_class:
     ).call
 
-    assert result.success?
+    assert result.success?, result.errors.to_sentence
     assert_equal "empr_created_123", @employer.reload.vitable_id
     assert_equal "bi_weekly", @employer.settings.fetch("vitable_pay_frequency")
     assert_equal "remote_api", @employer.settings.dig("vitable_eligibility_policy", "source")
     assert_equal "remote_submitted", @employer.settings.dig("vitable_eligibility_policy", "status")
     assert_equal "All", @employer.settings.dig("vitable_eligibility_policy", "classification")
+    assert_equal "elig_policy_123", @employer.settings.dig("vitable_eligibility_policy", "remote_policy_id")
     assert_equal "elig_policy_123", @employer.settings.dig("vitable_eligibility_policy", "remote_response", "data", "id")
+    assert_equal "elig_policy_123", @employer.settings.dig("vitable_eligibility_policy", "remote_snapshot", "data", "id")
+    assert_equal "[FILTERED]", @employer.settings.dig("vitable_eligibility_policy", "remote_snapshot", "data", "access_token")
+    assert_equal "/v1/benefit-eligibility-policies/elig_policy_123", @employer.settings.dig("vitable_eligibility_policy", "retrieve_endpoint")
     assert_equal "empr_created_123", @employer.settings.dig("vitable_remote_employer", "id")
     assert_equal "org_remote_123", @employer.settings.dig("vitable_remote_employer", "organization_id")
     assert_equal "Ops Employer LLC", @employer.settings.dig("vitable_remote_employer", "legal_name")
@@ -3976,15 +3998,19 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal "empr_created_123", sync.stats.fetch("remote_employer_id")
     assert_equal "bi_weekly", sync.stats.dig("remote_response", "settings_response", "data", "pay_frequency")
     assert_equal "remote_submitted", sync.stats.dig("remote_response", "eligibility_policy_submission", "status")
+    assert_equal "elig_policy_123", sync.stats.dig("remote_response", "eligibility_policy_submission", "remote_policy_id")
     assert_equal "elig_policy_123", sync.stats.dig("remote_response", "eligibility_policy_submission", "remote_response", "data", "id")
+    assert_equal "[FILTERED]", sync.stats.dig("remote_response", "eligibility_policy_submission", "remote_snapshot", "data", "access_token")
     assert_equal "[FILTERED]", sync.stats.dig("remote_response", "employer_response", "data", "access_token")
     assert_equal "[FILTERED]", sync.stats.dig("remote_response", "settings_response", "data", "client_secret")
     assert_equal "[FILTERED]", sync.stats.dig("remote_response", "eligibility_policy_submission", "remote_response", "data", "refresh_token")
     assert_not_includes sync.stats.to_json, "vit_at_employer_snapshot_secret"
     assert_not_includes sync.stats.to_json, "vit_client_secret_snapshot"
+    assert_not_includes sync.stats.to_json, "vit_at_policy_readback_secret"
     assert_not_includes @employer.settings.to_json, "vit_at_employer_snapshot_secret"
     assert_not_includes @employer.settings.to_json, "vit_rt_policy_snapshot_secret"
-    detail = Vitable::EmployerProvisioningQuery.new.call
+    assert_not_includes @employer.settings.to_json, "vit_at_policy_readback_secret"
+    detail = Vitable::EmployerProvisioningQuery.new(employer_repository:).call
     assert_not detail.submittable?
     assert_equal "blocked", detail.preflight_checks.find { |check| check.label == "Submit readiness" }.status
   ensure
@@ -4087,6 +4113,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
 
   test "successful employer settings command stores pay frequency metadata" do
     prepare_provisioning_profile(remote_id: "empr_ops_123")
+    employer_repository = employer_repository_for_current_employer
     response_class = Data.define(:data)
     gateway_class = Class.new do
       define_method(:initialize) { |_connection| }
@@ -4096,16 +4123,20 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       define_method(:create_eligibility_policy) do |employer_id, payload|
         response_class.new(data: { id: "elig_policy_update_123", employer_id:, classification: payload.fetch("classification") })
       end
+      define_method(:retrieve_eligibility_policy) do |policy_id|
+        response_class.new(data: { id: policy_id, employer_id: "empr_ops_123", classification: "All" })
+      end
     end
     previous_key = ENV[@connection.api_key_reference]
     ENV[@connection.api_key_reference] = "vit_apk_test_value"
 
     result = Vitable::SubmitEmployerProvisioningCommand.new(
       dto: Vitable::SubmitEmployerProvisioningDto.new(requested_by: "integration_admin"),
+      employer_repository:,
       gateway_class:
     ).call
 
-    assert result.success?
+    assert result.success?, result.errors.to_sentence
     assert_equal "empr_ops_123", @employer.reload.vitable_id
     assert_equal "bi_weekly", @employer.settings.fetch("vitable_pay_frequency")
     sync = @connection.sync_runs.where(operation: "employer_settings_update").recent_first.first
@@ -4113,6 +4144,44 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal "bi_weekly", sync.stats.dig("payload", "settings", "pay_frequency")
     assert_equal "remote_submitted", sync.stats.dig("remote_response", "eligibility_policy_submission", "status")
     assert_equal "remote_api", @employer.settings.dig("vitable_eligibility_policy", "source")
+  ensure
+    ENV[@connection.api_key_reference] = previous_key
+  end
+
+  test "employer provisioning fails when eligibility policy readback employer differs from submitted employer" do
+    prepare_provisioning_profile(remote_id: "empr_ops_123")
+    employer_repository = employer_repository_for_current_employer
+    response_class = Data.define(:data)
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:update_employer_settings) do |employer_id, pay_frequency|
+        response_class.new(data: { employer_id:, pay_frequency: })
+      end
+      define_method(:create_eligibility_policy) do |employer_id, payload|
+        response_class.new(data: { id: "elig_policy_123", employer_id:, classification: payload.fetch("classification") })
+      end
+      define_method(:retrieve_eligibility_policy) do |policy_id|
+        response_class.new(data: { id: policy_id, employer_id: "empr_other_456", refresh_token: "vit_rt_bad_policy_readback" })
+      end
+    end
+    previous_key = ENV[@connection.api_key_reference]
+    ENV[@connection.api_key_reference] = "vit_apk_test_value"
+
+    result = Vitable::SubmitEmployerProvisioningCommand.new(
+      dto: Vitable::SubmitEmployerProvisioningDto.new(requested_by: "integration_admin"),
+      employer_repository:,
+      gateway_class:
+    ).call
+
+    assert result.failure?
+    assert_nil @employer.reload.settings.to_h.fetch("vitable_eligibility_policy", nil)
+    sync = @connection.sync_runs.where(operation: "employer_settings_update").recent_first.first
+    assert_equal "failed", sync.status
+    assert_match "expected empr_ops_123", sync.error_message
+    assert_equal "empr_other_456", sync.stats.dig("remote_response", "eligibility_policy_retrieval_response", "data", "employer_id")
+    assert_equal "[FILTERED]", sync.stats.dig("remote_response", "eligibility_policy_retrieval_response", "data", "refresh_token")
+    assert_match "expected empr_ops_123", result.errors.to_sentence
+    assert_not_includes sync.stats.to_json, "vit_rt_bad_policy_readback"
   ensure
     ENV[@connection.api_key_reference] = previous_key
   end
@@ -4152,6 +4221,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
 
   test "employer provisioning fails when eligibility policy response omits remote policy id" do
     prepare_provisioning_profile(remote_id: "empr_ops_123")
+    employer_repository = employer_repository_for_current_employer
     response_class = Data.define(:data)
     gateway_class = Class.new do
       define_method(:initialize) { |_connection| }
@@ -4167,6 +4237,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
 
     result = Vitable::SubmitEmployerProvisioningCommand.new(
       dto: Vitable::SubmitEmployerProvisioningDto.new(requested_by: "integration_admin"),
+      employer_repository:,
       gateway_class:
     ).call
 
@@ -4182,6 +4253,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
 
   test "employer provisioning fails when eligibility policy response employer differs from submitted employer" do
     prepare_provisioning_profile(remote_id: "empr_ops_123")
+    employer_repository = employer_repository_for_current_employer
     response_class = Data.define(:data)
     gateway_class = Class.new do
       define_method(:initialize) { |_connection| }
@@ -4197,6 +4269,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
 
     result = Vitable::SubmitEmployerProvisioningCommand.new(
       dto: Vitable::SubmitEmployerProvisioningDto.new(requested_by: "integration_admin"),
+      employer_repository:,
       gateway_class:
     ).call
 
@@ -6828,6 +6901,14 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
       )
       location.save!
     end
+  end
+
+  def employer_repository_for_current_employer
+    Struct.new(:employer) do
+      def first_for_operations
+        employer
+      end
+    end.new(@employer)
   end
 
   def prepare_care_group_profile(remote_group_id: nil, remote_plan_id: "plan_care_123")
