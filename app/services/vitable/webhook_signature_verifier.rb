@@ -46,10 +46,17 @@ module Vitable
     private
 
     def connection_for(request)
-      external_id = request.payload.fetch("organization_id") { request.payload.fetch(:organization_id, nil) }
+      external_id = organization_external_id_from(request.payload)
       return if external_id.blank?
 
       @repository.connection_for_organization_external_id(external_id)
+    end
+
+    def organization_external_id_from(payload)
+      payload.fetch("organization_id", nil).presence ||
+        payload.fetch(:organization_id, nil).presence ||
+        payload.fetch("organization_external_id", nil).presence ||
+        payload.fetch(:organization_external_id, nil).presence
     end
 
     def signature_header(request)

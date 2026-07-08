@@ -1643,6 +1643,35 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
     ENV.delete("VITABLE_WEBHOOK_SECRET")
   end
 
+  test "accepts a signed Vitable webhook that uses organization_external_id" do
+    @connection.update!(webhook_secret_reference: "VITABLE_WEBHOOK_SECRET")
+    ENV["VITABLE_WEBHOOK_SECRET"] = "whsec_test_value"
+    payload = webhook_payload.except(:organization_id).merge(
+      event_id: "wevt_test_signed_external_org",
+      organization_external_id: @organization.external_id
+    )
+    raw_body = payload.to_json
+    timestamp = Time.current.iso8601
+    signature = Vitable::WebhookSignatureVerifier.sign(raw_body:, secret: ENV.fetch("VITABLE_WEBHOOK_SECRET"), timestamp:)
+
+    assert_difference "WebhookEvent.count", 1 do
+      post api_v1_webhooks_vitable_path,
+        params: payload,
+        headers: signed_headers(timestamp:, signature:),
+        as: :json
+    end
+
+    assert_response :accepted
+    response_payload = JSON.parse(response.body)
+    assert_equal "verified", response_payload.fetch("signature")
+    event = WebhookEvent.find_by!(event_id: payload.fetch(:event_id))
+    assert_equal @connection, event.integration_connection
+    assert_equal @organization.external_id, event.organization_external_id
+    assert_equal "verified", event.metadata.dig("signature_verification", "status")
+  ensure
+    ENV.delete("VITABLE_WEBHOOK_SECRET")
+  end
+
   test "rejects SHA256 webhook signatures when webhook secret is configured" do
     @connection.update!(webhook_secret_reference: "VITABLE_WEBHOOK_SECRET")
     ENV["VITABLE_WEBHOOK_SECRET"] = "whsec_test_value"
