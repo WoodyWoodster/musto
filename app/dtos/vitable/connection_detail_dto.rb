@@ -88,6 +88,7 @@ module Vitable
         operations: %w[employee.retrieve],
         resource_fetch_fragments: %w[/employees/],
         fetch_resource_types: %w[employee],
+        snapshot_count_key: "retrieved_remote_employee_count",
         event_resource_types: %w[employee]
       },
       {

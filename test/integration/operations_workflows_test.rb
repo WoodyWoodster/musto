@@ -3602,6 +3602,93 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     ENV[@connection.api_key_reference] = previous_key
   end
 
+  test "Vitable API snapshot refresh enriches roster employees from detail responses" do
+    response_class = Data.define(:data)
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:list_all_employers) do
+        response_class.new(
+          data: [
+            {
+              id: "empr_ops_123",
+              name: "Ops Employer",
+              reference_id: "musto_employer_#{Employer.find_by!(name: "Ops Employer").id}"
+            }
+          ]
+        )
+      end
+      define_method(:list_all_groups) { response_class.new(data: []) }
+      define_method(:list_all_plans) { response_class.new(data: []) }
+      define_method(:list_all_employer_employees) do |employer_id|
+        response_class.new(
+          data: [
+            {
+              id: "empl_ops_detail",
+              employer_id:,
+              email: "casey@example.com"
+            }
+          ]
+        )
+      end
+      define_method(:retrieve_employee) do |employee_id|
+        response_class.new(
+          data: {
+            id: employee_id,
+            reference_id: "musto_employee_#{Employee.find_by!(email: "casey@example.com").id}",
+            email: "casey@example.com",
+            status: "active",
+            member_id: "mem_ops_detail",
+            deductions: [
+              {
+                id: "ded_ops_detail_dental",
+                benefit_name: "Dental",
+                deduction_amount_in_cents: 4500,
+                frequency: "bi_weekly"
+              }
+            ],
+            access_token: "vit_at_employee_detail_secret"
+          }
+        )
+      end
+      define_method(:list_all_webhook_events) { |**_filters| response_class.new(data: []) }
+      define_method(:list_all_employee_enrollments) { |_employee_id| response_class.new(data: []) }
+    end
+    previous_key = ENV[@connection.api_key_reference]
+    ENV[@connection.api_key_reference] = "vit_apk_test_value"
+
+    result = Vitable::RefreshApiSnapshotCommand.new(
+      dto: Vitable::RefreshApiSnapshotDto.new(connection_id: @connection.id, requested_by: "integration_admin"),
+      gateway_class:
+    ).call
+
+    assert result.success?, result.errors.to_sentence
+    @employee.reload
+    @pending_deduction.reload
+    snapshot = @connection.reload.metadata.fetch("api_snapshot")
+    detail = snapshot.fetch("employee_details").sole
+
+    assert_equal 1, snapshot.dig("counts", "remote_employee_count")
+    assert_equal 1, snapshot.dig("counts", "retrieved_remote_employee_count")
+    assert_equal 0, snapshot.dig("counts", "errored_remote_employee_detail_count")
+    assert_equal 1, snapshot.dig("counts", "mapped_employee_count")
+    assert_equal 1, snapshot.dig("counts", "remote_employee_deduction_changed_count")
+    assert_equal "empl_ops_detail", detail.fetch("remote_employee_id")
+    assert_equal "[FILTERED]", detail.dig("response", "data", "access_token")
+    assert_equal "empl_ops_detail", @employee.vitable_id
+    assert_equal "mem_ops_detail", @employee.metadata.fetch("vitable_member_id")
+    assert_equal "musto_employee_#{@employee.id}", @employee.metadata.fetch("vitable_remote_reference_id")
+    assert_equal "empl_ops_detail", @employee.metadata.dig("vitable_last_resource_snapshot", "id")
+    assert_equal 4500, @pending_deduction.amount_cents
+    assert_equal "ready", @pending_deduction.status
+    assert_not_includes @employee.metadata.to_json, "vit_at_employee_detail_secret"
+
+    dto = Vitable::ConnectionDetailQuery.new.call(@connection.id).api_snapshot
+    assert_equal 1, dto.retrieved_remote_employee_count
+    assert_equal 0, dto.errored_remote_employee_detail_count
+  ensure
+    ENV[@connection.api_key_reference] = previous_key
+  end
+
   test "Vitable API snapshot refresh scopes webhook events to the previous snapshot window" do
     previous_refreshed_at = 3.hours.ago.change(usec: 0)
     @connection.update!(

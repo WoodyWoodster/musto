@@ -69,8 +69,9 @@ module Vitable
         refreshed_at:
       )
       remote_employee_rosters = remote_employee_rosters(gateway, connection, trace:)
+      employee_details = remote_employee_details(gateway, remote_employee_rosters, trace:)
       employee_reconciliation = RemoteEmployeeSnapshotRepository.new(connection:).reconcile_snapshot(
-        snapshot_entries: remote_employee_rosters,
+        snapshot_entries: employee_reconciliation_snapshots(remote_employee_rosters, employee_details),
         source: "vitable_api_snapshot",
         refreshed_at:
       )
@@ -103,6 +104,7 @@ module Vitable
         "webhook_event_query" => webhook_event_query_metadata(webhook_event_query),
         "webhook_events" => webhook_events,
         "remote_employee_rosters" => remote_employee_rosters,
+        "employee_details" => employee_details,
         "employee_reconciliation" => employee_reconciliation.to_metadata,
         "employee_enrollments" => employee_enrollments,
         "enrollment_reconciliation" => enrollment_reconciliation.to_metadata
@@ -351,6 +353,74 @@ module Vitable
           "error_message" => PayloadRedactor.error_message(e)
         }
       end
+    end
+
+    def remote_employee_details(gateway, remote_employee_rosters, trace:)
+      return [] unless gateway.respond_to?(:retrieve_employee)
+
+      remote_employee_ids(remote_employee_rosters).map do |employee_id|
+        response_hash = retrieve_snapshot_resource(
+          trace,
+          step: "employee",
+          response_label: "Vitable employee retrieve response",
+          resource_id: employee_id
+        ) { gateway.retrieve_employee(employee_id) }
+        dto = RemoteResourceResponseDto
+          .from_response(response_hash, resource_type: "employee", resource_id: employee_id)
+          .validate!
+        validate_retrieved_employee!(dto.attributes, expected_remote_id: employee_id)
+
+        {
+          "remote_employee_id" => employee_id,
+          "employee" => dto.attributes,
+          "response" => response_hash
+        }
+      rescue VitableConnect::Errors::NotFoundError => e
+        {
+          "remote_employee_id" => employee_id,
+          "error_class" => e.class.name,
+          "error_message" => PayloadRedactor.error_message(e)
+        }
+      end
+    end
+
+    def employee_reconciliation_snapshots(remote_employee_rosters, employee_details)
+      detail_records_by_id = employee_details.each_with_object({}) do |entry, index|
+        employee = entry.to_h.fetch("employee", nil)
+        next unless employee.respond_to?(:to_h)
+
+        employee = employee.to_h.stringify_keys
+        remote_id = employee.fetch("id", nil).presence
+        index[remote_id] = employee if remote_id.present?
+      end
+
+      remote_employee_rosters.map do |entry|
+        entry = entry.to_h.stringify_keys
+        employees = entry.fetch("employees", []).map do |employee|
+          employee = employee.to_h.stringify_keys
+          remote_id = employee.fetch("id", nil).presence
+          detail = detail_records_by_id.delete(remote_id)
+          detail.present? ? employee.merge(detail.compact) : employee
+        end
+
+        entry.merge("employees" => employees)
+      end
+    end
+
+    def remote_employee_ids(remote_employee_rosters)
+      remote_employee_rosters.flat_map do |entry|
+        entry.to_h.fetch("employees", []).filter_map do |employee|
+          employee.to_h.stringify_keys.fetch("id", nil).presence
+        end
+      end.uniq
+    end
+
+    def validate_retrieved_employee!(remote_employee, expected_remote_id:)
+      remote_id = remote_employee.to_h.stringify_keys.fetch("id", nil).presence
+      raise ArgumentError, "Vitable employee retrieve response did not include a remote employee ID" if remote_id.blank?
+      return if remote_id == expected_remote_id
+
+      raise ArgumentError, "Vitable employee retrieve response returned remote employee ID #{remote_id}, expected #{expected_remote_id}"
     end
 
     def eligibility_policy_snapshots(gateway, connection, trace:)

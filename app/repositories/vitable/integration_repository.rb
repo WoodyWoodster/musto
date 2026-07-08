@@ -1084,6 +1084,8 @@ module Vitable
         "failed_webhook_recovery_count" => snapshot.fetch("webhook_event_recovery", {}).to_h.fetch("failed_count", 0),
         "skipped_webhook_recovery_count" => snapshot.fetch("webhook_event_recovery", {}).to_h.fetch("skipped_count", 0),
         "remote_employee_count" => snapshot.fetch("remote_employee_rosters", []).sum { |entry| entry.to_h.fetch("employees", []).count },
+        "retrieved_remote_employee_count" => snapshot.fetch("employee_details", []).count { |entry| entry.to_h.fetch("employee", nil).present? },
+        "errored_remote_employee_detail_count" => snapshot.fetch("employee_details", []).count { |entry| entry.to_h.fetch("error_class", nil).present? },
         "mapped_employee_count" => employee_reconciliation.fetch("matched_count", 0),
         "unmatched_remote_employee_count" => employee_reconciliation.fetch("unmatched_count", 0),
         "remote_employee_deduction_changed_count" => employee_deduction_sync.fetch("created_count", 0) + employee_deduction_sync.fetch("updated_count", 0),
