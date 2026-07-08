@@ -105,7 +105,7 @@ module Vitable
       assert_equal "elig_policy_123", response.dig(:data, :id)
       request = requests.first
       assert_equal :post, request.fetch(:method)
-      assert_equal "v1/employers/empr_123/benefit-eligibility-policies", request.fetch(:path)
+      assert_equal "/v1/employers/empr_123/benefit-eligibility-policies", request.fetch(:path)
       assert_equal({ classification: "All", waiting_period: "30 days" }, request.fetch(:body))
 
       log = connection.api_request_logs.last

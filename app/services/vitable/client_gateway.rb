@@ -226,7 +226,7 @@ module Vitable
       instrument("employer.eligibility_policy.create", :post, path, request_body: body) do
         client.request(
           method: :post,
-          path: "v1/employers/#{employer_id}/benefit-eligibility-policies",
+          path:,
           body:,
           model: VitableConnect::Internal::Type::Unknown
         )
