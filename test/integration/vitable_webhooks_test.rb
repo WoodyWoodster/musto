@@ -181,6 +181,22 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
   test "employee deactivated webhooks terminate the local HRIS employee" do
     employer = @organization.employers.create!(name: "Deactivation Employer", status: "active")
     employee = employer.employees.create!(first_name: "Dana", last_name: "Inactive", email: "dana.inactive@example.com")
+    plan = employer.benefit_plans.create!(name: "Vitable Care", category: "direct_primary_care", carrier: "Vitable")
+    enrollment = employee.enrollments.create!(benefit_plan: plan, status: "accepted", accepted_at: 1.month.ago)
+    payroll_run = employer.payroll_runs.create!(
+      period_start_on: Date.current.beginning_of_month,
+      period_end_on: Date.current.end_of_month,
+      pay_date: Date.current.end_of_month,
+      gross_pay_cents: 0,
+      status: "estimated"
+    )
+    deduction = payroll_run.payroll_deductions.create!(
+      employee:,
+      enrollment:,
+      code: "VITABLE_CARE",
+      amount_cents: 9900,
+      status: "ready"
+    )
     ENV["VITABLE_CONNECT_API_KEY"] = "vit_apk_test_value"
     gateway_class = Class.new do
       define_method(:initialize) { |_connection| }
@@ -214,7 +230,14 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
     assert_equal "terminated", employee.employment_status
     assert_equal "inactive", employee.metadata.fetch("vitable_remote_status")
     assert_equal "deactivated", employee.metadata.fetch("vitable_lifecycle_status")
+    assert_equal "inactive", enrollment.reload.status
+    assert_nil enrollment.accepted_at
+    assert_equal "inactive", enrollment.metadata.fetch("vitable_lifecycle_status")
+    assert_equal 0, deduction.reload.amount_cents
+    assert_equal "inactive", deduction.status
     assert_includes reconciliation.fetch("applied_changes"), "employment_status"
+    assert_includes reconciliation.fetch("applied_changes"), "enrollments.#{enrollment.id}"
+    assert_includes reconciliation.fetch("applied_changes"), "payroll_deductions.#{deduction.id}"
   ensure
     ENV.delete("VITABLE_CONNECT_API_KEY")
   end

@@ -68,6 +68,7 @@ module Vitable
       applied_changes.concat(metadata_updates.keys.map { |key| "metadata.#{key}" })
       employee.update!(update_attributes)
       applied_changes.concat(apply_employee_payroll_deductions(employee, remote_resource, timestamp))
+      applied_changes.concat(deactivate_employee_benefits(employee, remote_resource, timestamp).applied_changes)
 
       reconciliation_result(status: "matched", remote_resource:, local_record: employee, matched_by:, applied_changes:)
     end
@@ -562,6 +563,17 @@ module Vitable
         reconciled_at: timestamp
       )
       result.changed_ids.map { |id| "payroll_deductions.#{id}" }
+    end
+
+    def deactivate_employee_benefits(employee, remote_resource, timestamp)
+      return EmployeeLifecycleReconciliationDto.empty unless employee_employment_status_for(remote_resource) == "terminated"
+
+      EmployeeEligibilityRepository.new.deactivate_benefits!(
+        employee:,
+        source: "vitable_webhook_resource",
+        source_event: @event,
+        reconciled_at: timestamp
+      )
     end
 
     def reconciliation_result(status:, remote_resource: nil, local_record: nil, matched_by: nil, applied_changes: [], warnings: [])

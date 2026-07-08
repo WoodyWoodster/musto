@@ -30,7 +30,9 @@ module Vitable
     :enrollment_deduction_changed_count,
     :mapped_employee_count,
     :unmatched_remote_employee_count,
-    :remote_employee_deduction_changed_count
+    :remote_employee_deduction_changed_count,
+    :inactive_employee_enrollment_count,
+    :inactive_employee_payroll_deduction_count
   ) do
     def self.from_metadata(metadata)
       payload = metadata.to_h.fetch("api_snapshot", {}).to_h
@@ -69,7 +71,9 @@ module Vitable
         enrollment_deduction_changed_count: counts.fetch("enrollment_deduction_changed_count", 0),
         mapped_employee_count: counts.fetch("mapped_employee_count", employee_enrollments.count),
         unmatched_remote_employee_count: counts.fetch("unmatched_remote_employee_count", 0),
-        remote_employee_deduction_changed_count: counts.fetch("remote_employee_deduction_changed_count", 0)
+        remote_employee_deduction_changed_count: counts.fetch("remote_employee_deduction_changed_count", 0),
+        inactive_employee_enrollment_count: counts.fetch("inactive_employee_enrollment_count", 0),
+        inactive_employee_payroll_deduction_count: counts.fetch("inactive_employee_payroll_deduction_count", 0)
       )
     end
 

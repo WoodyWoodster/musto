@@ -3519,6 +3519,68 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     ENV[@connection.api_key_reference] = previous_key
   end
 
+  test "Vitable API snapshot refresh deactivates local benefits for inactive remote employees" do
+    deduction = @payroll_run.payroll_deductions.find_by!(enrollment: @enrollment)
+    response_class = Data.define(:data)
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:list_all_employers) do
+        response_class.new(
+          data: [
+            {
+              id: "empr_ops_inactive",
+              name: "Ops Employer",
+              reference_id: "musto_employer_#{Employer.find_by!(name: "Ops Employer").id}"
+            }
+          ]
+        )
+      end
+      define_method(:list_all_groups) { response_class.new(data: []) }
+      define_method(:list_all_plans) { response_class.new(data: []) }
+      define_method(:list_all_webhook_events) { response_class.new(data: []) }
+      define_method(:list_all_employer_employees) do |employer_id|
+        response_class.new(
+          data: [
+            {
+              id: "empl_remote_inactive_casey",
+              employer_id:,
+              reference_id: "musto_employee_#{Employee.find_by!(email: "casey@example.com").id}",
+              email: "casey@example.com",
+              status: "inactive"
+            }
+          ]
+        )
+      end
+      define_method(:list_all_employee_enrollments) { |_employee_id| response_class.new(data: []) }
+    end
+    previous_key = ENV[@connection.api_key_reference]
+    ENV[@connection.api_key_reference] = "vit_apk_test_value"
+
+    result = Vitable::RefreshApiSnapshotCommand.new(
+      dto: Vitable::RefreshApiSnapshotDto.new(connection_id: @connection.id, requested_by: "integration_admin"),
+      gateway_class:
+    ).call
+
+    assert result.success?
+    snapshot = @connection.reload.metadata.fetch("api_snapshot")
+
+    assert_equal "terminated", @employee.reload.employment_status
+    assert_equal "inactive", @enrollment.reload.status
+    assert_nil @enrollment.accepted_at
+    assert_equal "inactive", @enrollment.metadata.fetch("vitable_lifecycle_status")
+    assert_equal 0, deduction.reload.amount_cents
+    assert_equal "inactive", deduction.status
+    assert_equal "vitable_api_snapshot", deduction.metadata.fetch("source")
+    assert_equal 3, snapshot.dig("counts", "inactive_employee_enrollment_count")
+    assert_equal 3, snapshot.dig("counts", "inactive_employee_payroll_deduction_count")
+
+    detail = Vitable::ConnectionDetailQuery.new.call(@connection.id)
+    assert_equal 3, detail.api_snapshot.inactive_employee_enrollment_count
+    assert_equal 3, detail.api_snapshot.inactive_employee_payroll_deduction_count
+  ensure
+    ENV[@connection.api_key_reference] = previous_key
+  end
+
   test "refreshes Vitable remote roster as missing credentials sync run without API key" do
     @employer.update!(vitable_id: "empr_ops_123")
 
@@ -3531,6 +3593,48 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal "needs_credentials", sync.status
     assert_match @connection.api_key_reference, sync.error_message
     assert_equal "integration_admin", sync.stats.fetch("requested_by")
+  end
+
+  test "remote roster refresh deactivates local benefits for inactive remote employees" do
+    @employer.update!(vitable_id: "empr_ops_123")
+    deduction = @payroll_run.payroll_deductions.find_by!(enrollment: @enrollment)
+    response_class = Data.define(:data)
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:list_all_employer_employees) do |_employer_id|
+        response_class.new(
+          data: [
+            {
+              id: "empl_remote_inactive_casey",
+              email: "casey@example.com",
+              reference_id: "musto_employee_#{Employee.find_by!(email: "casey@example.com").id}",
+              status: "inactive"
+            }
+          ]
+        )
+      end
+    end
+    previous_key = ENV[@connection.api_key_reference]
+    ENV[@connection.api_key_reference] = "vit_apk_test_value"
+
+    result = Vitable::RefreshRemoteRosterCommand.new(
+      dto: Vitable::RefreshRemoteRosterDto.new(requested_by: "integration_admin"),
+      gateway_class:
+    ).call
+
+    assert result.success?
+    sync = @connection.sync_runs.where(operation: "remote_roster_refresh").recent_first.first
+
+    assert_equal "terminated", @employee.reload.employment_status
+    assert_equal "inactive", @enrollment.reload.status
+    assert_equal 0, deduction.reload.amount_cents
+    assert_equal "inactive", deduction.status
+    assert_equal "vitable_remote_roster", deduction.metadata.fetch("source")
+    assert_equal 3, sync.stats.fetch("inactive_enrollment_count")
+    assert_equal 3, sync.stats.fetch("inactive_payroll_deduction_count")
+    assert_equal 3, @employer.reload.settings.dig("vitable_remote_roster", "lifecycle_reconciliation", "inactive_enrollment_count")
+  ensure
+    ENV[@connection.api_key_reference] = previous_key
   end
 
   test "successful remote roster refresh stores Vitable employee IDs" do

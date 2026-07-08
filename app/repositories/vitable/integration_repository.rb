@@ -624,6 +624,7 @@ module Vitable
       employee_reconciliation = snapshot.fetch("employee_reconciliation", {}).to_h
       enrollment_reconciliation = snapshot.fetch("enrollment_reconciliation", {}).to_h
       employee_deduction_sync = employee_reconciliation.fetch("deduction_sync", {}).to_h
+      employee_lifecycle = employee_reconciliation.fetch("lifecycle_reconciliation", {}).to_h
       deduction_sync = enrollment_reconciliation.fetch("deduction_sync", {}).to_h
 
       {
@@ -648,6 +649,8 @@ module Vitable
         "mapped_employee_count" => employee_reconciliation.fetch("matched_count", 0),
         "unmatched_remote_employee_count" => employee_reconciliation.fetch("unmatched_count", 0),
         "remote_employee_deduction_changed_count" => employee_deduction_sync.fetch("created_count", 0) + employee_deduction_sync.fetch("updated_count", 0),
+        "inactive_employee_enrollment_count" => employee_lifecycle.fetch("inactive_enrollment_count", 0),
+        "inactive_employee_payroll_deduction_count" => employee_lifecycle.fetch("inactive_payroll_deduction_count", 0),
         "remote_employee_enrollment_count" => snapshot.fetch("employee_enrollments", []).sum { |entry| entry.fetch("enrollments", []).count },
         "reconciled_enrollment_count" => enrollment_reconciliation.fetch("matched_count", 0),
         "created_enrollment_count" => enrollment_reconciliation.fetch("created_count", 0),

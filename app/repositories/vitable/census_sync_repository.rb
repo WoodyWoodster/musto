@@ -207,7 +207,8 @@ module Vitable
           "matched_remote_ids" => mapping.fetch("matched_remote_ids"),
           "unmatched_remote_ids" => mapping.fetch("unmatched_remote_ids"),
           "verification_status" => verification.fetch("status"),
-          "deduction_sync" => mapping.fetch("deduction_sync")
+          "deduction_sync" => mapping.fetch("deduction_sync"),
+          "lifecycle_reconciliation" => mapping.fetch("lifecycle_reconciliation")
         }
       }
       settings_update[VERIFICATION_KEY] = verification if latest_submission.present?
@@ -234,7 +235,9 @@ module Vitable
           "missing_submitted_count" => verification.fetch("missing_submitted_count"),
           "deduction_created_count" => mapping.dig("deduction_sync", "created_count"),
           "deduction_updated_count" => mapping.dig("deduction_sync", "updated_count"),
-          "deduction_unchanged_count" => mapping.dig("deduction_sync", "unchanged_count")
+          "deduction_unchanged_count" => mapping.dig("deduction_sync", "unchanged_count"),
+          "inactive_enrollment_count" => mapping.dig("lifecycle_reconciliation", "inactive_enrollment_count"),
+          "inactive_payroll_deduction_count" => mapping.dig("lifecycle_reconciliation", "inactive_payroll_deduction_count")
         )
       )
       sync_run
@@ -381,6 +384,7 @@ module Vitable
       unmatched = []
       matched_employee_ids = []
       deduction_sync = PayrollDeductionSyncResultDto.empty
+      lifecycle_reconciliation = EmployeeLifecycleReconciliationDto.empty
 
       remote_employees.each do |remote_employee|
         employee = employee_for_remote(remote_employee)
@@ -409,6 +413,9 @@ module Vitable
               reconciled_at: refreshed_at
             )
           )
+          lifecycle_reconciliation = lifecycle_reconciliation.merge(
+            deactivate_employee_benefits(employee, remote_employee, refreshed_at:)
+          )
           matched << remote_employee_id
           matched_employee_ids << employee.id
         else
@@ -422,8 +429,19 @@ module Vitable
         "matched_employee_ids" => matched_employee_ids.compact,
         "matched_remote_ids" => matched.compact,
         "unmatched_remote_ids" => unmatched.compact,
-        "deduction_sync" => deduction_sync.to_metadata
+        "deduction_sync" => deduction_sync.to_metadata,
+        "lifecycle_reconciliation" => lifecycle_reconciliation.to_metadata
       }
+    end
+
+    def deactivate_employee_benefits(employee, remote_employee, refreshed_at:)
+      return EmployeeLifecycleReconciliationDto.empty unless employee_employment_status_for(remote_employee) == "terminated"
+
+      EmployeeEligibilityRepository.new.deactivate_benefits!(
+        employee:,
+        source: "vitable_remote_roster",
+        reconciled_at: refreshed_at
+      )
     end
 
     def employee_for_remote(remote_employee)

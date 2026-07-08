@@ -44,13 +44,15 @@ module Vitable
         source:,
         reconciled_at: refreshed_at
       )
+      lifecycle_reconciliation = deactivate_employee_benefits(employee, remote_employee, source:, refreshed_at:)
 
       result.increment(
         processed_count: 1,
         matched_count: 1,
         updated_count: changed ? 1 : 0,
         unchanged_count: changed ? 0 : 1,
-        deduction_sync:
+        deduction_sync:,
+        lifecycle_reconciliation:
       )
     end
 
@@ -110,6 +112,16 @@ module Vitable
       return "active" if normalized.in?(%w[active reactivated])
 
       nil
+    end
+
+    def deactivate_employee_benefits(employee, remote_employee, source:, refreshed_at:)
+      return EmployeeLifecycleReconciliationDto.empty unless employee_employment_status_for(remote_employee) == "terminated"
+
+      EmployeeEligibilityRepository.new.deactivate_benefits!(
+        employee:,
+        source:,
+        reconciled_at: refreshed_at
+      )
     end
 
     def employer_from_reference_id(reference_id)
