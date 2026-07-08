@@ -3191,13 +3191,27 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     gateway_class = Class.new do
       define_method(:initialize) { |_connection| }
       define_method(:create_employer) do |payload|
-        response_class.new(data: { id: "empr_created_123", name: payload.fetch("name") })
+        response_class.new(
+          data: {
+            id: "empr_created_123",
+            name: payload.fetch("name"),
+            access_token: "vit_at_employer_snapshot_secret"
+          }
+        )
       end
       define_method(:update_employer_settings) do |employer_id, pay_frequency|
-        response_class.new(data: { employer_id:, pay_frequency: })
+        response_class.new(data: { employer_id:, pay_frequency:, client_secret: "vit_client_secret_snapshot" })
       end
       define_method(:create_eligibility_policy) do |employer_id, payload|
-        response_class.new(data: { id: "elig_policy_123", employer_id:, classification: payload.fetch("classification"), waiting_period: payload.fetch("waiting_period") })
+        response_class.new(
+          data: {
+            id: "elig_policy_123",
+            employer_id:,
+            classification: payload.fetch("classification"),
+            waiting_period: payload.fetch("waiting_period"),
+            refresh_token: "vit_rt_policy_snapshot_secret"
+          }
+        )
       end
     end
     previous_key = ENV[@connection.api_key_reference]
@@ -3221,6 +3235,12 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal "bi_weekly", sync.stats.dig("remote_response", "settings_response", "data", "pay_frequency")
     assert_equal "remote_submitted", sync.stats.dig("remote_response", "eligibility_policy_submission", "status")
     assert_equal "elig_policy_123", sync.stats.dig("remote_response", "eligibility_policy_submission", "remote_response", "data", "id")
+    assert_equal "[FILTERED]", sync.stats.dig("remote_response", "employer_response", "data", "access_token")
+    assert_equal "[FILTERED]", sync.stats.dig("remote_response", "settings_response", "data", "client_secret")
+    assert_equal "[FILTERED]", sync.stats.dig("remote_response", "eligibility_policy_submission", "remote_response", "data", "refresh_token")
+    assert_not_includes sync.stats.to_json, "vit_at_employer_snapshot_secret"
+    assert_not_includes sync.stats.to_json, "vit_client_secret_snapshot"
+    assert_not_includes @employer.settings.to_json, "vit_rt_policy_snapshot_secret"
   ensure
     ENV[@connection.api_key_reference] = previous_key
   end
@@ -3375,7 +3395,14 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     gateway_class = Class.new do
       define_method(:initialize) { |_connection| }
       define_method(:submit_census_sync) do |employer_id, employees|
-        response_class.new(data: { employer_id:, accepted_at: Time.current, employee_count: employees.count })
+        response_class.new(
+          data: {
+            employer_id:,
+            accepted_at: Time.current,
+            employee_count: employees.count,
+            access_token: "vit_at_census_snapshot_secret"
+          }
+        )
       end
     end
     previous_key = ENV[@connection.api_key_reference]
@@ -3421,7 +3448,14 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     gateway_class = Class.new do
       define_method(:initialize) { |_connection| }
       define_method(:submit_census_sync) do |employer_id, employees|
-        response_class.new(data: { employer_id:, accepted_at: Time.current, employee_count: employees.count })
+        response_class.new(
+          data: {
+            employer_id:,
+            accepted_at: Time.current,
+            employee_count: employees.count,
+            access_token: "vit_at_census_snapshot_secret"
+          }
+        )
       end
     end
     previous_key = ENV[@connection.api_key_reference]
@@ -3446,6 +3480,9 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     detail = Vitable::CensusSyncQuery.new.call
     assert_instance_of Vitable::CensusSyncSubmissionDto, detail.latest_submission
     assert_equal "accepted", detail.latest_submission.status
+    sync = @connection.sync_runs.where(operation: "census_sync").recent_first.first
+    assert_equal "[FILTERED]", sync.stats.dig("remote_response", "data", "access_token")
+    assert_not_includes sync.stats.to_json, "vit_at_census_snapshot_secret"
   ensure
     ENV[@connection.api_key_reference] = previous_key
   end
@@ -3946,7 +3983,14 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     gateway_class = Class.new do
       define_method(:initialize) { |_connection| }
       define_method(:create_group) do |payload|
-        response_class.new(data: { id: "grp_created_123", name: payload.fetch("name"), external_reference_id: payload.fetch("external_reference_id") })
+        response_class.new(
+          data: {
+            id: "grp_created_123",
+            name: payload.fetch("name"),
+            external_reference_id: payload.fetch("external_reference_id"),
+            api_key: "vit_apk_group_snapshot_secret"
+          }
+        )
       end
     end
     previous_key = ENV[@connection.api_key_reference]
@@ -3962,6 +4006,8 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     sync = @connection.sync_runs.where(operation: "care_group_upsert").recent_first.first
     assert_equal "succeeded", sync.status
     assert_equal "grp_created_123", sync.stats.fetch("remote_group_id")
+    assert_equal "[FILTERED]", sync.stats.dig("remote_response", "data", "api_key")
+    assert_not_includes sync.stats.to_json, "vit_apk_group_snapshot_secret"
   ensure
     ENV[@connection.api_key_reference] = previous_key
   end
@@ -4023,7 +4069,15 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     gateway_class = Class.new do
       define_method(:initialize) { |_connection| }
       define_method(:submit_group_member_sync) do |group_id, members|
-        response_class.new(data: { group_id:, request_id: "grpmsr_ops_123", accepted_at: Time.current, member_count: members.count })
+        response_class.new(
+          data: {
+            group_id:,
+            request_id: "grpmsr_ops_123",
+            accepted_at: Time.current,
+            member_count: members.count,
+            access_token: "vit_at_member_sync_snapshot_secret"
+          }
+        )
       end
       define_method(:retrieve_group_member_sync) do |group_id, request_id|
         response_class.new(
@@ -4032,6 +4086,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
             request_id:,
             accepted_at: 1.minute.ago,
             completed_at: Time.current,
+            refresh_token: "vit_rt_member_sync_snapshot_secret",
             results: {
               added_group_member_ids: [ "grpmem_casey" ],
               removed_group_member_ids: [],
@@ -4079,11 +4134,17 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal "failed", failed_employee.reload.metadata.fetch("vitable_care_member_sync_status")
     assert_equal "Plan is not available for this member.", failed_employee.metadata.dig("vitable_care_member_sync_failure", "reason")
     assert_equal "failed", failed_enrollment.reload.metadata.fetch("vitable_care_member_sync_status")
-    assert_equal "succeeded", @connection.sync_runs.where(operation: "care_member_sync_submit").recent_first.first.status
+    submit_sync = @connection.sync_runs.where(operation: "care_member_sync_submit").recent_first.first
+    assert_equal "succeeded", submit_sync.status
+    assert_equal "[FILTERED]", submit_sync.stats.dig("remote_response", "data", "access_token")
     refresh_sync = @connection.sync_runs.where(operation: "care_member_sync_refresh").recent_first.first
     assert_equal "succeeded", refresh_sync.status
     assert_equal 1, refresh_sync.stats.fetch("succeeded_member_count")
     assert_equal 1, refresh_sync.stats.fetch("failed_member_count")
+    assert_equal "[FILTERED]", refresh_sync.stats.dig("remote_response", "data", "refresh_token")
+    assert_not_includes submit_sync.stats.to_json, "vit_at_member_sync_snapshot_secret"
+    assert_not_includes refresh_sync.stats.to_json, "vit_rt_member_sync_snapshot_secret"
+    assert_not_includes @employer.settings.to_json, "vit_rt_member_sync_snapshot_secret"
   ensure
     ENV[@connection.api_key_reference] = previous_key
   end

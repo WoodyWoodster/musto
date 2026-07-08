@@ -357,11 +357,18 @@ module Vitable
     end
 
     def serialize_response(response)
-      return {} if response.blank?
-      return response.deep_to_h.deep_stringify_keys if response.respond_to?(:deep_to_h)
-      return response.to_h.deep_stringify_keys if response.respond_to?(:to_h)
+      serialized =
+        if response.blank?
+          {}
+        elsif response.respond_to?(:deep_to_h)
+          response.deep_to_h
+        elsif response.respond_to?(:to_h)
+          response.to_h
+        else
+          { "value" => response.to_s }
+        end
 
-      { "value" => response.to_s }
+      PayloadRedactor.redact(serialized.deep_stringify_keys)
     end
 
     def page_data(response_hash)
