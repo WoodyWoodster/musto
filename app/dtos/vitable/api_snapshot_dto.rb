@@ -8,6 +8,11 @@ module Vitable
     :imported_webhook_event_count,
     :existing_webhook_event_count,
     :remote_employee_enrollment_count,
+    :reconciled_enrollment_count,
+    :created_enrollment_count,
+    :updated_enrollment_count,
+    :enrollment_missing_plan_count,
+    :enrollment_deduction_changed_count,
     :mapped_employee_count
   ) do
     def self.from_metadata(metadata)
@@ -24,6 +29,11 @@ module Vitable
         imported_webhook_event_count: counts.fetch("imported_webhook_event_count", 0),
         existing_webhook_event_count: counts.fetch("existing_webhook_event_count", 0),
         remote_employee_enrollment_count: counts.fetch("remote_employee_enrollment_count", 0),
+        reconciled_enrollment_count: counts.fetch("reconciled_enrollment_count", 0),
+        created_enrollment_count: counts.fetch("created_enrollment_count", 0),
+        updated_enrollment_count: counts.fetch("updated_enrollment_count", 0),
+        enrollment_missing_plan_count: counts.fetch("enrollment_missing_plan_count", 0),
+        enrollment_deduction_changed_count: counts.fetch("enrollment_deduction_changed_count", 0),
         mapped_employee_count: employee_enrollments.count
       )
     end

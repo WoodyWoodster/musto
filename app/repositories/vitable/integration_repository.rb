@@ -460,6 +460,8 @@ module Vitable
 
     def snapshot_counts(snapshot)
       webhook_ingestion = snapshot.fetch("webhook_event_ingestion", {}).to_h
+      enrollment_reconciliation = snapshot.fetch("enrollment_reconciliation", {}).to_h
+      deduction_sync = enrollment_reconciliation.fetch("deduction_sync", {}).to_h
 
       {
         "remote_employer_count" => snapshot.fetch("employers", []).count,
@@ -467,6 +469,11 @@ module Vitable
         "remote_plan_count" => snapshot.fetch("plans", []).count,
         "remote_webhook_event_count" => snapshot.fetch("webhook_events", []).count,
         "remote_employee_enrollment_count" => snapshot.fetch("employee_enrollments", []).sum { |entry| entry.fetch("enrollments", []).count },
+        "reconciled_enrollment_count" => enrollment_reconciliation.fetch("matched_count", 0),
+        "created_enrollment_count" => enrollment_reconciliation.fetch("created_count", 0),
+        "updated_enrollment_count" => enrollment_reconciliation.fetch("updated_count", 0),
+        "enrollment_missing_plan_count" => enrollment_reconciliation.fetch("missing_plan_count", 0),
+        "enrollment_deduction_changed_count" => deduction_sync.fetch("created_count", 0) + deduction_sync.fetch("updated_count", 0),
         "imported_webhook_event_count" => webhook_ingestion.fetch("created_count", 0),
         "existing_webhook_event_count" => webhook_ingestion.fetch("existing_count", 0)
       }

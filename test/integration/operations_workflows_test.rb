@@ -2837,6 +2837,71 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     ENV[@connection.api_key_reference] = previous_key
   end
 
+  test "Vitable API snapshot refresh reconciles employee enrollments and payroll deductions" do
+    @employee.update!(vitable_id: "empl_ops_casey")
+    @pending_plan.update!(vitable_id: "bprd_remote_dental")
+    answered_at = Time.current.change(usec: 0)
+    coverage_start = Date.current.beginning_of_month
+    response_class = Data.define(:data)
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:list_all_employers) { response_class.new(data: [ { id: "empr_ops_123", name: "Atlas Global Services" } ]) }
+      define_method(:list_all_groups) { response_class.new(data: []) }
+      define_method(:list_all_plans) { response_class.new(data: [ { id: "bprd_remote_dental", name: "Dental" } ]) }
+      define_method(:list_all_webhook_events) { response_class.new(data: []) }
+      define_method(:list_all_employee_enrollments) do |employee_id|
+        response_class.new(
+          data: [
+            {
+              id: "enrl_remote_dental",
+              employee_id:,
+              benefit: { id: "bprd_remote_dental", name: "Dental", category: "Dental" },
+              status: "enrolled",
+              answered_at:,
+              coverage_start:,
+              employee_deduction_in_cents: 4500,
+              employer_contribution_in_cents: 500
+            }
+          ]
+        )
+      end
+    end
+    previous_key = ENV[@connection.api_key_reference]
+    ENV[@connection.api_key_reference] = "vit_apk_test_value"
+
+    result = Vitable::RefreshApiSnapshotCommand.new(
+      dto: Vitable::RefreshApiSnapshotDto.new(connection_id: @connection.id, requested_by: "integration_admin"),
+      gateway_class:
+    ).call
+
+    assert result.success?
+    @pending_enrollment.reload
+    @pending_deduction.reload
+    snapshot = @connection.reload.metadata.fetch("api_snapshot")
+
+    assert_equal "enrl_remote_dental", @pending_enrollment.vitable_id
+    assert_equal "accepted", @pending_enrollment.status
+    assert_equal answered_at.to_i, @pending_enrollment.accepted_at.to_i
+    assert_equal coverage_start, @pending_enrollment.effective_on
+    assert_equal "enrolled", @pending_enrollment.metadata.fetch("vitable_remote_status")
+    assert_equal "bprd_remote_dental", @pending_enrollment.metadata.fetch("vitable_remote_plan_id")
+    assert_equal 4500, @pending_enrollment.metadata.fetch("vitable_employee_deduction_cents")
+    assert_equal 4500, @pending_deduction.amount_cents
+    assert_equal "ready", @pending_deduction.status
+    assert_equal "vitable_api_snapshot", @pending_deduction.metadata.fetch("source")
+    assert_equal "enrl_remote_dental", @pending_deduction.metadata.fetch("raw_payload").fetch("enrollment_id")
+    assert_equal 1, snapshot.dig("counts", "reconciled_enrollment_count")
+    assert_equal 1, snapshot.dig("counts", "updated_enrollment_count")
+    assert_equal 1, snapshot.dig("counts", "enrollment_deduction_changed_count")
+    assert_equal 0, snapshot.dig("counts", "enrollment_missing_plan_count")
+
+    detail = Vitable::ConnectionDetailQuery.new.call(@connection.id)
+    assert_equal 1, detail.api_snapshot.reconciled_enrollment_count
+    assert_equal 1, detail.api_snapshot.enrollment_deduction_changed_count
+  ensure
+    ENV[@connection.api_key_reference] = previous_key
+  end
+
   test "vitable employer provisioning workspace exposes packet DTOs" do
     prepare_provisioning_profile
     Vitable::GenerateEmployerProvisioningCommand.new(dto: Vitable::GenerateEmployerProvisioningDto.new(requested_by: "ops_test")).call

@@ -35,6 +35,12 @@ module Vitable
 
     def build_snapshot(connection)
       gateway = @gateway_class.new(connection)
+      employee_enrollments = employee_enrollment_snapshot(gateway, connection)
+      enrollment_reconciliation = EnrollmentSnapshotRepository.new(connection:).reconcile_snapshot(
+        snapshot_entries: employee_enrollments,
+        source: "vitable_api_snapshot",
+        refreshed_at: Time.current.iso8601
+      )
 
       {
         "requested_by" => @dto.requested_by,
@@ -42,7 +48,8 @@ module Vitable
         "groups" => page_data(gateway.list_all_groups),
         "plans" => page_data(gateway.list_all_plans),
         "webhook_events" => page_data(gateway.list_all_webhook_events),
-        "employee_enrollments" => employee_enrollment_snapshot(gateway, connection)
+        "employee_enrollments" => employee_enrollments,
+        "enrollment_reconciliation" => enrollment_reconciliation.to_metadata
       }
     end
 
