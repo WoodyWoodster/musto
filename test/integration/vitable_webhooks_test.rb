@@ -538,6 +538,97 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
     ENV.delete("VITABLE_CONNECT_API_KEY")
   end
 
+  test "reconciles nested payroll deduction payload-only webhooks" do
+    employer = @organization.employers.create!(name: "Nested Payroll Deduction Employer", status: "active")
+    employee = employer.employees.create!(
+      first_name: "Jordan",
+      last_name: "Nested",
+      email: "jordan.nested-deduction@example.com",
+      vitable_id: "empl_nested_jordan"
+    )
+    plan = employer.benefit_plans.create!(
+      name: "Primary Care",
+      carrier: "Vitable",
+      category: "direct_primary_care",
+      monthly_premium_cents: 9_900,
+      vitable_id: "plan_nested_primary"
+    )
+    enrollment = employee.enrollments.create!(
+      benefit_plan: plan,
+      status: "accepted",
+      effective_on: Date.current,
+      vitable_id: "enrl_nested_primary"
+    )
+    gateway_class = Class.new do
+      def self.retrievable_resource_type?(_resource_type)
+        false
+      end
+
+      def self.webhook_resource_type?(resource_type)
+        resource_type == "payroll_deduction"
+      end
+
+      def self.payload_only_webhook_resource_type?(resource_type)
+        resource_type == "payroll_deduction"
+      end
+
+      define_method(:initialize) { |_connection| }
+      define_method(:fetch_resource) { |_resource_type, _resource_id| raise "gateway should not fetch payload-only resources" }
+    end
+
+    result = Vitable::ProcessWebhookCommand.new(
+      payload: webhook_payload.merge(
+        event_id: "wevt_test_nested_payroll_deduction_payload_only",
+        event_name: "employee.deduction_created",
+        resource_type: "payroll_deduction",
+        resource_id: "pded_nested_primary",
+        data: {
+          employee: {
+            id: "empl_nested_jordan",
+            email: "jordan.nested-deduction@example.com"
+          },
+          payroll_deduction: {
+            enrollment_id: "enrl_nested_primary",
+            benefit: {
+              id: "plan_nested_primary",
+              name: "Primary Care",
+              category: "Medical"
+            },
+            deduction_amount_in_cents: 8_800,
+            frequency: "monthly",
+            period_start_on: "2026-07-01",
+            period_end_on: "2026-07-31",
+            tax_treatment: "Pre-tax",
+            status: "active"
+          }
+        }
+      ),
+      gateway_class:
+    ).call
+
+    assert result.success?
+    assert_equal "payload_only", result.value
+
+    event = WebhookEvent.find_by!(event_id: "wevt_test_nested_payroll_deduction_payload_only")
+    reconciliation = event.metadata.fetch("resource_reconciliation")
+    deduction = employer.payroll_runs.sole.payroll_deductions.sole
+
+    assert_equal "processed", event.status
+    assert_equal "matched", reconciliation.fetch("status")
+    assert_equal "remote_employee_id", reconciliation.fetch("matched_by")
+    assert_equal employee.id, reconciliation.fetch("local_record_id")
+    assert_equal enrollment.id, deduction.enrollment_id
+    assert_equal "pded_nested_primary", deduction.vitable_id
+    assert_equal "VITABLE_PRIMARY_CARE", deduction.code
+    assert_equal 8_800, deduction.amount_cents
+    assert_equal "ready", deduction.status
+    assert_equal "monthly", deduction.metadata.fetch("frequency")
+    assert_equal "2026-07-01", deduction.metadata.fetch("period_start_on")
+    assert_equal "2026-07-31", deduction.metadata.fetch("period_end_on")
+    assert_equal "Pre-tax", deduction.metadata.fetch("tax_classification")
+    assert_includes reconciliation.fetch("applied_changes"), "payroll_deductions.#{deduction.id}"
+  end
+
   test "reconciles payload-only webhooks without an API key" do
     employer = @organization.employers.create!(name: "Credentialless Dependent Employer", status: "active")
     employee = employer.employees.create!(

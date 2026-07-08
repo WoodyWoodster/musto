@@ -12,22 +12,44 @@ module Vitable
     :raw_payload
   ) do
     def self.from_hash(payload)
-      attributes = payload.to_h.stringify_keys
-      amount = attributes.fetch("deduction_amount_in_cents", nil).presence ||
-        attributes.fetch("amount_cents", nil).presence ||
-        attributes.fetch("employee_deduction_in_cents", nil).presence
+      attributes = resource_payload(payload.respond_to?(:to_h) ? payload.to_h.stringify_keys : {})
+      benefit = nested_payload(attributes, "benefit")
+      plan = nested_payload(attributes, "plan")
+      enrollment = nested_payload(attributes, "enrollment")
+      enrollment_benefit = nested_payload(enrollment, "benefit")
+      amount = first_present(
+        attributes["deduction_amount_in_cents"],
+        attributes["amount_cents"],
+        attributes["employee_deduction_in_cents"],
+        attributes["amount_in_cents"]
+      )
+      remote_id = first_present(attributes["id"], attributes["deduction_id"], attributes["payroll_deduction_id"])
+      benefit_name = first_present(attributes["benefit_name"], attributes["name"], benefit["name"], plan["name"], enrollment_benefit["name"])
+      category = first_present(attributes["deduction_category"], attributes["category"], benefit["category"], plan["category"], enrollment_benefit["category"])
+      period_start = first_present(attributes["period_start_date"], attributes["period_start_on"], attributes["statement_period_start"], attributes["pay_period_start"])
+      period_end = first_present(attributes["period_end_date"], attributes["period_end_on"], attributes["statement_period_end"], attributes["pay_period_end"])
+      amount_cents = amount.to_i
+      period_start_on = parse_date(period_start)
+      period_end_on = parse_date(period_end)
 
       new(
-        remote_id: attributes.fetch("id", nil).presence || attributes.fetch("deduction_id", nil).presence,
-        benefit_name: attributes.fetch("benefit_name", nil).presence || attributes.fetch("name", nil).presence,
-        category: attributes.fetch("deduction_category", nil).presence || attributes.fetch("category", nil).presence,
-        amount_cents: amount.to_i,
-        frequency: attributes.fetch("frequency", nil),
-        period_start_on: parse_date(attributes.fetch("period_start_date", nil).presence || attributes.fetch("period_start_on", nil).presence),
-        period_end_on: parse_date(attributes.fetch("period_end_date", nil).presence || attributes.fetch("period_end_on", nil).presence),
-        tax_classification: attributes.fetch("tax_classification", nil),
-        remote_status: attributes.fetch("status", nil),
-        raw_payload: attributes
+        remote_id:,
+        benefit_name:,
+        category:,
+        amount_cents:,
+        frequency: first_present(attributes["frequency"], attributes["deduction_frequency"]),
+        period_start_on:,
+        period_end_on:,
+        tax_classification: first_present(attributes["tax_classification"], attributes["tax_treatment"]),
+        remote_status: first_present(attributes["status"], attributes["deduction_status"]),
+        raw_payload: attributes.merge(
+          "id" => remote_id,
+          "deduction_amount_in_cents" => amount_cents,
+          "benefit_name" => benefit_name,
+          "deduction_category" => category,
+          "period_start_date" => period_start_on&.iso8601,
+          "period_end_date" => period_end_on&.iso8601
+        ).compact
       )
     end
 
@@ -73,6 +95,30 @@ module Vitable
       nil
     end
 
-    private_class_method :parse_date
+    def self.resource_payload(attributes)
+      %w[
+        data
+        payroll_deduction
+        payrollDeduction
+        employee_deduction
+        deduction
+        resource
+        object
+      ].reduce(attributes) do |payload, key|
+        value = payload[key]
+        !value.nil? && value.respond_to?(:to_h) ? value.to_h.stringify_keys : payload
+      end
+    end
+
+    def self.nested_payload(attributes, key)
+      value = attributes[key]
+      value.respond_to?(:to_h) ? value.to_h.stringify_keys : {}
+    end
+
+    def self.first_present(*values)
+      values.compact_blank.first
+    end
+
+    private_class_method :parse_date, :resource_payload, :nested_payload, :first_present
   end
 end
