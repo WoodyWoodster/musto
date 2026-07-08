@@ -50,6 +50,50 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
     assert_response :accepted
   end
 
+  test "unprocessed duplicate webhook deliveries refresh the latest payload before retry processing" do
+    first_payload = webhook_payload.merge(
+      event_id: "wevt_test_retry_refresh",
+      resource_id: "enrl_stale"
+    )
+    first_result = Vitable::ProcessWebhookCommand.new(payload: first_payload).call
+
+    assert first_result.success?
+    event = WebhookEvent.find_by!(event_id: "wevt_test_retry_refresh")
+    assert_equal "needs_credentials", event.status
+    assert_equal "enrl_stale", event.resource_id
+
+    ENV["VITABLE_CONNECT_API_KEY"] = "vit_apk_test_value"
+    fetched_resource_ids = []
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:fetch_resource) do |_resource_type, resource_id|
+        fetched_resource_ids << resource_id
+        {
+          data: {
+            id: resource_id,
+            employee_id: "empl_current",
+            benefit: {
+              id: "bprd_current",
+              name: "Primary Care"
+            },
+            status: "accepted"
+          }
+        }
+      end
+    end
+
+    retry_payload = first_payload.merge(resource_id: "enrl_current")
+    retry_result = Vitable::ProcessWebhookCommand.new(payload: retry_payload, gateway_class:).call
+
+    assert retry_result.success?
+    assert_equal [ "enrl_current" ], fetched_resource_ids
+    assert_equal "processed", event.reload.status
+    assert_equal "enrl_current", event.resource_id
+    assert_equal "enrl_current", event.payload.fetch("resource_id")
+  ensure
+    ENV.delete("VITABLE_CONNECT_API_KEY")
+  end
+
   test "direct resource fetches record missing credentials before gateway calls" do
     gateway_class = Class.new do
       define_method(:initialize) { |_connection| }

@@ -69,7 +69,7 @@ module Vitable
     def persist_event(dto, connection, signature_verification: nil)
       existing_event = find_event(dto.event_id)
       if existing_event
-        existing_event.update!(existing_event_attributes(existing_event, connection, signature_verification))
+        existing_event.update!(existing_event_attributes(existing_event, dto, connection, signature_verification))
         return existing_event
       end
 
@@ -663,8 +663,9 @@ module Vitable
       connection
     end
 
-    def existing_event_attributes(event, connection, signature_verification)
+    def existing_event_attributes(event, dto, connection, signature_verification)
       attributes = { metadata: event_metadata(event.metadata, signature_verification) }
+      attributes.merge!(dto.to_event_attributes.except(:event_id)) unless event.processed?
       attributes[:integration_connection] = connection if event.integration_connection.blank? && connection.present?
       attributes
     end
