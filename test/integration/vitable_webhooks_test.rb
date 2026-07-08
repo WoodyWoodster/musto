@@ -867,6 +867,75 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
     ENV.delete("VITABLE_CONNECT_API_KEY")
   end
 
+  test "reconciles nested dependent payload-only webhook envelopes" do
+    employer = @organization.employers.create!(name: "Nested Dependent Payload Employer", status: "active")
+    employee = employer.employees.create!(
+      first_name: "Casey",
+      last_name: "NestedDependents",
+      email: "casey.nesteddependents@example.com",
+      vitable_id: "empl_nested_dependent_casey"
+    )
+    ENV["VITABLE_CONNECT_API_KEY"] = "vit_apk_test_value"
+    gateway_class = Class.new do
+      def self.retrievable_resource_type?(_resource_type)
+        false
+      end
+
+      def self.webhook_resource_type?(resource_type)
+        resource_type == "dependent"
+      end
+
+      def self.payload_only_webhook_resource_type?(resource_type)
+        resource_type == "dependent"
+      end
+
+      define_method(:initialize) { |_connection| }
+      define_method(:fetch_resource) { |_resource_type, _resource_id| raise "gateway should not fetch payload-only resources" }
+    end
+
+    result = Vitable::ProcessWebhookCommand.new(
+      payload: webhook_payload.merge(
+        event_id: "wevt_test_nested_dependent_payload_only",
+        event_name: "dependent.updated",
+        resource_type: "dependent",
+        resource_id: "dep_nested_payload",
+        data: {
+          employee: {
+            id: "empl_nested_dependent_casey"
+          },
+          dependent: {
+            first_name: "Rowan",
+            last_name: "NestedDependents",
+            relationship_type: "child",
+            dob: "2020-05-06",
+            status: "active",
+            verification_status: "verified"
+          }
+        }
+      ),
+      gateway_class:
+    ).call
+
+    assert result.success?
+    assert_equal "payload_only", result.value
+
+    event = WebhookEvent.find_by!(event_id: "wevt_test_nested_dependent_payload_only")
+    reconciliation = event.metadata.fetch("resource_reconciliation")
+    dependent = employee.dependents.sole
+
+    assert_equal "processed", event.status
+    assert_equal "matched", reconciliation.fetch("status")
+    assert_equal dependent.id, reconciliation.fetch("local_record_id")
+    assert_equal "dep_nested_payload", dependent.vitable_id
+    assert_equal "Rowan", dependent.first_name
+    assert_equal "child", dependent.relationship
+    assert_equal Date.new(2020, 5, 6), dependent.date_of_birth
+    assert_equal "enrolled", dependent.enrollment_status
+    assert_equal "eligible", dependent.eligibility_status
+  ensure
+    ENV.delete("VITABLE_CONNECT_API_KEY")
+  end
+
   test "matches dependent payload-only webhooks by employee email case insensitively" do
     employer = @organization.employers.create!(name: "Dependent Email Match Employer", status: "active")
     employee = employer.employees.create!(

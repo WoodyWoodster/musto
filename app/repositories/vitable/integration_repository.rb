@@ -770,14 +770,10 @@ module Vitable
     end
 
     def dependent_payload(event)
-      payload = event.payload.to_h.stringify_keys
-      resource_payload = %w[data resource object].lazy.filter_map do |key|
-        value = payload.fetch(key, nil)
-        value.to_h.stringify_keys if !value.nil? && value.respond_to?(:to_h)
-      end.first || payload
+      payload = RemoteDependentDto.normalized_payload(event.payload)
 
-      resource_payload.merge(
-        "id" => resource_payload.fetch("id", nil).presence || event.resource_id
+      payload.merge(
+        "id" => payload.fetch("id", nil).presence || event.resource_id
       )
     end
 

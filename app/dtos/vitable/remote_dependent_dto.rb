@@ -11,8 +11,11 @@ module Vitable
     :eligibility_status,
     :raw_payload
   ) do
+    RESOURCE_ENVELOPE_KEYS = %w[data dependent resource object].freeze
+    CONTEXT_KEYS = %w[employee employee_id subscriber_id employee_reference_id employee_email].freeze
+
     def self.from_hash(payload)
-      attributes = payload.respond_to?(:to_h) ? payload.to_h.stringify_keys : {}
+      attributes = normalized_payload(payload)
       employee = nested_payload(attributes, "employee")
 
       new(
@@ -27,6 +30,12 @@ module Vitable
         eligibility_status: eligibility_status_for(first_present(attributes["eligibility_status"], attributes["verification_status"], attributes["status"])),
         raw_payload: attributes
       )
+    end
+
+    def self.normalized_payload(payload)
+      attributes = payload.respond_to?(:to_h) ? payload.to_h.stringify_keys : {}
+
+      resource_payload(attributes)
     end
 
     def missing_required_fields(existing: nil)
@@ -88,8 +97,25 @@ module Vitable
     end
 
     def self.nested_payload(attributes, key)
-      value = attributes.fetch(key, {})
-      value.respond_to?(:to_h) ? value.to_h.stringify_keys : {}
+      value = attributes.fetch(key, nil)
+      return {} if value.blank? || !value.respond_to?(:to_h)
+
+      value.to_h.stringify_keys
+    end
+
+    def self.resource_payload(attributes)
+      RESOURCE_ENVELOPE_KEYS.reduce(attributes) do |payload, key|
+        value = payload.fetch(key, nil)
+        if value.present? && value.respond_to?(:to_h)
+          merge_context(value.to_h.stringify_keys, payload)
+        else
+          payload
+        end
+      end
+    end
+
+    def self.merge_context(resource, parent)
+      parent.slice(*CONTEXT_KEYS).merge(resource)
     end
 
     def self.date_from(value)
@@ -125,6 +151,6 @@ module Vitable
       values.compact_blank.first
     end
 
-    private_class_method :nested_payload, :date_from, :enrollment_status_for, :eligibility_status_for, :first_present
+    private_class_method :nested_payload, :resource_payload, :merge_context, :date_from, :enrollment_status_for, :eligibility_status_for, :first_present
   end
 end
