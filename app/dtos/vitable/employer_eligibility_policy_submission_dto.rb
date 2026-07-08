@@ -36,7 +36,7 @@ module Vitable
         remote_response: {},
         submitted_at:,
         error_class: error.class.name,
-        error_message: error.message
+        error_message: PayloadRedactor.error_message(error)
       )
     end
 

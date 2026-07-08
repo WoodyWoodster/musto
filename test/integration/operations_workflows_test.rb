@@ -4099,7 +4099,11 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
           url: URI("https://api.demo.vitablehealth.com/v1/employers/empr_ops_123/benefit-eligibility-policies"),
           status: 422,
           headers: {},
-          body: { error: "active policy already exists" },
+          body: {
+            error: "active policy already exists",
+            api_key: "vit_apk_duplicate_policy_secret",
+            details: [ { access_token: "vit_at_duplicate_policy_secret" } ]
+          },
           request: nil,
           response: nil
         )
@@ -4115,9 +4119,18 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
 
     assert result.success?
     sync = @connection.sync_runs.where(operation: "employer_settings_update").recent_first.first
+    submission = sync.stats.dig("remote_response", "eligibility_policy_submission")
+    error_payload = JSON.parse(submission.fetch("error_message").split(": ", 2).last)
+
     assert_equal "succeeded", sync.status
-    assert_equal "remote_existing", sync.stats.dig("remote_response", "eligibility_policy_submission", "status")
+    assert_equal "remote_existing", submission.fetch("status")
+    assert_equal "[FILTERED]", error_payload.fetch("api_key")
+    assert_equal "[FILTERED]", error_payload.dig("details", 0, "access_token")
+    assert_not_includes sync.stats.to_json, "vit_apk_duplicate_policy_secret"
+    assert_not_includes sync.stats.to_json, "vit_at_duplicate_policy_secret"
     assert_equal "remote_existing", @employer.reload.settings.dig("vitable_eligibility_policy", "source")
+    assert_not_includes @employer.settings.to_json, "vit_apk_duplicate_policy_secret"
+    assert_not_includes @employer.settings.to_json, "vit_at_duplicate_policy_secret"
   ensure
     ENV[@connection.api_key_reference] = previous_key
   end
