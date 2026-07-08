@@ -47,5 +47,42 @@ module Vitable
       assert_equal 43, embedded.sync_run_id
       assert_equal 3_600, embedded.expires_in
     end
+
+    test "token response DTOs reject non-integer expiry values" do
+      issued_at = Time.current
+      response = {
+        "data" => {
+          "access_token" => "vit_at_wrapped_session",
+          "expires_in" => "3600abc",
+          "token_type" => "Bearer",
+          "bound_entity" => { "type" => "employee", "id" => "empl_wrapped" }
+        }
+      }
+
+      widget = WidgetTokenResponseDto.from_response(response, issued_at:)
+      admin = AdminSessionIssuanceDto.from_response(response, issued_at:, sync_run_id: 42)
+      embedded = EmbeddedSessionIssuanceDto.from_response(response, issued_at:, sync_run_id: 43)
+      verification = RemoteAccessTokenResponseDto.from_response(response)
+
+      error = assert_raises(ArgumentError) do
+        widget.validate!(expected_type: "employee", expected_id: "empl_wrapped")
+      end
+      assert_match "invalid expires_in 3600abc", error.message
+
+      error = assert_raises(ArgumentError) do
+        admin.validate!(expected_type: "employee", expected_id: "empl_wrapped")
+      end
+      assert_match "invalid expires_in 3600abc", error.message
+
+      error = assert_raises(ArgumentError) do
+        embedded.validate!(expected_type: "employee", expected_id: "empl_wrapped")
+      end
+      assert_match "invalid expires_in 3600abc", error.message
+
+      error = assert_raises(ArgumentError) do
+        verification.validate!
+      end
+      assert_match "invalid expires_in 3600abc", error.message
+    end
   end
 end

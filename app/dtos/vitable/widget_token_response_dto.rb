@@ -48,7 +48,9 @@ module Vitable
     def validate!(expected_type:, expected_id:, response_label: "Vitable widget token response")
       raise ArgumentError, "#{response_label} did not include an access token" if access_token.blank?
       raise ArgumentError, "#{response_label} did not include expires_in" if expires_in.blank?
-      raise ArgumentError, "#{response_label} returned invalid expires_in #{expires_in}" unless expires_in.to_i.positive?
+      unless ApplicationDto.strict_positive_integer?(expires_in)
+        raise ArgumentError, "#{response_label} returned invalid expires_in #{expires_in}"
+      end
       raise ArgumentError, "#{response_label} did not include token_type" if token_type.blank?
       raise ArgumentError, "#{response_label} returned token_type #{token_type}, expected Bearer" unless token_type.to_s.casecmp("Bearer").zero?
       raise ArgumentError, "#{response_label} did not include bound_entity" if bound_entity.blank?
