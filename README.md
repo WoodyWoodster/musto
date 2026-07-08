@@ -100,7 +100,7 @@ curl -X POST http://localhost:3000/api/v1/webhooks/vitable \
   }'
 ```
 
-Without `VITABLE_CONNECT_API_KEY`, the event is accepted and marked `needs_credentials`.
+Without `VITABLE_CONNECT_API_KEY`, the event is accepted and marked `needs_credentials`. If `VITABLE_WEBHOOK_SECRET` is configured, send a valid HMAC-SHA512 `X-Vitable-Signature` header with the webhook request.
 
 ## Verification
 

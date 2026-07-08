@@ -12,7 +12,7 @@ connection = organization.integration_connections.find_by(provider: "vitable", e
 connection.assign_attributes(
   environment: "demo",
   api_key_reference: "VITABLE_CONNECT_API_KEY",
-  webhook_secret_reference: "VITABLE_WEBHOOK_SECRET",
+  webhook_secret_reference: ENV["VITABLE_WEBHOOK_SECRET"].present? ? "VITABLE_WEBHOOK_SECRET" : nil,
   status: ENV["VITABLE_CONNECT_API_KEY"].present? ? "active" : "needs_credentials",
   metadata: {
     docs: "https://developer.vitablehealth.com/",
@@ -1243,7 +1243,11 @@ workers_comp_policy.save!
   [ employees.second, "WC-CLAIM-1048", Date.current - 24.days, Date.current - 23.days, "accepted", "lost_time", "strain", "Lower back", "Retail lead reported a lifting injury while closing floor inventory.", 4, 8_500_00, 1_250_00, nil ],
   [ employees.last, nil, Date.current - 6.days, Date.current - 5.days, "reported", "medical_only", "burn", "Hand", "Client support associate reported a minor burn during facilities prep.", 0, 1_200_00, 175_00, Date.current + 2.days ]
 ].each do |employee, claim_number, incident_on, reported_on, status, severity, injury_type, body_part, description, lost_time_days, reserve_cents, paid_cents, return_to_work_on|
-  claim = workers_comp_policy.workers_comp_claims.find_or_initialize_by(employee:, incident_on:)
+  claim = if claim_number.present?
+    workers_comp_policy.workers_comp_claims.find_or_initialize_by(claim_number:)
+  else
+    workers_comp_policy.workers_comp_claims.find_or_initialize_by(employee:, incident_on:)
+  end
   claim.assign_attributes(
     employer:,
     claim_number:,
