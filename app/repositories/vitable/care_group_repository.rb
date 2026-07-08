@@ -298,6 +298,38 @@ module Vitable
       sync_run
     end
 
+    def reconcile_member_sync_snapshot(response, refreshed_at: Time.current)
+      response_hash = serialize_response(response)
+      previous = latest_member_sync_request.to_h.stringify_keys
+      expected_group_id = remote_group_id.presence || previous.fetch("group_id", nil).presence
+      dto = RemoteCareMemberSyncResponseDto
+        .from_hash(response_hash)
+        .validate_refresh!(
+          expected_group_id:,
+          expected_request_id: previous.fetch("request_id", nil)
+        )
+      data = dto.raw_payload
+      results = member_sync_results(data)
+      reconciliation = reconcile_member_sync_results(data, results:)
+      request_state = previous.merge(
+        dto.to_request_state(refreshed_at:).merge(
+          "source" => "vitable_api_snapshot",
+          "reconciliation" => reconciliation.to_h
+        )
+      )
+
+      merge_settings(MEMBER_SYNC_REQUEST_KEY => request_state)
+
+      {
+        "request_state" => request_state,
+        "reconciliation" => reconciliation.to_h,
+        "response" => response_hash,
+        "status" => request_state.fetch("status", nil),
+        "succeeded_member_count" => reconciliation.succeeded_count,
+        "failed_member_count" => reconciliation.failed_count
+      }
+    end
+
     def mark_failed(sync_run, error, response: nil)
       return unless sync_run
 

@@ -1059,6 +1059,7 @@ module Vitable
       employee_lifecycle = employee_reconciliation.fetch("lifecycle_reconciliation", {}).to_h
       deduction_sync = enrollment_reconciliation.fetch("deduction_sync", {}).to_h
       webhook_resource_counts = webhook_event_resource_counts(snapshot.fetch("webhook_events", []))
+      care_member_sync_requests = snapshot.fetch("care_member_sync_requests", [])
 
       {
         "remote_employer_count" => snapshot.fetch("employers", []).count,
@@ -1073,6 +1074,11 @@ module Vitable
         "mapped_group_count" => group_reconciliation.fetch("matched_count", 0),
         "unmatched_remote_group_count" => group_reconciliation.fetch("unmatched_count", 0),
         "conflicting_remote_group_count" => group_reconciliation.fetch("conflict_count", 0),
+        "remote_care_member_sync_count" => care_member_sync_requests.count { |entry| entry.to_h.fetch("member_sync", nil).present? },
+        "errored_remote_care_member_sync_count" => care_member_sync_requests.count { |entry| entry.to_h.fetch("error_class", nil).present? },
+        "completed_care_member_sync_count" => care_member_sync_requests.count { |entry| completed_care_member_sync?(entry) },
+        "succeeded_care_member_sync_member_count" => care_member_sync_requests.sum { |entry| entry.to_h.dig("reconciliation", "succeeded_count").to_i },
+        "failed_care_member_sync_member_count" => care_member_sync_requests.sum { |entry| entry.to_h.dig("reconciliation", "failed_count").to_i },
         "remote_plan_count" => snapshot.fetch("plans", []).count,
         "mapped_plan_count" => plan_reconciliation.sum { |entry| entry.to_h.fetch("mapped_plan_count", 0) },
         "unmatched_remote_plan_count" => plan_reconciliation.sum { |entry| entry.to_h.fetch("unmatched_remote_count", 0) },
@@ -1113,6 +1119,12 @@ module Vitable
         "imported_webhook_event_count" => webhook_ingestion.fetch("created_count", 0),
         "existing_webhook_event_count" => webhook_ingestion.fetch("existing_count", 0)
       }
+    end
+
+    def completed_care_member_sync?(entry)
+      attributes = entry.to_h
+      attributes.dig("member_sync", "completed_at").present? ||
+        attributes.dig("reconciliation", "status") == "complete"
     end
 
     def apply_remote_webhook_delivery_snapshots(connection, delivery_entries, refreshed_at:)

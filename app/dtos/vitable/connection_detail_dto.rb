@@ -132,7 +132,8 @@ module Vitable
         method: "POST/GET",
         fetch_path: "/v1/groups/:id/members/sync",
         operations: %w[group.member_sync.submit group.member_sync.retrieve],
-        sync_operations: %w[care_member_sync_submit care_member_sync_refresh]
+        sync_operations: %w[care_member_sync_submit care_member_sync_refresh],
+        snapshot_count_key: "remote_care_member_sync_count"
       },
       {
         resource_type: "webhook events",

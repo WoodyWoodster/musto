@@ -3606,6 +3606,84 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     ENV[@connection.api_key_reference] = previous_key
   end
 
+  test "Vitable API snapshot refresh mirrors care member sync request status" do
+    prepare_care_group_profile(remote_group_id: "grp_ops_members", remote_plan_id: "plan_remote_primary")
+    Vitable::GenerateCareMemberSyncCommand.new(dto: Vitable::GenerateCareMemberSyncDto.new(requested_by: "ops_test")).call
+    @employer.reload.update!(
+      settings: @employer.settings.to_h.merge(
+        "vitable_care_member_sync_last_request" => {
+          "request_id" => "grpmsr_ops_snapshot",
+          "group_id" => "grp_ops_members",
+          "accepted_at" => 10.minutes.ago.iso8601,
+          "status" => "processing"
+        }
+      )
+    )
+    response_class = Data.define(:data)
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:list_all_employers) { response_class.new(data: []) }
+      define_method(:list_all_groups) { response_class.new(data: []) }
+      define_method(:list_all_plans) { response_class.new(data: []) }
+      define_method(:list_all_webhook_events) { |**_filters| response_class.new(data: []) }
+      define_method(:retrieve_group_member_sync) do |group_id, request_id|
+        response_class.new(
+          data: {
+            request_id:,
+            group_id:,
+            accepted_at: 10.minutes.ago.iso8601,
+            completed_at: Time.current.iso8601,
+            results: {
+              added_group_member_ids: [ "gmem_casey" ],
+              removed_group_member_ids: [],
+              failures: []
+            },
+            access_token: "vit_at_member_sync_secret"
+          }
+        )
+      end
+    end
+    previous_key = ENV[@connection.api_key_reference]
+    ENV[@connection.api_key_reference] = "vit_apk_test_value"
+
+    result = Vitable::RefreshApiSnapshotCommand.new(
+      dto: Vitable::RefreshApiSnapshotDto.new(connection_id: @connection.id, requested_by: "integration_admin"),
+      gateway_class:
+    ).call
+
+    assert result.success?, result.errors.to_sentence
+    snapshot = @connection.reload.metadata.fetch("api_snapshot")
+    member_sync = snapshot.fetch("care_member_sync_requests").sole
+
+    assert_equal 1, snapshot.dig("counts", "remote_care_member_sync_count")
+    assert_equal 0, snapshot.dig("counts", "errored_remote_care_member_sync_count")
+    assert_equal 1, snapshot.dig("counts", "completed_care_member_sync_count")
+    assert_equal 1, snapshot.dig("counts", "succeeded_care_member_sync_member_count")
+    assert_equal 0, snapshot.dig("counts", "failed_care_member_sync_member_count")
+    assert_equal "grp_ops_members", member_sync.fetch("remote_group_id")
+    assert_equal "grpmsr_ops_snapshot", member_sync.fetch("remote_request_id")
+    assert_equal "complete", member_sync.dig("reconciliation", "status")
+    assert_equal "[FILTERED]", member_sync.dig("response", "data", "access_token")
+
+    request = @employer.reload.settings.fetch("vitable_care_member_sync_last_request")
+    assert_equal "complete", request.fetch("status")
+    assert_equal "vitable_api_snapshot", request.fetch("source")
+    assert_equal "complete", request.dig("reconciliation", "status")
+    assert_equal "succeeded", @employee.reload.metadata.fetch("vitable_care_member_sync_status")
+    assert_equal "grpmsr_ops_snapshot", @employee.metadata.fetch("vitable_care_member_sync_request_id")
+    assert_equal "succeeded", @enrollment.reload.metadata.fetch("vitable_care_member_sync_status")
+    assert_not_includes snapshot.to_json, "vit_at_member_sync_secret"
+
+    detail = Vitable::ConnectionDetailQuery.new.call(@connection.id)
+    dto = detail.api_snapshot
+    member_sync_coverage = detail.endpoint_coverage.find { |coverage| coverage.resource_type == "group member sync" }
+    assert_equal 1, dto.remote_care_member_sync_count
+    assert_equal 1, dto.succeeded_care_member_sync_member_count
+    assert_equal "ready", member_sync_coverage.status
+  ensure
+    ENV[@connection.api_key_reference] = previous_key
+  end
+
   test "Vitable API snapshot refresh mirrors retrieved webhook event detail responses" do
     @employee.update!(vitable_id: "empl_remote_casey")
     response_class = Data.define(:data)

@@ -61,6 +61,7 @@ module Vitable
         source: "vitable_api_snapshot",
         refreshed_at:
       )
+      care_member_sync_requests = remote_care_member_sync_requests(gateway, connection, trace:, refreshed_at: snapshot_refreshed_at)
       plan_reconciliation = plan_reconciliation_snapshots(connection, plans, refreshed_at:)
       eligibility_policies = eligibility_policy_snapshots(gateway, connection, trace:)
       eligibility_policy_reconciliation = EligibilityPolicySnapshotRepository.new(connection:).reconcile_snapshot(
@@ -101,6 +102,7 @@ module Vitable
         "groups" => groups,
         "group_details" => group_details,
         "group_reconciliation" => group_reconciliation.to_metadata,
+        "care_member_sync_requests" => care_member_sync_requests,
         "plans" => plans,
         "plan_reconciliation" => plan_reconciliation,
         "eligibility_policies" => eligibility_policies,
@@ -447,6 +449,49 @@ module Vitable
       return if remote_id == expected_remote_id
 
       raise ArgumentError, "Vitable group retrieve response returned remote group ID #{remote_id}, expected #{expected_remote_id}"
+    end
+
+    def remote_care_member_sync_requests(gateway, connection, trace:, refreshed_at:)
+      return [] unless gateway.respond_to?(:retrieve_group_member_sync)
+
+      local_employers(connection).filter_map do |employer|
+        repository = CareGroupRepository.new(employer:)
+        request = repository.latest_member_sync_request.to_h.stringify_keys
+        request_id = request.fetch("request_id", nil).presence
+        group_id = repository.remote_group_id.presence || request.fetch("group_id", nil).presence
+        next if group_id.blank? || request_id.blank?
+
+        response = gateway.retrieve_group_member_sync(group_id, request_id)
+        response_hash = serialize_response(response)
+        trace.replace(
+          {
+            "last_step" => "group_member_sync",
+            "last_resource_id" => request_id,
+            "last_response" => response_hash,
+            "last_fetched_at" => Time.current.iso8601
+          }
+        )
+        reconciliation = repository.reconcile_member_sync_snapshot(response_hash, refreshed_at:)
+
+        {
+          "local_employer_id" => employer.id,
+          "employer_name" => employer.name,
+          "remote_group_id" => group_id,
+          "remote_request_id" => request_id,
+          "member_sync" => response_hash.fetch("data", response_hash),
+          "reconciliation" => reconciliation.fetch("reconciliation", {}),
+          "response" => response_hash
+        }
+      rescue VitableConnect::Errors::NotFoundError => e
+        {
+          "local_employer_id" => employer.id,
+          "employer_name" => employer.name,
+          "remote_group_id" => group_id,
+          "remote_request_id" => request_id,
+          "error_class" => e.class.name,
+          "error_message" => PayloadRedactor.error_message(e)
+        }
+      end
     end
 
     def remote_employee_rosters(gateway, connection, trace:)
