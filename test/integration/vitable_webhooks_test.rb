@@ -120,6 +120,102 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
     ENV.delete("VITABLE_CONNECT_API_KEY")
   end
 
+  test "reconciles employee deduction webhooks into payroll deductions" do
+    employer = @organization.employers.create!(name: "Deduction Employer", status: "active")
+    employee = employer.employees.create!(
+      first_name: "Casey",
+      last_name: "Nguyen",
+      email: "casey.deductions@example.com",
+      vitable_id: "empl_remote_casey"
+    )
+    plan = employer.benefit_plans.create!(
+      name: "Primary Care",
+      category: "direct_primary_care",
+      carrier: "Vitable",
+      vitable_id: "bprd_primary_care"
+    )
+    enrollment = employee.enrollments.create!(
+      benefit_plan: plan,
+      status: "accepted",
+      vitable_id: "enrl_remote_primary"
+    )
+    payroll_run = employer.payroll_runs.create!(
+      period_start_on: Date.current.beginning_of_month,
+      period_end_on: Date.current.end_of_month,
+      pay_date: Date.current.end_of_month,
+      gross_pay_cents: 0,
+      status: "estimated"
+    )
+    ENV["VITABLE_CONNECT_API_KEY"] = "vit_apk_test_value"
+    deduction_amounts = [ 7900, 8100 ]
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:fetch_resource) do |_resource_type, resource_id|
+        {
+          data: {
+            id: resource_id,
+            reference_id: "musto_employee_#{Employee.find_by!(email: "casey.deductions@example.com").id}",
+            email: "casey.deductions@example.com",
+            status: "active",
+            deductions: [
+              {
+                id: "ded_remote_primary",
+                enrollment_id: "enrl_remote_primary",
+                plan_id: "bprd_primary_care",
+                benefit_name: "Primary Care",
+                deduction_amount_in_cents: deduction_amounts.shift,
+                frequency: "bi_weekly",
+                period_start_date: Date.current.beginning_of_month,
+                period_end_date: Date.current.end_of_month,
+                tax_classification: "Post-tax"
+              }
+            ]
+          }
+        }
+      end
+    end
+
+    first_result = Vitable::ProcessWebhookCommand.new(
+      payload: webhook_payload.merge(
+        event_id: "wevt_test_employee_deduction_created",
+        event_name: "employee.deduction_created",
+        resource_type: "employee",
+        resource_id: "empl_remote_casey"
+      ),
+      gateway_class:
+    ).call
+    second_result = nil
+    assert_no_difference -> { PayrollDeduction.count } do
+      second_result = Vitable::ProcessWebhookCommand.new(
+        payload: webhook_payload.merge(
+          event_id: "wevt_test_employee_deduction_updated",
+          event_name: "employee.deduction_created",
+          resource_type: "employee",
+          resource_id: "empl_remote_casey"
+        ),
+        gateway_class:
+      ).call
+    end
+
+    assert first_result.success?
+    assert second_result.success?
+    deduction = payroll_run.payroll_deductions.find_by!(vitable_id: "ded_remote_primary")
+    assert_equal employee.id, deduction.employee_id
+    assert_equal enrollment.id, deduction.enrollment_id
+    assert_equal "VITABLE_PRIMARY_CARE", deduction.code
+    assert_equal 8100, deduction.amount_cents
+    assert_equal "ready", deduction.status
+    assert_equal "bi_weekly", deduction.metadata.fetch("frequency")
+    assert_equal "employee.deduction_created", deduction.metadata.fetch("last_webhook_event_name")
+    assert_equal "ded_remote_primary", deduction.metadata.fetch("remote_id")
+    assert_equal "employee.deduction_created", employee.reload.metadata.fetch("vitable_last_webhook_event_name")
+    assert_equal 1, employee.metadata.fetch("vitable_remote_deductions").count
+    reconciliation = WebhookEvent.find_by!(event_id: "wevt_test_employee_deduction_created").metadata.fetch("resource_reconciliation")
+    assert_includes reconciliation.fetch("applied_changes"), "payroll_deductions.#{deduction.id}"
+  ensure
+    ENV.delete("VITABLE_CONNECT_API_KEY")
+  end
+
   test "reconciles fetched enrollment resources into local enrollment state" do
     employer = @organization.employers.create!(name: "Enrollment Employer", status: "active")
     employee = employer.employees.create!(

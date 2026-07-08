@@ -58,6 +58,7 @@ module Vitable
       update_attributes[:metadata] = employee.metadata.to_h.stringify_keys.merge(metadata_updates)
       applied_changes.concat(metadata_updates.keys.map { |key| "metadata.#{key}" })
       employee.update!(update_attributes)
+      applied_changes.concat(apply_employee_payroll_deductions(employee, remote_resource, timestamp))
 
       reconciliation_result(status: "matched", remote_resource:, local_record: employee, matched_by:, applied_changes:)
     end
@@ -382,6 +383,7 @@ module Vitable
       when "employee.deduction_created"
         {
           "vitable_last_deduction_event_at" => timestamp,
+          "vitable_remote_deductions" => remote_resource.fetch("deductions", []),
           "vitable_last_deduction" => remote_resource_summary(remote_resource, %w[id status deduction_type amount_cents starts_on])
         }
       else
@@ -404,6 +406,100 @@ module Vitable
 
     def remote_resource_summary(remote_resource, keys)
       remote_resource.slice(*keys).compact
+    end
+
+    def apply_employee_payroll_deductions(employee, remote_resource, timestamp)
+      remote_deductions = Array(remote_resource.fetch("deductions", []))
+      return [] if remote_deductions.empty?
+
+      payroll_run = current_or_create_payroll_run(employee.employer)
+
+      remote_deductions.filter_map do |payload|
+        dto = RemotePayrollDeductionDto.from_hash(payload)
+        deduction = payroll_deduction_for(payroll_run, employee, dto)
+        enrollment = enrollment_for_remote_deduction(employee, dto)
+        attributes = {
+          employee:,
+          enrollment: enrollment || deduction&.enrollment,
+          code: dto.payroll_code,
+          amount_cents: dto.amount_cents,
+          status: dto.payroll_status,
+          vitable_id: dto.remote_id.presence || deduction&.vitable_id,
+          metadata: deduction&.metadata.to_h.stringify_keys.merge(dto.metadata).merge(
+            "last_reconciled_at" => timestamp,
+            "last_webhook_event_id" => @event.event_id,
+            "last_webhook_event_name" => @event.event_name
+          )
+        }.compact
+
+        if deduction
+          changed = deduction_changes?(deduction, attributes)
+          deduction.update!(attributes)
+          "payroll_deductions.#{deduction.id}" if changed
+        else
+          created = payroll_run.payroll_deductions.create!(attributes)
+          "payroll_deductions.#{created.id}"
+        end
+      end
+    end
+
+    def payroll_deduction_for(payroll_run, employee, dto)
+      if dto.remote_id.present?
+        deduction = payroll_run.payroll_deductions.find_by(vitable_id: dto.remote_id)
+        return deduction if deduction
+      end
+
+      payroll_run.payroll_deductions.find_by(employee:, code: dto.payroll_code)
+    end
+
+    def deduction_changes?(deduction, attributes)
+      attributes.any? do |key, value|
+        next false if key == :metadata
+
+        deduction.public_send(key) != value
+      end || deduction.metadata.to_h.stringify_keys != attributes.fetch(:metadata, {})
+    end
+
+    def enrollment_for_remote_deduction(employee, dto)
+      enrollment_by_remote_deduction(employee, dto) ||
+        enrollment_by_remote_deduction_plan(employee, dto) ||
+        enrollment_by_deduction_name(employee, dto)
+    end
+
+    def enrollment_by_remote_deduction(employee, dto)
+      enrollment_id = dto.raw_payload.fetch("enrollment_id", nil).presence
+      return if enrollment_id.blank?
+
+      employee.enrollments.find_by(vitable_id: enrollment_id)
+    end
+
+    def enrollment_by_remote_deduction_plan(employee, dto)
+      plan_id = dto.raw_payload.fetch("plan_id", nil).presence ||
+        dto.raw_payload.fetch("product_id", nil).presence ||
+        dto.raw_payload.dig("benefit", "id").presence ||
+        dto.raw_payload.dig("plan", "id").presence
+      return if plan_id.blank?
+
+      employee.enrollments.joins(:benefit_plan).find_by(benefit_plans: { vitable_id: plan_id })
+    end
+
+    def enrollment_by_deduction_name(employee, dto)
+      return if dto.benefit_name.blank?
+
+      employee.enrollments.includes(:benefit_plan).detect do |enrollment|
+        enrollment.benefit_plan.name.casecmp?(dto.benefit_name.to_s)
+      end
+    end
+
+    def current_or_create_payroll_run(employer)
+      employer.payroll_runs.order(pay_date: :desc).first ||
+        employer.payroll_runs.create!(
+          period_start_on: Date.current.beginning_of_month,
+          period_end_on: Date.current.end_of_month,
+          pay_date: Date.current.end_of_month,
+          gross_pay_cents: 0,
+          status: "estimated"
+        )
     end
 
     def reconciliation_result(status:, remote_resource: nil, local_record: nil, matched_by: nil, applied_changes: [], warnings: [])
