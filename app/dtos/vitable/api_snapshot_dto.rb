@@ -7,18 +7,22 @@ module Vitable
     :remote_webhook_event_count,
     :imported_webhook_event_count,
     :existing_webhook_event_count,
+    :remote_employee_count,
     :remote_employee_enrollment_count,
     :reconciled_enrollment_count,
     :created_enrollment_count,
     :updated_enrollment_count,
     :enrollment_missing_plan_count,
     :enrollment_deduction_changed_count,
-    :mapped_employee_count
+    :mapped_employee_count,
+    :unmatched_remote_employee_count,
+    :remote_employee_deduction_changed_count
   ) do
     def self.from_metadata(metadata)
       payload = metadata.to_h.fetch("api_snapshot", {}).to_h
       counts = payload.fetch("counts", {}).to_h
       employee_enrollments = payload.fetch("employee_enrollments", [])
+      remote_employee_rosters = payload.fetch("remote_employee_rosters", [])
 
       new(
         refreshed_at: payload["refreshed_at"].present? ? Time.iso8601(payload.fetch("refreshed_at")) : nil,
@@ -28,13 +32,16 @@ module Vitable
         remote_webhook_event_count: counts.fetch("remote_webhook_event_count", 0),
         imported_webhook_event_count: counts.fetch("imported_webhook_event_count", 0),
         existing_webhook_event_count: counts.fetch("existing_webhook_event_count", 0),
+        remote_employee_count: counts.fetch("remote_employee_count", remote_employee_rosters.sum { |entry| entry.to_h.fetch("employees", []).count }),
         remote_employee_enrollment_count: counts.fetch("remote_employee_enrollment_count", 0),
         reconciled_enrollment_count: counts.fetch("reconciled_enrollment_count", 0),
         created_enrollment_count: counts.fetch("created_enrollment_count", 0),
         updated_enrollment_count: counts.fetch("updated_enrollment_count", 0),
         enrollment_missing_plan_count: counts.fetch("enrollment_missing_plan_count", 0),
         enrollment_deduction_changed_count: counts.fetch("enrollment_deduction_changed_count", 0),
-        mapped_employee_count: employee_enrollments.count
+        mapped_employee_count: counts.fetch("mapped_employee_count", employee_enrollments.count),
+        unmatched_remote_employee_count: counts.fetch("unmatched_remote_employee_count", 0),
+        remote_employee_deduction_changed_count: counts.fetch("remote_employee_deduction_changed_count", 0)
       )
     end
 

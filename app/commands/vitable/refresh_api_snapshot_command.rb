@@ -35,22 +35,52 @@ module Vitable
 
     def build_snapshot(connection)
       gateway = @gateway_class.new(connection)
+      refreshed_at = Time.current.iso8601
+      employers = page_data(gateway.list_all_employers)
+      remote_employee_rosters = remote_employee_rosters(gateway, connection)
+      employee_reconciliation = RemoteEmployeeSnapshotRepository.new(connection:).reconcile_snapshot(
+        snapshot_entries: remote_employee_rosters,
+        source: "vitable_api_snapshot",
+        refreshed_at:
+      )
       employee_enrollments = employee_enrollment_snapshot(gateway, connection)
       enrollment_reconciliation = EnrollmentSnapshotRepository.new(connection:).reconcile_snapshot(
         snapshot_entries: employee_enrollments,
         source: "vitable_api_snapshot",
-        refreshed_at: Time.current.iso8601
+        refreshed_at:
       )
 
       {
         "requested_by" => @dto.requested_by,
-        "employers" => page_data(gateway.list_all_employers),
+        "employers" => employers,
         "groups" => page_data(gateway.list_all_groups),
         "plans" => page_data(gateway.list_all_plans),
         "webhook_events" => page_data(gateway.list_all_webhook_events),
+        "remote_employee_rosters" => remote_employee_rosters,
+        "employee_reconciliation" => employee_reconciliation.to_metadata,
         "employee_enrollments" => employee_enrollments,
         "enrollment_reconciliation" => enrollment_reconciliation.to_metadata
       }
+    end
+
+    def remote_employee_rosters(gateway, connection)
+      local_remote_employers(connection).map do |employer|
+        {
+          "local_employer_id" => employer.id,
+          "remote_employer_id" => employer.vitable_id,
+          "employer_name" => employer.name,
+          "employees" => page_data(gateway.list_all_employer_employees(employer.vitable_id))
+        }
+      rescue VitableConnect::Errors::NotFoundError => e
+        {
+          "local_employer_id" => employer.id,
+          "remote_employer_id" => employer.vitable_id,
+          "employer_name" => employer.name,
+          "employees" => [],
+          "error_class" => e.class.name,
+          "error_message" => e.message
+        }
+      end
     end
 
     def employee_enrollment_snapshot(gateway, connection)
@@ -72,6 +102,13 @@ module Vitable
           "error_message" => e.message
         }
       end
+    end
+
+    def local_remote_employers(connection)
+      Employer
+        .joins(:organization)
+        .where(organization: connection.organization)
+        .where.not(vitable_id: [ nil, "" ])
     end
 
     def local_remote_employees(connection)

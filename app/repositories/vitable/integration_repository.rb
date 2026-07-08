@@ -511,7 +511,9 @@ module Vitable
 
     def snapshot_counts(snapshot)
       webhook_ingestion = snapshot.fetch("webhook_event_ingestion", {}).to_h
+      employee_reconciliation = snapshot.fetch("employee_reconciliation", {}).to_h
       enrollment_reconciliation = snapshot.fetch("enrollment_reconciliation", {}).to_h
+      employee_deduction_sync = employee_reconciliation.fetch("deduction_sync", {}).to_h
       deduction_sync = enrollment_reconciliation.fetch("deduction_sync", {}).to_h
 
       {
@@ -519,6 +521,10 @@ module Vitable
         "remote_group_count" => snapshot.fetch("groups", []).count,
         "remote_plan_count" => snapshot.fetch("plans", []).count,
         "remote_webhook_event_count" => snapshot.fetch("webhook_events", []).count,
+        "remote_employee_count" => snapshot.fetch("remote_employee_rosters", []).sum { |entry| entry.to_h.fetch("employees", []).count },
+        "mapped_employee_count" => employee_reconciliation.fetch("matched_count", 0),
+        "unmatched_remote_employee_count" => employee_reconciliation.fetch("unmatched_count", 0),
+        "remote_employee_deduction_changed_count" => employee_deduction_sync.fetch("created_count", 0) + employee_deduction_sync.fetch("updated_count", 0),
         "remote_employee_enrollment_count" => snapshot.fetch("employee_enrollments", []).sum { |entry| entry.fetch("enrollments", []).count },
         "reconciled_enrollment_count" => enrollment_reconciliation.fetch("matched_count", 0),
         "created_enrollment_count" => enrollment_reconciliation.fetch("created_count", 0),

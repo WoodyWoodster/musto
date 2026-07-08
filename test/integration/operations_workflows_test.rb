@@ -2902,6 +2902,79 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     ENV[@connection.api_key_reference] = previous_key
   end
 
+  test "Vitable API snapshot refresh maps remote roster employees before enrollment reads" do
+    @employer.update!(vitable_id: "empr_ops_123")
+    response_class = Data.define(:data)
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| }
+      define_method(:list_all_employers) { response_class.new(data: [ { id: "empr_ops_123", name: "Ops Employer" } ]) }
+      define_method(:list_all_groups) { response_class.new(data: []) }
+      define_method(:list_all_plans) { response_class.new(data: []) }
+      define_method(:list_all_webhook_events) { response_class.new(data: []) }
+      define_method(:list_all_employer_employees) do |employer_id|
+        response_class.new(
+          data: [
+            {
+              id: "empl_remote_casey",
+              employer_id:,
+              reference_id: "musto_employee_#{Employee.find_by!(email: "casey@example.com").id}",
+              email: "casey@example.com",
+              status: "active",
+              member_id: "mem_remote_casey",
+              deductions: [
+                {
+                  id: "ded_remote_dental",
+                  benefit_name: "Dental",
+                  deduction_amount_in_cents: 4500,
+                  frequency: "bi_weekly"
+                }
+              ]
+            }
+          ]
+        )
+      end
+      define_method(:list_all_employee_enrollments) do |employee_id|
+        response_class.new(data: employee_id == "empl_remote_casey" ? [] : [ { id: "unexpected_employee_id" } ])
+      end
+    end
+    previous_key = ENV[@connection.api_key_reference]
+    ENV[@connection.api_key_reference] = "vit_apk_test_value"
+
+    result = Vitable::RefreshApiSnapshotCommand.new(
+      dto: Vitable::RefreshApiSnapshotDto.new(connection_id: @connection.id, requested_by: "integration_admin"),
+      gateway_class:
+    ).call
+
+    assert result.success?
+    @employee.reload
+    @pending_deduction.reload
+    snapshot = @connection.reload.metadata.fetch("api_snapshot")
+    sync = @connection.sync_runs.where(operation: "api_snapshot_refresh").recent_first.first
+
+    assert_equal "empl_remote_casey", @employee.vitable_id
+    assert_equal "active", @employee.metadata.fetch("vitable_remote_status")
+    assert_equal "mem_remote_casey", @employee.metadata.fetch("vitable_member_id")
+    assert_equal "musto_employee_#{@employee.id}", @employee.metadata.fetch("vitable_remote_reference_id")
+    assert_equal 4500, @pending_deduction.amount_cents
+    assert_equal "ready", @pending_deduction.status
+    assert_equal "vitable_api_snapshot", @pending_deduction.metadata.fetch("source")
+    assert_equal 1, snapshot.dig("counts", "remote_employee_count")
+    assert_equal 1, snapshot.dig("counts", "mapped_employee_count")
+    assert_equal 0, snapshot.dig("counts", "unmatched_remote_employee_count")
+    assert_equal 1, snapshot.dig("counts", "remote_employee_deduction_changed_count")
+    assert_equal 1, snapshot.fetch("remote_employee_rosters").first.fetch("employees").count
+    assert_equal "empl_remote_casey", snapshot.fetch("employee_enrollments").first.fetch("remote_employee_id")
+    assert_equal 1, sync.stats.fetch("remote_employee_count")
+    assert_equal 1, sync.stats.fetch("mapped_employee_count")
+
+    detail = Vitable::ConnectionDetailQuery.new.call(@connection.id)
+    assert_equal 1, detail.api_snapshot.remote_employee_count
+    assert_equal 1, detail.api_snapshot.mapped_employee_count
+    assert_equal 1, detail.api_snapshot.remote_employee_deduction_changed_count
+  ensure
+    ENV[@connection.api_key_reference] = previous_key
+  end
+
   test "vitable employer provisioning workspace exposes packet DTOs" do
     prepare_provisioning_profile
     Vitable::GenerateEmployerProvisioningCommand.new(dto: Vitable::GenerateEmployerProvisioningDto.new(requested_by: "ops_test")).call
