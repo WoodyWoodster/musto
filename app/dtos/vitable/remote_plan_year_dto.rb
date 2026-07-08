@@ -37,7 +37,7 @@ module Vitable
     def self.resource_payload(attributes)
       %w[data resource object].lazy.filter_map do |key|
         value = attributes.fetch(key, nil)
-        value.to_h.stringify_keys if value.respond_to?(:to_h)
+        value.to_h.stringify_keys if !value.nil? && value.respond_to?(:to_h)
       end.first || attributes
     end
 

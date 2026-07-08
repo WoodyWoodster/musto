@@ -4088,14 +4088,16 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
         response_class.new(
           data: [
             {
-              id: "enrl_remote_dental",
-              employee_id:,
-              benefit: { id: "bprd_remote_dental", name: "Dental", category: "Dental" },
-              status: "enrolled",
-              answered_at:,
-              coverage_start:,
-              employee_deduction_in_cents: 4500,
-              employer_contribution_in_cents: 500
+              enrollment: {
+                enrollment_id: "enrl_remote_dental",
+                member_id: employee_id,
+                plan: { id: "bprd_remote_dental", name: "Dental", category: "Dental" },
+                status: "enrolled",
+                answered_at:,
+                coverage_start_date: coverage_start,
+                deduction_amount_in_cents: 4500,
+                employer_contribution_in_cents: 500
+              }
             }
           ]
         )

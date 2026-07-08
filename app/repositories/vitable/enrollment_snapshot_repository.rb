@@ -22,8 +22,9 @@ module Vitable
       return result.increment(unmatched_count: 1) unless employee
 
       entry.fetch("enrollments", []).reduce(result) do |entry_result, payload|
-        dto = RemoteEnrollmentDto.from_hash(payload)
-        validate_remote_enrollment_identity!(dto)
+        dto = RemoteEnrollmentDto
+          .from_hash(payload)
+          .validate_identity!(response_label: "Vitable API snapshot enrollment")
         reconcile_enrollment(
           result: entry_result.increment(processed_count: 1),
           employee:,
@@ -159,13 +160,6 @@ module Vitable
 
     def benefit_plan_snapshot_repository
       @benefit_plan_snapshot_repository ||= BenefitPlanSnapshotRepository.new
-    end
-
-    def validate_remote_enrollment_identity!(dto)
-      reference = dto.raw_payload.fetch("id", nil).presence || dto.raw_payload.fetch("enrollment_id", nil).presence || "unknown enrollment"
-      raise ArgumentError, "Vitable API snapshot enrollment #{reference} did not include a remote enrollment ID" if dto.raw_payload.fetch("id", nil).blank?
-      raise ArgumentError, "Vitable API snapshot enrollment #{reference} did not include a remote employee ID" if dto.raw_payload.fetch("employee_id", nil).blank?
-      raise ArgumentError, "Vitable API snapshot enrollment #{reference} did not include a remote benefit ID" if dto.raw_payload.dig("benefit", "id").blank?
     end
 
     def employee_scope

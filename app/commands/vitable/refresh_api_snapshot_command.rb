@@ -730,8 +730,7 @@ module Vitable
     end
 
     def remote_enrollment_id(enrollment)
-      enrollment.to_h.stringify_keys.fetch("id", nil).presence ||
-        enrollment.to_h.stringify_keys.fetch("enrollment_id", nil).presence
+      RemoteEnrollmentDto.from_hash(enrollment).remote_id
     end
 
     def validate_retrieved_enrollment!(remote_enrollment, expected_remote_id:)

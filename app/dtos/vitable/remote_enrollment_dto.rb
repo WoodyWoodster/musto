@@ -17,7 +17,7 @@ module Vitable
     :raw_payload
   ) do
     def self.from_hash(payload)
-      attributes = payload.to_h.stringify_keys
+      attributes = resource_payload(payload.respond_to?(:to_h) ? payload.to_h.stringify_keys : {})
       benefit = attributes.fetch("benefit", {}).to_h.stringify_keys
       plan = attributes.fetch("plan", {}).to_h.stringify_keys
 
@@ -38,6 +38,15 @@ module Vitable
         employer_contribution_cents: parse_cents(attributes.fetch("employer_contribution_in_cents", nil)),
         raw_payload: attributes
       )
+    end
+
+    def validate_identity!(response_label: "Vitable API snapshot enrollment")
+      reference = remote_id.presence || "unknown enrollment"
+      raise ArgumentError, "#{response_label} #{reference} did not include a remote enrollment ID" if remote_id.blank?
+      raise ArgumentError, "#{response_label} #{reference} did not include a remote employee ID" if remote_employee_id.blank?
+      raise ArgumentError, "#{response_label} #{reference} did not include a remote benefit ID" if remote_plan_id.blank?
+
+      self
     end
 
     def accepted?
@@ -76,7 +85,7 @@ module Vitable
         "vitable_remote_terminated_at" => terminated_at&.iso8601,
         "vitable_employee_deduction_cents" => employee_deduction_cents,
         "vitable_employer_contribution_cents" => employer_contribution_cents,
-        "vitable_last_resource_snapshot" => raw_payload.slice("id", "status", "employee_id", "plan_id", "product_id", "coverage_start", "coverage_end", "employee_deduction_in_cents", "employer_contribution_in_cents")
+        "vitable_last_resource_snapshot" => raw_payload.slice("id", "enrollment_id", "status", "employee_id", "member_id", "plan_id", "product_id", "benefit", "plan", "coverage_start", "coverage_end", "employee_deduction_in_cents", "employer_contribution_in_cents")
       }.compact
     end
 
@@ -97,6 +106,13 @@ module Vitable
       return "inactive" if normalized.in?(%w[inactive terminated canceled cancelled])
 
       nil
+    end
+
+    def self.resource_payload(attributes)
+      %w[data enrollment resource object].reduce(attributes) do |payload, key|
+        value = payload.fetch(key, nil)
+        !value.nil? && value.respond_to?(:to_h) ? value.to_h.stringify_keys : payload
+      end
     end
 
     def self.parse_cents(value)
@@ -139,6 +155,6 @@ module Vitable
       "inactive"
     end
 
-    private_class_method :local_status_for, :parse_cents, :parse_date, :parse_time
+    private_class_method :local_status_for, :resource_payload, :parse_cents, :parse_date, :parse_time
   end
 end

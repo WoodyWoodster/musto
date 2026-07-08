@@ -773,7 +773,7 @@ module Vitable
       payload = event.payload.to_h.stringify_keys
       resource_payload = %w[data resource object].lazy.filter_map do |key|
         value = payload.fetch(key, nil)
-        value.to_h.stringify_keys if value.respond_to?(:to_h)
+        value.to_h.stringify_keys if !value.nil? && value.respond_to?(:to_h)
       end.first || payload
 
       resource_payload.merge(
@@ -971,7 +971,7 @@ module Vitable
       payload = event.payload.to_h.stringify_keys
       resource_payload = %w[data resource object].lazy.filter_map do |key|
         value = payload.fetch(key, nil)
-        value.to_h.stringify_keys if value.respond_to?(:to_h)
+        value.to_h.stringify_keys if !value.nil? && value.respond_to?(:to_h)
       end.first || payload
 
       resource_payload.merge(
