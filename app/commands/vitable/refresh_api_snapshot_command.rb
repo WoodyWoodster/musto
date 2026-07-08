@@ -37,9 +37,15 @@ module Vitable
       gateway = @gateway_class.new(connection)
       refreshed_at = Time.current.iso8601
       employers = page_data(gateway.list_all_employers)
+      groups = page_data(gateway.list_all_groups)
       plans = page_data(gateway.list_all_plans)
       employer_reconciliation = RemoteEmployerSnapshotRepository.new(connection:).reconcile_snapshot(
         remote_employers: employers,
+        source: "vitable_api_snapshot",
+        refreshed_at:
+      )
+      group_reconciliation = RemoteGroupSnapshotRepository.new(connection:).reconcile_snapshot(
+        remote_groups: groups,
         source: "vitable_api_snapshot",
         refreshed_at:
       )
@@ -61,7 +67,8 @@ module Vitable
         "requested_by" => @dto.requested_by,
         "employers" => employers,
         "employer_reconciliation" => employer_reconciliation.to_metadata,
-        "groups" => page_data(gateway.list_all_groups),
+        "groups" => groups,
+        "group_reconciliation" => group_reconciliation.to_metadata,
         "plans" => plans,
         "plan_reconciliation" => plan_reconciliation,
         "webhook_events" => page_data(gateway.list_all_webhook_events),

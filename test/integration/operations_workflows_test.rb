@@ -2925,7 +2925,18 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
           ]
         )
       end
-      define_method(:list_all_groups) { response_class.new(data: []) }
+      define_method(:list_all_groups) do
+        response_class.new(
+          data: [
+            {
+              id: "grp_remote_ops",
+              name: "Ops Employer",
+              external_reference_id: "musto_care_group_#{Employer.find_by!(name: "Ops Employer").id}",
+              organization_id: "org_demo_vitable"
+            }
+          ]
+        )
+      end
       define_method(:list_all_plans) { response_class.new(data: []) }
       define_method(:list_all_webhook_events) { response_class.new(data: []) }
       define_method(:list_all_employer_employees) do |employer_id|
@@ -2958,6 +2969,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     ENV[@connection.api_key_reference] = "vit_apk_test_value"
 
     assert_nil @employer.vitable_id
+    assert_nil @employer.settings.to_h.fetch("vitable_care_group_id", nil)
 
     result = Vitable::RefreshApiSnapshotCommand.new(
       dto: Vitable::RefreshApiSnapshotDto.new(connection_id: @connection.id, requested_by: "integration_admin"),
@@ -2974,6 +2986,9 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal "empr_ops_123", @employer.vitable_id
     assert_equal "active", @employer.settings.fetch("vitable_remote_status")
     assert_equal "musto_employer_#{@employer.id}", @employer.settings.fetch("vitable_remote_reference_id")
+    assert_equal "grp_remote_ops", @employer.settings.fetch("vitable_care_group_id")
+    assert_equal "external_reference_id", @employer.settings.fetch("vitable_care_group_snapshot_matched_by")
+    assert_equal "grp_remote_ops", @employer.settings.dig("vitable_care_group_snapshot", "id")
     assert_equal "empl_remote_casey", @employee.vitable_id
     assert_equal "active", @employee.metadata.fetch("vitable_remote_status")
     assert_equal "mem_remote_casey", @employee.metadata.fetch("vitable_member_id")
@@ -2985,6 +3000,10 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal 1, snapshot.dig("counts", "mapped_employer_count")
     assert_equal 0, snapshot.dig("counts", "unmatched_remote_employer_count")
     assert_equal 0, snapshot.dig("counts", "conflicting_remote_employer_count")
+    assert_equal 1, snapshot.dig("counts", "mapped_group_count")
+    assert_equal 0, snapshot.dig("counts", "unmatched_remote_group_count")
+    assert_equal 0, snapshot.dig("counts", "conflicting_remote_group_count")
+    assert_equal 1, snapshot.dig("group_reconciliation", "matched_count")
     assert_equal 1, snapshot.dig("counts", "mapped_employee_count")
     assert_equal 0, snapshot.dig("counts", "unmatched_remote_employee_count")
     assert_equal 1, snapshot.dig("counts", "remote_employee_deduction_changed_count")
@@ -2993,11 +3012,13 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal "empr_ops_123", snapshot.fetch("remote_employee_rosters").first.fetch("remote_employer_id")
     assert_equal "empl_remote_casey", snapshot.fetch("employee_enrollments").first.fetch("remote_employee_id")
     assert_equal 1, sync.stats.fetch("mapped_employer_count")
+    assert_equal 1, sync.stats.fetch("mapped_group_count")
     assert_equal 1, sync.stats.fetch("remote_employee_count")
     assert_equal 1, sync.stats.fetch("mapped_employee_count")
 
     detail = Vitable::ConnectionDetailQuery.new.call(@connection.id)
     assert_equal 1, detail.api_snapshot.mapped_employer_count
+    assert_equal 1, detail.api_snapshot.mapped_group_count
     assert_equal 1, detail.api_snapshot.remote_employee_count
     assert_equal 1, detail.api_snapshot.mapped_employee_count
     assert_equal 1, detail.api_snapshot.remote_employee_deduction_changed_count
