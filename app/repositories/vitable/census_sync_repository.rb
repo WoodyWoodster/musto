@@ -6,6 +6,10 @@ module Vitable
     MAX_EMPLOYEES = 5_000
     MIN_EMPLOYEES = 1
     CENSUS_OPERATIONS = %w[census_manifest census_sync remote_roster_refresh].freeze
+    VITABLE_ADDRESS_STATES = %w[
+      AL AK AZ AR CA CO CT DC DE FL GA HI ID IL IN IA KS KY LA ME MD MA MI MN MS MO MT NE NV NH NJ NM NY NC ND OH OK OR PA RI SC SD TN TX UT VT VA WA WI WV WY
+      PR GU AS VI MP MH PW FM AE AA AP
+    ].freeze
 
     def initialize(employer:)
       @employer = employer
@@ -70,7 +74,14 @@ module Vitable
           next
         end
 
-        lines << line_for(employee)
+        line = line_for(employee)
+        invalid_fields = invalid_payload_fields(line.fetch("api_payload"))
+        if invalid_fields.any?
+          holdbacks << holdback_for(employee, "invalid_api_contract_fields", "Invalid #{invalid_fields.to_sentence} for Vitable census sync.")
+          next
+        end
+
+        lines << line
       end
 
       manifest = {
@@ -266,9 +277,9 @@ module Vitable
       missing = []
       missing << "date of birth" if employee.date_of_birth.blank?
       missing << "phone" if phone_for(employee).blank?
-      missing << "email" if employee.email.blank?
-      missing << "first name" if employee.first_name.blank?
-      missing << "last name" if employee.last_name.blank?
+      missing << "email" if email_for(employee).blank?
+      missing << "first name" if employee.first_name.to_s.strip.blank?
+      missing << "last name" if employee.last_name.to_s.strip.blank?
       missing
     end
 
@@ -278,10 +289,10 @@ module Vitable
       {
         "employee_id" => employee.id,
         "employee_name" => employee.full_name,
-        "email" => employee.email,
-        "phone" => phone_for(employee),
-        "date_of_birth" => employee.date_of_birth.iso8601,
-        "start_date" => employee.start_on&.iso8601,
+        "email" => payload.fetch("email"),
+        "phone" => payload.fetch("phone"),
+        "date_of_birth" => payload.fetch("date_of_birth"),
+        "start_date" => payload.fetch("start_date", nil),
         "department_name" => employee.department&.name || "Unassigned",
         "location_name" => employee.work_location&.name || "No location",
         "pay_type" => employee.pay_type,
@@ -313,9 +324,9 @@ module Vitable
     def api_payload_for(employee)
       {
         "reference_id" => "musto_employee_#{employee.id}",
-        "first_name" => employee.first_name,
-        "last_name" => employee.last_name,
-        "email" => employee.email,
+        "first_name" => employee.first_name.to_s.strip,
+        "last_name" => employee.last_name.to_s.strip,
+        "email" => email_for(employee),
         "phone" => phone_for(employee),
         "date_of_birth" => employee.date_of_birth.iso8601,
         "start_date" => employee.start_on&.iso8601,
@@ -331,16 +342,50 @@ module Vitable
       return if [ location.address_line1, location.city, location.state, location.postal_code ].any?(&:blank?)
 
       {
-        "address_line_1" => location.address_line1,
-        "city" => location.city,
-        "state" => location.state,
-        "zipcode" => location.postal_code
+        "address_line_1" => location.address_line1.to_s.strip,
+        "city" => location.city.to_s.strip,
+        "state" => location.state.to_s.strip.upcase,
+        "zipcode" => location.postal_code.to_s.strip
       }
+    end
+
+    def invalid_payload_fields(payload)
+      fields = []
+      fields << "email" unless valid_email?(payload.fetch("email", nil))
+      fields << "phone" unless valid_phone?(payload.fetch("phone", nil))
+
+      address = payload.fetch("address", nil)
+      address = address.respond_to?(:to_h) ? address.to_h : {}
+      if address.present?
+        fields << "address state" unless VITABLE_ADDRESS_STATES.include?(address.fetch("state", nil))
+        fields << "address ZIP" unless valid_zipcode?(address.fetch("zipcode", nil))
+      end
+
+      fields
     end
 
     def phone_for(employee)
       metadata = employee.metadata.to_h.stringify_keys
-      metadata["phone"].presence || metadata["phone_number"].presence || metadata["mobile_phone"].presence
+      raw = metadata["phone"].presence || metadata["phone_number"].presence || metadata["mobile_phone"].presence
+      digits = raw.to_s.gsub(/\D/, "")
+      digits = digits.delete_prefix("1") if digits.length == 11 && digits.start_with?("1")
+      digits.presence
+    end
+
+    def email_for(employee)
+      employee.email.to_s.strip.downcase.presence
+    end
+
+    def valid_email?(value)
+      value.to_s.match?(/\A[^@\s]+@[^@\s]+\.[^@\s]+\z/)
+    end
+
+    def valid_phone?(value)
+      value.to_s.match?(/\A\d{10}\z/)
+    end
+
+    def valid_zipcode?(value)
+      value.to_s.match?(/\A\d{5}(-\d{4})?\z/)
     end
 
     def sync_stats(manifest:, requested_by:)

@@ -3557,6 +3557,54 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal "/v1/employers/:employer_id/census-sync", batch.fetch("endpoint")
   end
 
+  test "Vitable census manifest normalizes employee API fields" do
+    prepare_provisioning_profile(remote_id: "empr_ops_123")
+    location = @employer.work_locations.find_by!(name: "Ops HQ")
+    location.update!(state: "pa", postal_code: " 19106-1234 ")
+    @employee.update!(
+      email: " CASEY@EXAMPLE.COM ",
+      work_location: location,
+      metadata: @employee.metadata.to_h.merge("phone" => "+1 (555) 123-4567")
+    )
+
+    post generate_vitable_census_manifest_path, params: { requested_by: "integration_admin" }
+
+    batch = @employer.reload.settings.fetch("vitable_census_sync_batch")
+    employee_payload = batch.fetch("api_payload").fetch("employees").first
+
+    assert_equal "ready", batch.fetch("status")
+    assert_equal "casey@example.com", employee_payload.fetch("email")
+    assert_equal "5551234567", employee_payload.fetch("phone")
+    assert_equal "PA", employee_payload.fetch("address").fetch("state")
+    assert_equal "19106-1234", employee_payload.fetch("address").fetch("zipcode")
+    assert_empty batch.fetch("holdbacks")
+  end
+
+  test "Vitable census manifest holds back invalid employee API fields" do
+    prepare_provisioning_profile(remote_id: "empr_ops_123")
+    location = @employer.work_locations.find_by!(name: "Ops HQ")
+    location.update!(state: "Pennsylvania", postal_code: "191")
+    @employee.update!(
+      email: "casey",
+      work_location: location,
+      metadata: @employee.metadata.to_h.merge("phone" => "555123")
+    )
+
+    post generate_vitable_census_manifest_path, params: { requested_by: "integration_admin" }
+
+    batch = @employer.reload.settings.fetch("vitable_census_sync_batch")
+    holdback = batch.fetch("holdbacks").first
+
+    assert_equal "blocked", batch.fetch("status")
+    assert_equal 0, batch.fetch("totals").fetch("ready_count")
+    assert_equal "invalid_api_contract_fields", holdback.fetch("reason_code")
+    assert_includes holdback.fetch("reason"), "email"
+    assert_includes holdback.fetch("reason"), "phone"
+    assert_includes holdback.fetch("reason"), "address state"
+    assert_includes holdback.fetch("reason"), "address ZIP"
+    assert_empty batch.fetch("api_payload").fetch("employees")
+  end
+
   test "census manifest omits approved offboarding employees for Vitable deactivation" do
     @employer.update!(vitable_id: "empr_ops_123")
     @employee.update!(vitable_id: "empl_ops_casey")
