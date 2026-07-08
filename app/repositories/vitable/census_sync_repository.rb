@@ -470,19 +470,14 @@ module Vitable
         if employee
           remote_employee_id = remote_employee.fetch("id")
           refreshed_at = Time.current.iso8601
+          remote_hire_date = remote_employee_hire_date(remote_employee)
           update_attributes = {
             vitable_id: remote_employee_id,
-            metadata: employee.metadata.to_h.stringify_keys.merge(
-              "vitable_census_sync_status" => "synced",
-              "vitable_remote_status" => remote_employee.fetch("status", nil),
-              "vitable_member_id" => remote_employee.fetch("member_id", nil),
-              "vitable_remote_reference_id" => remote_employee.fetch("reference_id", nil),
-              "vitable_remote_deductions" => remote_employee.fetch("deductions", []),
-              "vitable_last_refreshed_at" => refreshed_at
-            ).compact
+            metadata: employee.metadata.to_h.stringify_keys.merge(remote_employee_metadata(remote_employee, refreshed_at)).compact
           }
           local_employment_status = employee_employment_status_for(remote_employee)
           update_attributes[:employment_status] = local_employment_status if local_employment_status.present? && employee.employment_status != local_employment_status
+          update_attributes[:start_on] = remote_hire_date if remote_hire_date.present? && employee.start_on != remote_hire_date
           employee.update!(update_attributes)
           deduction_sync = deduction_sync.merge(
             PayrollDeductionRepository.new.sync_employee_deductions(
@@ -640,6 +635,9 @@ module Vitable
           "remote_employee_id" => remote_employee.fetch("id", nil),
           "remote_member_id" => remote_employee.fetch("member_id", nil),
           "remote_status" => remote_employee.fetch("status", nil),
+          "remote_employee_class" => remote_employee.fetch("employee_class", nil),
+          "remote_hire_date" => remote_employee_hire_date(remote_employee)&.iso8601,
+          "remote_termination_date" => remote_employee_termination_date(remote_employee)&.iso8601,
           "remote_deduction_count" => Array(remote_employee.fetch("deductions", [])).count,
           "status" => "synced",
           "readiness_status" => "synced",
@@ -679,6 +677,67 @@ module Vitable
       reference = remote_employee.fetch("reference_id", nil).presence || remote_employee.fetch("email", nil).presence || "unknown remote employee"
       raise ArgumentError, "Vitable remote roster employee #{reference} did not include a remote employee ID" if remote_employee.fetch("id", nil).blank?
       raise ArgumentError, "Vitable remote roster employee #{reference} did not include a remote member ID" if remote_employee.fetch("member_id", nil).blank?
+    end
+
+    def remote_employee_metadata(remote_employee, refreshed_at)
+      {
+        "vitable_census_sync_status" => "synced",
+        "vitable_remote_status" => remote_employee.fetch("status", nil),
+        "vitable_member_id" => remote_employee.fetch("member_id", nil),
+        "vitable_remote_reference_id" => remote_employee.fetch("reference_id", nil),
+        "vitable_remote_employee_class" => remote_employee.fetch("employee_class", nil),
+        "vitable_remote_hire_date" => remote_employee_hire_date(remote_employee)&.iso8601,
+        "vitable_remote_termination_date" => remote_employee_termination_date(remote_employee)&.iso8601,
+        "vitable_remote_date_of_birth" => remote_date(remote_employee, "date_of_birth")&.iso8601,
+        "vitable_remote_phone" => remote_employee.fetch("phone", nil),
+        "vitable_remote_address" => remote_employee_address(remote_employee),
+        "vitable_remote_deductions" => remote_employee.fetch("deductions", []),
+        "vitable_last_refreshed_at" => refreshed_at,
+        "vitable_last_resource_snapshot" => remote_employee_summary(remote_employee)
+      }
+    end
+
+    def remote_employee_summary(remote_employee)
+      remote_employee.slice(
+        "id",
+        "reference_id",
+        "email",
+        "first_name",
+        "last_name",
+        "status",
+        "member_id",
+        "employee_class",
+        "hire_date",
+        "termination_date",
+        "date_of_birth",
+        "phone"
+      ).compact
+    end
+
+    def remote_employee_hire_date(remote_employee)
+      remote_date(remote_employee, "hire_date") || remote_date(remote_employee, "start_date")
+    end
+
+    def remote_employee_termination_date(remote_employee)
+      remote_date(remote_employee, "termination_date") || remote_date(remote_employee, "terminated_on")
+    end
+
+    def remote_date(remote_employee, key)
+      value = remote_employee.fetch(key, nil)
+      return value if value.is_a?(Date)
+      return value.to_date if value.respond_to?(:to_date)
+      return if value.blank?
+
+      Date.iso8601(value.to_s)
+    rescue ArgumentError
+      nil
+    end
+
+    def remote_employee_address(remote_employee)
+      address = remote_employee.fetch("address", nil)
+      return unless address.respond_to?(:to_h)
+
+      address.to_h.stringify_keys.slice("address_line_1", "address_line_2", "city", "state", "zipcode").compact
     end
 
     def roster_verification(manifest:, remote_employees:, mapping:, checked_at:)

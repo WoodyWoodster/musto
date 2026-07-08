@@ -4790,6 +4790,8 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
   test "successful remote roster refresh stores Vitable employee IDs" do
     @employer.update!(vitable_id: "empr_ops_123")
     Vitable::GenerateCensusManifestCommand.new(dto: Vitable::GenerateCensusManifestDto.new(requested_by: "ops_test")).call
+    remote_hire_date = Date.new(2026, 1, 15)
+    remote_birth_date = Date.new(1990, 5, 15)
     response_class = Data.define(:data)
     gateway_class = Class.new do
       define_method(:initialize) { |_connection| }
@@ -4807,6 +4809,18 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
               reference_id: "musto_employee_#{Employee.find_by!(email: "casey@example.com").id}",
               status: "active",
               member_id: "mem_remote_casey",
+              date_of_birth: remote_birth_date.iso8601,
+              employee_class: "Full Time",
+              hire_date: remote_hire_date.iso8601,
+              termination_date: nil,
+              phone: "4155551234",
+              address: {
+                address_line_1: "456 Oak Avenue",
+                address_line_2: "Apt 2B",
+                city: "San Francisco",
+                state: "CA",
+                zipcode: "94102"
+              },
               deductions: [
                 {
                   id: "ded_remote_casey_primary",
@@ -4841,9 +4855,16 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert result.success?
     assert_equal "empl_remote_casey", @employee.reload.vitable_id
     assert_equal "active", @employee.employment_status
+    assert_equal remote_hire_date, @employee.start_on
     assert_equal "synced", @employee.metadata.fetch("vitable_census_sync_status")
     assert_equal "active", @employee.metadata.fetch("vitable_remote_status")
     assert_equal "mem_remote_casey", @employee.metadata.fetch("vitable_member_id")
+    assert_equal "Full Time", @employee.metadata.fetch("vitable_remote_employee_class")
+    assert_equal remote_hire_date.iso8601, @employee.metadata.fetch("vitable_remote_hire_date")
+    assert_equal remote_birth_date.iso8601, @employee.metadata.fetch("vitable_remote_date_of_birth")
+    assert_equal "4155551234", @employee.metadata.fetch("vitable_remote_phone")
+    assert_equal "San Francisco", @employee.metadata.dig("vitable_remote_address", "city")
+    assert_equal "Full Time", @employee.metadata.dig("vitable_last_resource_snapshot", "employee_class")
     assert_equal 1, @employee.metadata.fetch("vitable_remote_deductions").count
     remote_deduction = @payroll_run.payroll_deductions.find_by!(vitable_id: "ded_remote_casey_primary")
     assert_equal @employee.id, remote_deduction.employee_id
@@ -4857,6 +4878,8 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal "synced", manifest_line.fetch("status")
     assert_equal "empl_remote_casey", manifest_line.fetch("remote_employee_id")
     assert_equal "mem_remote_casey", manifest_line.fetch("remote_member_id")
+    assert_equal "Full Time", manifest_line.fetch("remote_employee_class")
+    assert_equal remote_hire_date.iso8601, manifest_line.fetch("remote_hire_date")
     assert_equal 1, manifest_line.fetch("remote_deduction_count")
     sync = @connection.sync_runs.where(operation: "remote_roster_refresh").recent_first.first
     assert_equal "succeeded", sync.status
