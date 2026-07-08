@@ -232,6 +232,7 @@ module Vitable
           "unmatched_remote_ids" => mapping.fetch("unmatched_remote_ids"),
           "verification_status" => verification.fetch("status"),
           "deduction_sync" => mapping.fetch("deduction_sync"),
+          "dependent_sync" => mapping.fetch("dependent_sync"),
           "lifecycle_reconciliation" => mapping.fetch("lifecycle_reconciliation")
         }
       }
@@ -260,6 +261,12 @@ module Vitable
           "deduction_created_count" => mapping.dig("deduction_sync", "created_count"),
           "deduction_updated_count" => mapping.dig("deduction_sync", "updated_count"),
           "deduction_unchanged_count" => mapping.dig("deduction_sync", "unchanged_count"),
+          "dependent_processed_count" => mapping.dig("dependent_sync", "processed_count"),
+          "dependent_matched_count" => mapping.dig("dependent_sync", "matched_count"),
+          "dependent_created_count" => mapping.dig("dependent_sync", "created_count"),
+          "dependent_updated_count" => mapping.dig("dependent_sync", "updated_count"),
+          "dependent_unchanged_count" => mapping.dig("dependent_sync", "unchanged_count"),
+          "dependent_missing_required_count" => mapping.dig("dependent_sync", "missing_required_count"),
           "inactive_enrollment_count" => mapping.dig("lifecycle_reconciliation", "inactive_enrollment_count"),
           "inactive_payroll_deduction_count" => mapping.dig("lifecycle_reconciliation", "inactive_payroll_deduction_count")
         )
@@ -462,6 +469,7 @@ module Vitable
       unmatched = []
       matched_employee_ids = []
       deduction_sync = PayrollDeductionSyncResultDto.empty
+      dependent_sync = DependentSnapshotSyncResultDto.empty
       lifecycle_reconciliation = EmployeeLifecycleReconciliationDto.empty
 
       remote_employees.each do |remote_employee|
@@ -487,6 +495,14 @@ module Vitable
               reconciled_at: refreshed_at
             )
           )
+          dependent_sync = dependent_sync.merge(
+            dependent_snapshot_repository.sync_remote_employee_dependents(
+              employee:,
+              remote_employee:,
+              source: "vitable_remote_roster",
+              refreshed_at:
+            )
+          )
           lifecycle_reconciliation = lifecycle_reconciliation.merge(
             deactivate_employee_benefits(employee, remote_employee, refreshed_at:)
           )
@@ -504,6 +520,7 @@ module Vitable
         "matched_remote_ids" => matched.compact,
         "unmatched_remote_ids" => unmatched.compact,
         "deduction_sync" => deduction_sync.to_metadata,
+        "dependent_sync" => dependent_sync.to_metadata,
         "lifecycle_reconciliation" => lifecycle_reconciliation.to_metadata
       }
     end
@@ -516,6 +533,10 @@ module Vitable
         source: "vitable_remote_roster",
         reconciled_at: refreshed_at
       )
+    end
+
+    def dependent_snapshot_repository
+      @dependent_snapshot_repository ||= DependentSnapshotRepository.new
     end
 
     def employee_for_remote(remote_employee)

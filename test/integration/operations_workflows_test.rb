@@ -5763,6 +5763,27 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
               reference_id: "musto_employee_#{Employee.find_by!(email: "casey@example.com").id}",
               status: "active",
               member_id: "mem_remote_casey",
+              member: {
+                dependents: [
+                  {
+                    id: "dep_remote_harper_roster",
+                    reference_id: "musto_dependent_#{Dependent.find_by!(first_name: "Harper", last_name: "Ng").id}",
+                    first_name: "Harper",
+                    last_name: "Ng",
+                    relationship: "spouse",
+                    date_of_birth: Dependent.find_by!(first_name: "Harper", last_name: "Ng").date_of_birth.iso8601,
+                    status: "active"
+                  },
+                  {
+                    id: "dep_remote_avery_roster",
+                    first_name: "Avery",
+                    last_name: "Ng",
+                    relationship: "child",
+                    date_of_birth: Date.new(2018, 3, 4).iso8601,
+                    status: "active"
+                  }
+                ]
+              },
               date_of_birth: remote_birth_date.iso8601,
               employee_class: "Full Time",
               hire_date: remote_hire_date.iso8601,
@@ -5820,6 +5841,16 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal "San Francisco", @employee.metadata.dig("vitable_remote_address", "city")
     assert_equal "Full Time", @employee.metadata.dig("vitable_last_resource_snapshot", "employee_class")
     assert_equal 1, @employee.metadata.fetch("vitable_remote_deductions").count
+    @dependent.reload
+    created_dependent = @employee.dependents.find_by!(vitable_id: "dep_remote_avery_roster")
+    assert_equal "dep_remote_harper_roster", @dependent.vitable_id
+    assert_equal "vitable_remote_roster", @dependent.metadata.fetch("source")
+    assert_equal "empl_remote_casey", @dependent.metadata.fetch("vitable_remote_employee_id")
+    assert_equal "dep_remote_harper_roster", @dependent.metadata.dig("vitable_last_resource_snapshot", "id")
+    assert_equal "Avery", created_dependent.first_name
+    assert_equal "eligible", created_dependent.eligibility_status
+    assert_equal "enrolled", created_dependent.enrollment_status
+    assert_equal "empl_remote_casey", created_dependent.metadata.fetch("vitable_remote_employee_id")
     remote_deduction = @payroll_run.payroll_deductions.find_by!(vitable_id: "ded_remote_casey_primary")
     assert_equal @employee.id, remote_deduction.employee_id
     assert_equal @enrollment.id, remote_deduction.enrollment_id
@@ -5842,7 +5873,14 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal 1, sync.stats.fetch("manifest_synced_count")
     assert_equal 1, sync.stats.fetch("deduction_created_count")
     assert_equal 0, sync.stats.fetch("deduction_updated_count")
+    assert_equal 2, sync.stats.fetch("dependent_processed_count")
+    assert_equal 2, sync.stats.fetch("dependent_matched_count")
+    assert_equal 1, sync.stats.fetch("dependent_created_count")
+    assert_equal 1, sync.stats.fetch("dependent_updated_count")
+    assert_equal 0, sync.stats.fetch("dependent_missing_required_count")
     assert_equal 1, @employer.reload.settings.dig("vitable_remote_roster", "deduction_sync", "created_count")
+    assert_equal 1, @employer.reload.settings.dig("vitable_remote_roster", "dependent_sync", "created_count")
+    assert_equal 1, @employer.reload.settings.dig("vitable_remote_roster", "dependent_sync", "updated_count")
     assert_equal "verified", sync.stats.fetch("verification_status")
     verification = @employer.reload.settings.fetch("vitable_census_roster_verification")
     assert_equal "verified", verification.fetch("status")

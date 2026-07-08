@@ -45,7 +45,12 @@ module Vitable
         source:,
         reconciled_at: refreshed_at
       )
-      dependent_sync = sync_dependents(employee, remote_employee, source:, refreshed_at:)
+      dependent_sync = dependent_snapshot_repository.sync_remote_employee_dependents(
+        employee:,
+        remote_employee:,
+        source:,
+        refreshed_at:
+      )
       lifecycle_reconciliation = deactivate_employee_benefits(employee, remote_employee, source:, refreshed_at:)
 
       result.increment(
@@ -53,7 +58,7 @@ module Vitable
         matched_count: 1,
         updated_count: changed ? 1 : 0,
         unchanged_count: changed ? 0 : 1,
-        **dependent_sync,
+        **dependent_sync.to_reconciliation_attributes,
         deduction_sync:,
         lifecycle_reconciliation:
       )
@@ -127,90 +132,8 @@ module Vitable
       )
     end
 
-    def sync_dependents(employee, remote_employee, source:, refreshed_at:)
-      remote_dependents_for(remote_employee).reduce(dependent_sync_counts) do |counts, payload|
-        counts[:dependent_processed_count] += 1
-        dto = RemoteDependentDto.from_hash(payload)
-        dependent = dependent_for_remote(employee, dto)
-        missing_fields = dto.missing_required_fields(existing: dependent)
-        if missing_fields.any?
-          counts[:dependent_missing_required_count] += 1
-          next counts
-        end
-
-        attributes = dto.attributes(existing: dependent, source:, refreshed_at:)
-        counts[:dependent_matched_count] += 1
-        if dependent
-          dependent.assign_attributes(attributes)
-          if dependent.has_changes_to_save?
-            dependent.save!
-            counts[:dependent_updated_count] += 1
-          else
-            counts[:dependent_unchanged_count] += 1
-          end
-        else
-          employee.dependents.create!(attributes)
-          counts[:dependent_created_count] += 1
-        end
-        counts
-      end
-    end
-
-    def dependent_sync_counts
-      {
-        dependent_processed_count: 0,
-        dependent_matched_count: 0,
-        dependent_created_count: 0,
-        dependent_updated_count: 0,
-        dependent_unchanged_count: 0,
-        dependent_missing_required_count: 0
-      }
-    end
-
-    def remote_dependents_for(remote_employee)
-      dependents = remote_employee.fetch("dependents", nil)
-      dependents = remote_employee.dig("member", "dependents") if dependents.blank?
-      return [] unless dependents.respond_to?(:map)
-
-      dependents.map do |dependent|
-        dependent.to_h.stringify_keys.tap do |record|
-          record["employee_id"] ||= remote_employee.fetch("id", nil)
-        end
-      end
-    end
-
-    def dependent_for_remote(employee, dto)
-      if dto.remote_id.present?
-        dependent = employee.dependents.find_by(vitable_id: dto.remote_id)
-        return dependent if dependent
-      end
-
-      dependent = dependent_from_reference_id(employee, dto.reference_id)
-      return dependent if dependent
-
-      dependent_from_identity(employee, dto)
-    end
-
-    def dependent_from_reference_id(employee, reference_id)
-      value = reference_id.to_s
-      return unless value.match?(/\Amusto_dependent_\d+\z/)
-
-      employee.dependents.find_by(id: value.delete_prefix("musto_dependent_").to_i)
-    end
-
-    def dependent_from_identity(employee, dto)
-      identity_key = dto.identity_key
-      return unless identity_key
-
-      matches = employee.dependents.select do |dependent|
-        [
-          dependent.first_name.to_s.downcase,
-          dependent.last_name.to_s.downcase,
-          dependent.relationship,
-          dependent.date_of_birth
-        ] == identity_key
-      end
-      matches.one? ? matches.first : nil
+    def dependent_snapshot_repository
+      @dependent_snapshot_repository ||= DependentSnapshotRepository.new
     end
 
     def employer_from_reference_id(reference_id)
