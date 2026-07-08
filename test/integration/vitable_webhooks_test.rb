@@ -64,6 +64,42 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
     assert_equal "wevt_test_data_envelope", event.payload.dig("data", "event_id")
   end
 
+  test "accepts a nested Vitable webhook event envelope" do
+    payload = {
+      data: {
+        webhook_event: {
+          id: "wevt_test_nested_webhook_event",
+          organization: {
+            id: @organization.external_id
+          },
+          type: "enrollment.accepted",
+          resource: {
+            type: "enrollment",
+            id: "enrl_nested_webhook_event"
+          },
+          timestamp: "2026-01-23T14:30:00+00:00"
+        }
+      }
+    }
+
+    assert_difference "WebhookEvent.count", 1 do
+      post api_v1_webhooks_vitable_path, params: payload, as: :json
+    end
+
+    assert_response :accepted
+    event = WebhookEvent.find_by!(event_id: "wevt_test_nested_webhook_event")
+    assert_equal @connection, event.integration_connection
+    assert_equal "needs_credentials", event.status
+    assert_equal @organization.external_id, event.organization_external_id
+    assert_equal "enrollment.accepted", event.event_name
+    assert_equal "enrollment", event.resource_type
+    assert_equal "enrl_nested_webhook_event", event.resource_id
+    assert_equal "wevt_test_nested_webhook_event", event.payload.fetch("event_id")
+    assert_equal "enrollment.accepted", event.payload.fetch("event_name")
+    assert_equal "enrl_nested_webhook_event", event.payload.fetch("resource_id")
+    assert_equal "wevt_test_nested_webhook_event", event.payload.dig("data", "webhook_event", "id")
+  end
+
   test "accepts a Vitable webhook that uses occurred_at for the event timestamp" do
     occurred_at = Time.current.change(usec: 0)
     payload = webhook_payload.except(:created_at).merge(
