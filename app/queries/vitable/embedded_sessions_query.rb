@@ -17,7 +17,7 @@ module Vitable
         connection_id: connection&.id,
         connection_status: connection&.status || "missing",
         credentials_present: connection&.credentials_present? || false,
-        api_key_reference: connection&.api_key_reference || "VITABLE_CONNECT_API_KEY",
+        api_key_reference: connection&.api_key_reference || Configuration::DEFAULT_API_KEY_REFERENCE,
         metrics: metrics(employees, holdbacks, latest_packet, connection),
         preflight_checks: preflight_checks(employees, holdbacks, latest_packet, connection),
         employees:,
@@ -25,9 +25,9 @@ module Vitable
         latest_packet:,
         token_runs: @repository.token_runs.map { |sync| Operations::SyncRunDto.from_record(sync) },
         request_logs: @repository.request_logs.map { |log| Operations::ApiRequestLogDto.from_record(log) },
-        docs_url: "https://developer.vitablehealth.com/",
-        ruby_docs_url: "https://developer.vitablehealth.com/api/ruby",
-        widget_base_url: ENV.fetch("VITABLE_WIDGET_BASE_URL", "https://app.vitablehealth.com")
+        docs_url: Configuration::DOCS_URL,
+        ruby_docs_url: Configuration::RUBY_DOCS_URL,
+        widget_base_url: Configuration.widget_base_url
       )
     end
 
@@ -55,7 +55,7 @@ module Vitable
         EmbeddedSessionPreflightCheckDto.new(
           label: "API credentials",
           status: connection&.credentials_present? ? "ready" : "needs_credentials",
-          detail: connection&.credentials_present? ? "#{connection.api_key_reference} is available to Rails." : "Set #{connection&.api_key_reference || "VITABLE_CONNECT_API_KEY"} before live token issuance."
+          detail: connection&.credentials_present? ? "#{connection.api_key_reference} is available to Rails." : "Set #{connection&.api_key_reference || Configuration::DEFAULT_API_KEY_REFERENCE} before live token issuance."
         ),
         EmbeddedSessionPreflightCheckDto.new(
           label: "Enrollment widget",

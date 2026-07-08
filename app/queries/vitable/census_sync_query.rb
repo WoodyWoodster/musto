@@ -23,7 +23,7 @@ module Vitable
         connection_id: connection&.id,
         connection_status: connection&.status || "missing",
         credentials_present: connection&.credentials_present? || false,
-        api_key_reference: connection&.api_key_reference || "VITABLE_CONNECT_API_KEY",
+        api_key_reference: connection&.api_key_reference || Configuration::DEFAULT_API_KEY_REFERENCE,
         remote_employer_id: @employer&.vitable_id,
         metrics: metrics(roster, latest_manifest, holdbacks, connection),
         preflight_checks: preflight_checks(roster, latest_manifest, holdbacks, connection),
@@ -35,9 +35,9 @@ module Vitable
         latest_verification:,
         sync_runs: @repository.sync_runs.map { |sync| Operations::SyncRunDto.from_record(sync) },
         request_logs: @repository.request_logs.map { |log| Operations::ApiRequestLogDto.from_record(log) },
-        endpoint_path: "/v1/employers/:employer_id/census-sync",
-        docs_url: "https://developer.vitablehealth.com/",
-        ruby_docs_url: "https://developer.vitablehealth.com/api/ruby"
+        endpoint_path: EndpointCatalog::EMPLOYER_CENSUS_SYNC_BY_EMPLOYER,
+        docs_url: Configuration::DOCS_URL,
+        ruby_docs_url: Configuration::RUBY_DOCS_URL
       )
     end
 
@@ -70,7 +70,7 @@ module Vitable
         CensusSyncPreflightCheckDto.new(
           label: "API credentials",
           status: connection&.credentials_present? ? "ready" : "needs_credentials",
-          detail: connection&.credentials_present? ? "#{connection.api_key_reference} is available to Rails." : "Set #{connection&.api_key_reference || "VITABLE_CONNECT_API_KEY"} before live census submission."
+          detail: connection&.credentials_present? ? "#{connection.api_key_reference} is available to Rails." : "Set #{connection&.api_key_reference || Configuration::DEFAULT_API_KEY_REFERENCE} before live census submission."
         ),
         CensusSyncPreflightCheckDto.new(
           label: "Remote employer ID",

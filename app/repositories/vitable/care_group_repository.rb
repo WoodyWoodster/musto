@@ -109,7 +109,7 @@ module Vitable
         "requested_by" => requested_by,
         "employer_id" => @employer.id,
         "remote_group_id" => remote_group_id,
-        "endpoint" => "/v1/groups/:group_id/members/sync",
+        "endpoint" => EndpointCatalog::GROUP_MEMBERS_SYNC_BY_GROUP,
         "status" => member_manifest_status(members, holdbacks),
         "limits" => {
           "max_members" => max_members,
@@ -179,7 +179,7 @@ module Vitable
         stats: {
           "requested_by" => requested_by,
           "resource_id" => remote_group_id.presence || "care_group_pending",
-          "endpoint" => "/v1/groups/:group_id/members/sync/:request_id",
+          "endpoint" => EndpointCatalog::GROUP_MEMBER_SYNC_REQUEST_BY_GROUP,
           "request_id" => latest_member_sync_request.to_h.fetch("request_id", nil)
         }
       )
@@ -374,7 +374,7 @@ module Vitable
         "requested_by" => requested_by,
         "employer_id" => @employer.id,
         "remote_group_id" => remote_group_id,
-        "endpoint" => mode == "create" ? "/v1/groups" : "/v1/groups/:group_id",
+        "endpoint" => mode == "create" ? EndpointCatalog::GROUPS : EndpointCatalog::GROUP.sub(":id", ":group_id"),
         "mode" => mode,
         "status" => holdbacks.any? ? "blocked" : "ready",
         "totals" => {

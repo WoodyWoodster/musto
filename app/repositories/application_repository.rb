@@ -10,7 +10,7 @@ class ApplicationRepository
   end
 
   def preferred_vitable_environment
-    ENV.fetch("VITABLE_CONNECT_ENVIRONMENT", "demo").presence || "demo"
+    Vitable::Configuration.default_environment
   end
 
   def severity_sort

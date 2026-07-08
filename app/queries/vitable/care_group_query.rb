@@ -21,7 +21,7 @@ module Vitable
         connection_id: connection&.id,
         connection_status: connection&.status || "missing",
         credentials_present: connection&.credentials_present? || false,
-        api_key_reference: connection&.api_key_reference || "VITABLE_CONNECT_API_KEY",
+        api_key_reference: connection&.api_key_reference || Configuration::DEFAULT_API_KEY_REFERENCE,
         remote_group_id: @repository.remote_group_id,
         metrics: metrics(roster, group_packet, member_manifest, holdbacks, connection),
         preflight_checks: preflight_checks(roster, display_group_packet, group_packet, member_manifest, holdbacks, connection),
@@ -32,10 +32,10 @@ module Vitable
         sync_runs: @repository.sync_runs.map { |sync| Operations::SyncRunDto.from_record(sync) },
         request_logs: @repository.request_logs.map { |log| Operations::ApiRequestLogDto.from_record(log) },
         member_sync_request: @repository.latest_member_sync_request.to_h,
-        group_endpoint_path: "/v1/groups",
-        member_sync_endpoint_path: "/v1/groups/:group_id/members/sync",
-        docs_url: "https://developer.vitablehealth.com/",
-        ruby_docs_url: "https://developer.vitablehealth.com/api/ruby"
+        group_endpoint_path: EndpointCatalog::GROUPS,
+        member_sync_endpoint_path: EndpointCatalog::GROUP_MEMBERS_SYNC_BY_GROUP,
+        docs_url: Configuration::DOCS_URL,
+        ruby_docs_url: Configuration::RUBY_DOCS_URL
       )
     end
 
@@ -63,7 +63,7 @@ module Vitable
         CareGroupPreflightCheckDto.new(
           label: "API credentials",
           status: connection&.credentials_present? ? "ready" : "needs_credentials",
-          detail: connection&.credentials_present? ? "#{connection.api_key_reference} is available to Rails." : "Set #{connection&.api_key_reference || "VITABLE_CONNECT_API_KEY"} before live group sync."
+          detail: connection&.credentials_present? ? "#{connection.api_key_reference} is available to Rails." : "Set #{connection&.api_key_reference || Configuration::DEFAULT_API_KEY_REFERENCE} before live group sync."
         ),
         CareGroupPreflightCheckDto.new(
           label: "Group profile",

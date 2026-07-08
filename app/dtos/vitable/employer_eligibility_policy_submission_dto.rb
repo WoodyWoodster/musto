@@ -13,7 +13,7 @@ module Vitable
     :error_class,
     :error_message
   ) do
-    ENDPOINT_TEMPLATE = "/v1/employers/:employer_id/benefit-eligibility-policies"
+    ENDPOINT_TEMPLATE = EndpointCatalog::EMPLOYER_ELIGIBILITY_POLICIES_BY_EMPLOYER
 
     def self.submitted(remote_employer_id:, payload:, response:, retrieval_response:, submitted_at:)
       remote_response = serialize_response(response)
@@ -110,13 +110,13 @@ module Vitable
     def self.endpoint_for(remote_employer_id)
       return ENDPOINT_TEMPLATE if remote_employer_id.blank?
 
-      "/v1/employers/#{remote_employer_id}/benefit-eligibility-policies"
+      EndpointCatalog.path(:employer_eligibility_policies, id: remote_employer_id)
     end
 
     def self.retrieve_endpoint_for(remote_policy_id)
       return if remote_policy_id.blank?
 
-      "/v1/benefit-eligibility-policies/#{remote_policy_id}"
+      EndpointCatalog.path(:benefit_eligibility_policy, id: remote_policy_id)
     end
 
     def self.serialize_response(response)

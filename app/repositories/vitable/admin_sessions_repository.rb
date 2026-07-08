@@ -63,7 +63,7 @@ module Vitable
         "token_request" => {
           "grant_type" => "client_credentials",
           "bound_entity_type" => "employer",
-          "endpoint" => "/v1/auth/access-tokens",
+          "endpoint" => EndpointCatalog::AUTH_ACCESS_TOKENS,
           "authorization_header" => WidgetLaunchToken::HEADER
         },
         "launch_authorization" => launch_authorization,

@@ -403,7 +403,7 @@ module Vitable
           "requested_by" => requested_by,
           "resource_id" => event.event_id,
           "webhook_event_id" => event.id,
-          "endpoint" => "/v1/webhook-events/:event_id/deliveries"
+          "endpoint" => EndpointCatalog::WEBHOOK_EVENT_DELIVERIES_BY_EVENT
         }
       )
     end
@@ -587,17 +587,17 @@ module Vitable
           "requested_by" => requested_by,
           "resource_id" => "connection_#{connection.id}",
           "environment" => connection.environment,
-          "base_url" => connection.effective_api_base_url,
-          "endpoints" => %w[
-            /v1/auth/access-tokens
-            /v1/employers
-            /v1/employers/:id
-            /v1/employers/:id/employees
-            /v1/employees/:id/enrollments
-            /v1/groups
-            /v1/groups/:id
-            /v1/plans
-            /v1/webhook-events
+          "base_url" => connection.sdk_base_url,
+          "endpoints" => [
+            EndpointCatalog::AUTH_ACCESS_TOKENS,
+            EndpointCatalog::EMPLOYERS,
+            EndpointCatalog::EMPLOYER,
+            EndpointCatalog::EMPLOYER_EMPLOYEES,
+            EndpointCatalog::EMPLOYEE_ENROLLMENTS,
+            EndpointCatalog::GROUPS,
+            EndpointCatalog::GROUP,
+            EndpointCatalog::PLANS,
+            EndpointCatalog::WEBHOOK_EVENTS
           ]
         }
       )
@@ -695,7 +695,7 @@ module Vitable
         environment:,
         api_key_reference:,
         status: "pending",
-        metadata: environment == "demo" ? { "api_base_url" => IntegrationConnection::DEMO_BASE_URL } : {}
+        metadata: {}
       )
     end
 

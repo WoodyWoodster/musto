@@ -43,7 +43,7 @@ module Benefits
         "requested_by" => requested_by,
         "employer_id" => @employer.id,
         "status" => holdbacks.any? ? "needs_review" : "ready",
-        "endpoint" => "/v1/employers/:employer_id/census-sync",
+        "endpoint" => Vitable::EndpointCatalog::EMPLOYER_CENSUS_SYNC_BY_EMPLOYER,
         "deactivation_strategy" => "omit_employee_from_next_census_sync",
         "totals" => {
           "event_count" => selected_events.count,

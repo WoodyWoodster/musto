@@ -90,7 +90,7 @@ module Vitable
         "requested_by" => requested_by,
         "employer_id" => @employer.id,
         "remote_employer_id" => @employer.vitable_id,
-        "endpoint" => "/v1/employers/:employer_id/census-sync",
+        "endpoint" => EndpointCatalog::EMPLOYER_CENSUS_SYNC_BY_EMPLOYER,
         "status" => manifest_status(lines, holdbacks, offboarding_omissions),
         "limits" => {
           "max_employees" => max_employees,
@@ -208,7 +208,7 @@ module Vitable
         stats: {
           "requested_by" => requested_by,
           "resource_id" => @employer.vitable_id,
-          "endpoint" => "/v1/employers/:employer_id/employees"
+          "endpoint" => EndpointCatalog::EMPLOYER_EMPLOYEES.sub(":id", ":employer_id")
         }
       )
     end

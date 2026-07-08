@@ -24,146 +24,10 @@ module Vitable
     :api_snapshot,
     :simulator
   ) do
-    ENDPOINT_CATALOG = [
-      {
-        resource_type: "auth tokens",
-        method: "POST",
-        fetch_path: "/v1/auth/access-tokens",
-        operations: %w[auth.issue_access_token auth.issue_employee_access_token auth.issue_employer_access_token],
-        sync_operations: %w[embedded_enrollment_token embedded_admin_token widget_token_broker demo_smoke_check]
-      },
-      {
-        resource_type: "employers",
-        method: "GET/POST",
-        fetch_path: "/v1/employers",
-        operations: %w[employer.list employer.create employer.retrieve],
-        sync_operations: %w[employer_create api_snapshot_refresh demo_smoke_check],
-        resource_fetch_fragments: %w[/employers/],
-        fetch_resource_types: %w[employer],
-        snapshot_count_key: "remote_employer_count",
-        event_resource_types: %w[employer]
-      },
-      {
-        resource_type: "employer settings",
-        method: "PUT",
-        fetch_path: "/v1/employers/:id/settings",
-        operations: %w[employer.update_settings],
-        sync_operations: %w[employer_settings_update]
-      },
-      {
-        resource_type: "eligibility policy creation",
-        method: "POST",
-        fetch_path: "/v1/employers/:id/benefit-eligibility-policies",
-        operations: %w[employer.eligibility_policy.create],
-        sync_operations: %w[employer_create employer_settings_update]
-      },
-      {
-        resource_type: "eligibility policy retrieval",
-        method: "GET",
-        fetch_path: "/v1/benefit-eligibility-policies/:id",
-        operations: %w[eligibility_policy.retrieve],
-        sync_operations: %w[api_snapshot_refresh],
-        resource_fetch_fragments: %w[/benefit-eligibility-policies/],
-        fetch_resource_types: %w[eligibility_policy benefit_eligibility_policy]
-      },
-      {
-        resource_type: "census sync",
-        method: "POST",
-        fetch_path: "/v1/employers/:id/census-sync",
-        operations: %w[employer.census_sync],
-        sync_operations: %w[census_sync]
-      },
-      {
-        resource_type: "remote roster",
-        method: "GET",
-        fetch_path: "/v1/employers/:id/employees",
-        operations: %w[employer.list_employees],
-        sync_operations: %w[remote_roster_refresh demo_smoke_check],
-        snapshot_count_key: "mapped_employee_count"
-      },
-      {
-        resource_type: "employees",
-        method: "GET",
-        fetch_path: "/v1/employees/:id",
-        operations: %w[employee.retrieve],
-        resource_fetch_fragments: %w[/employees/],
-        fetch_resource_types: %w[employee],
-        snapshot_count_key: "retrieved_remote_employee_count",
-        event_resource_types: %w[employee]
-      },
-      {
-        resource_type: "employee enrollments",
-        method: "GET",
-        fetch_path: "/v1/employees/:id/enrollments",
-        operations: %w[employee.list_enrollments],
-        sync_operations: %w[api_snapshot_refresh demo_smoke_check],
-        snapshot_count_key: "remote_employee_enrollment_count"
-      },
-      {
-        resource_type: "enrollments",
-        method: "GET",
-        fetch_path: "/v1/enrollments/:id",
-        operations: %w[enrollment.retrieve],
-        resource_fetch_fragments: %w[/enrollments/],
-        fetch_resource_types: %w[enrollment],
-        snapshot_count_key: "retrieved_remote_enrollment_count",
-        event_resource_types: %w[enrollment]
-      },
-      {
-        resource_type: "plans",
-        method: "GET",
-        fetch_path: "/v1/plans",
-        operations: %w[plan.list],
-        sync_operations: %w[plan_mapping_refresh api_snapshot_refresh demo_smoke_check],
-        snapshot_count_key: "remote_plan_count"
-      },
-      {
-        resource_type: "groups",
-        method: "GET/POST/PATCH",
-        fetch_path: "/v1/groups",
-        operations: %w[group.list group.retrieve group.create group.update],
-        sync_operations: %w[care_group_upsert api_snapshot_refresh demo_smoke_check],
-        fetch_resource_types: %w[group],
-        snapshot_count_key: "remote_group_count",
-        event_resource_types: %w[group]
-      },
-      {
-        resource_type: "group member sync",
-        method: "POST/GET",
-        fetch_path: "/v1/groups/:id/members/sync",
-        operations: %w[group.member_sync.submit group.member_sync.retrieve],
-        sync_operations: %w[care_member_sync_submit care_member_sync_refresh],
-        snapshot_count_key: "remote_care_member_sync_count"
-      },
-      {
-        resource_type: "webhook events",
-        method: "GET",
-        fetch_path: "/v1/webhook-events",
-        operations: %w[webhook_event.list webhook_event.retrieve],
-        sync_operations: %w[webhook_replay webhook_delivery_refresh api_snapshot_refresh demo_smoke_check],
-        fetch_resource_types: %w[webhook_event],
-        snapshot_count_key: "remote_webhook_event_count"
-      },
-      {
-        resource_type: "webhook event deliveries",
-        method: "GET",
-        fetch_path: "/v1/webhook-events/:id/deliveries",
-        operations: %w[webhook_event.list_deliveries],
-        sync_operations: %w[webhook_delivery_refresh api_snapshot_refresh],
-        snapshot_count_key: "remote_webhook_delivery_count"
-      },
-      {
-        resource_type: "payload-only webhooks",
-        method: "WEBHOOK",
-        fetch_path: "/api/v1/webhooks/vitable",
-        operations: %w[webhook.payload_only],
-        event_resource_types: %w[dependent payroll_deduction plan_year]
-      }
-    ].freeze
     NON_READY_ENDPOINT_STATUSES = %w[failed needs_credentials blocked running].freeze
 
     def self.endpoint_catalog
-      ENDPOINT_CATALOG
+      EndpointCatalog.coverage_catalog
     end
 
     def self.from_record(record, webhook_events:, sync_runs:, request_logs:, simulator_resource_ids: {})
@@ -204,15 +68,15 @@ module Vitable
     end
 
     def docs_url
-      metadata.fetch("docs", "https://developer.vitablehealth.com/")
+      Configuration.docs_url(metadata)
     end
 
     def ruby_docs_url
-      "https://developer.vitablehealth.com/api/ruby"
+      Configuration::RUBY_DOCS_URL
     end
 
     def webhooks_docs_url
-      "https://developer.vitablehealth.com/webhooks/introduction"
+      Configuration::WEBHOOKS_DOCS_URL
     end
 
     def self.metrics(record, webhook_events, sync_runs, request_logs)

@@ -139,9 +139,9 @@ module Vitable
       eligibility_profile = eligibility_profile_for
       mode = @employer.vitable_id.present? ? "update_settings" : "create"
       holdbacks = holdbacks_for(mode:, create_payload:, settings_payload:, eligibility_profile:)
-      endpoint = mode == "create" ? "/v1/employers" : "/v1/employers/:employer_id/settings"
-      eligibility_policy_endpoint = "/v1/employers/:employer_id/benefit-eligibility-policies"
-      eligibility_policy_retrieval_endpoint = "/v1/benefit-eligibility-policies/:id"
+      endpoint = mode == "create" ? EndpointCatalog::EMPLOYERS : EndpointCatalog::EMPLOYER_SETTINGS_BY_EMPLOYER
+      eligibility_policy_endpoint = EndpointCatalog::EMPLOYER_ELIGIBILITY_POLICIES_BY_EMPLOYER
+      eligibility_policy_retrieval_endpoint = EndpointCatalog::BENEFIT_ELIGIBILITY_POLICY
 
       {
         "packet_id" => "vitable_employer_provisioning_#{@employer.id}_#{Time.current.to_i}",
@@ -435,10 +435,10 @@ module Vitable
 
     def endpoint_sequence_for(mode, eligibility_policy_endpoint)
       endpoints = []
-      endpoints << "/v1/employers" if mode == "create"
-      endpoints << "/v1/employers/:employer_id/settings"
+      endpoints << EndpointCatalog::EMPLOYERS if mode == "create"
+      endpoints << EndpointCatalog::EMPLOYER_SETTINGS_BY_EMPLOYER
       endpoints << eligibility_policy_endpoint
-      endpoints << "/v1/benefit-eligibility-policies/:id"
+      endpoints << EndpointCatalog::BENEFIT_ELIGIBILITY_POLICY
       endpoints
     end
 

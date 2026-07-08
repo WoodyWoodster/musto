@@ -23,7 +23,6 @@ jobs:
       RAILS_ENV: test
       VITABLE_CONNECT_API_KEY: ${{ secrets.VITABLE_CONNECT_API_KEY }}
       VITABLE_CONNECT_ENVIRONMENT: demo
-      VITABLE_CONNECT_BASE_URL: https://api.demo.vitablehealth.com
       VITABLE_SMOKE_CONNECTION_ID: ${{ inputs.connection_id }}
       VITABLE_SMOKE_REQUESTED_BY: github_actions
 

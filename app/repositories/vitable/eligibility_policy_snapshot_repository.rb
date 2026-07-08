@@ -48,7 +48,7 @@ module Vitable
         "remote_employer_id" => dto.remote_employer_id,
         "remote_policy_id" => dto.remote_policy_id,
         "remote_snapshot" => response_hash,
-        "retrieve_endpoint" => "/v1/benefit-eligibility-policies/#{dto.remote_policy_id}",
+        "retrieve_endpoint" => EndpointCatalog.path(:benefit_eligibility_policy, id: dto.remote_policy_id),
         "last_refreshed_at" => refreshed_at,
         "last_snapshot_source" => source
       ).compact

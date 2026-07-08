@@ -18,7 +18,7 @@ module Vitable
         connection_id: connection&.id,
         connection_status: connection&.status || "missing",
         credentials_present: connection&.credentials_present? || false,
-        api_key_reference: connection&.api_key_reference || "VITABLE_CONNECT_API_KEY",
+        api_key_reference: connection&.api_key_reference || Configuration::DEFAULT_API_KEY_REFERENCE,
         remote_employer_id: @employer&.vitable_id,
         metrics: metrics(latest_packet, holdbacks, connection),
         preflight_checks: preflight_checks(latest_packet, payload, holdbacks, connection),
@@ -27,9 +27,9 @@ module Vitable
         latest_packet:,
         sync_runs: @repository.sync_runs.map { |sync| Operations::SyncRunDto.from_record(sync) },
         request_logs: @repository.request_logs.map { |log| Operations::ApiRequestLogDto.from_record(log) },
-        docs_url: "https://developer.vitablehealth.com/",
-        ruby_docs_url: "https://developer.vitablehealth.com/api/ruby",
-        onboarding_docs_url: "https://developer.vitablehealth.com/embedded_benefits/guides/employer-onboarding/"
+        docs_url: Configuration::DOCS_URL,
+        ruby_docs_url: Configuration::RUBY_DOCS_URL,
+        onboarding_docs_url: Configuration::EMPLOYER_ONBOARDING_DOCS_URL
       )
     end
 
@@ -59,7 +59,7 @@ module Vitable
         EmployerProvisioningPreflightCheckDto.new(
           label: "API credentials",
           status: connection&.credentials_present? ? "ready" : "needs_credentials",
-          detail: connection&.credentials_present? ? "#{connection.api_key_reference} is available to Rails." : "Set #{connection&.api_key_reference || "VITABLE_CONNECT_API_KEY"} before live employer provisioning."
+          detail: connection&.credentials_present? ? "#{connection.api_key_reference} is available to Rails." : "Set #{connection&.api_key_reference || Configuration::DEFAULT_API_KEY_REFERENCE} before live employer provisioning."
         ),
         EmployerProvisioningPreflightCheckDto.new(
           label: "Legal entity",
@@ -102,7 +102,7 @@ module Vitable
       return "Generate a packet before submitting to Vitable." unless latest_packet
       return "#{holdbacks.count} blocking fields need attention before submit." if holdbacks.any?
       return "Regenerate the provisioning packet before submitting because the employer's Vitable state changed." unless packet_current?(latest_packet)
-      return "Set #{connection&.api_key_reference || "VITABLE_CONNECT_API_KEY"} before live employer provisioning." unless connection&.credentials_present?
+      return "Set #{connection&.api_key_reference || Configuration::DEFAULT_API_KEY_REFERENCE} before live employer provisioning." unless connection&.credentials_present?
 
       "Packet is ready for Vitable employer provisioning."
     end

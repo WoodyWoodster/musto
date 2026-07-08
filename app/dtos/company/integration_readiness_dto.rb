@@ -38,10 +38,10 @@ module Company
       new(
         connection_id: nil,
         provider: "vitable",
-        environment: "demo",
+        environment: Vitable::Configuration::DEFAULT_ENVIRONMENT,
         status: "not_configured",
-        api_key_reference: "VITABLE_CONNECT_API_KEY",
-        webhook_secret_reference: "VITABLE_WEBHOOK_SECRET",
+        api_key_reference: Vitable::Configuration::DEFAULT_API_KEY_REFERENCE,
+        webhook_secret_reference: Vitable::Configuration::DEFAULT_WEBHOOK_SECRET_REFERENCE,
         last_synced_at: nil,
         sync_run_count: 0,
         failed_sync_count: 0

@@ -65,12 +65,12 @@ module Vitable
       {
         gateway_method: :create_eligibility_policy,
         operation: "employer.eligibility_policy.create",
-        path: "/v1/employers/:id/benefit-eligibility-policies"
+        path: EndpointCatalog::EMPLOYER_ELIGIBILITY_POLICIES
       },
       {
         gateway_method: :retrieve_eligibility_policy,
         operation: "eligibility_policy.retrieve",
-        path: "/v1/benefit-eligibility-policies/:id"
+        path: EndpointCatalog::BENEFIT_ELIGIBILITY_POLICY
       }
     ].freeze
     DOCUMENTED_WEBHOOK_EVENT_NAMES = %w[
@@ -110,7 +110,7 @@ module Vitable
     def issue_access_token
       body = { grant_type: "client_credentials" }
 
-      instrument("auth.issue_access_token", :post, "/v1/auth/access-tokens", request_body: body) do
+      instrument("auth.issue_access_token", :post, EndpointCatalog::AUTH_ACCESS_TOKENS, request_body: body) do
         client.auth.issue_access_token(grant_type: :client_credentials)
       end
     end
@@ -121,7 +121,7 @@ module Vitable
         bound_entity: { type: "employee", id: employee_id }
       }
 
-      instrument("auth.issue_employee_access_token", :post, "/v1/auth/access-tokens", request_body: body) do
+      instrument("auth.issue_employee_access_token", :post, EndpointCatalog::AUTH_ACCESS_TOKENS, request_body: body) do
         client.auth.issue_access_token(
           grant_type: :client_credentials,
           bound_entity: { type: :employee, id: employee_id }
@@ -135,7 +135,7 @@ module Vitable
         bound_entity: { type: "employer", id: employer_id }
       }
 
-      instrument("auth.issue_employer_access_token", :post, "/v1/auth/access-tokens", request_body: body) do
+      instrument("auth.issue_employer_access_token", :post, EndpointCatalog::AUTH_ACCESS_TOKENS, request_body: body) do
         client.auth.issue_access_token(
           grant_type: :client_credentials,
           bound_entity: { type: :employer, id: employer_id }
@@ -163,19 +163,19 @@ module Vitable
     end
 
     def retrieve_employee(employee_id)
-      instrument("employee.retrieve", :get, "/v1/employees/#{employee_id}") do
+      instrument("employee.retrieve", :get, EndpointCatalog.path(:employee, id: employee_id)) do
         client.employees.retrieve(employee_id)
       end
     end
 
     def retrieve_employer(employer_id)
-      instrument("employer.retrieve", :get, "/v1/employers/#{employer_id}") do
+      instrument("employer.retrieve", :get, EndpointCatalog.path(:employer, id: employer_id)) do
         client.employers.retrieve(employer_id)
       end
     end
 
     def retrieve_enrollment(enrollment_id)
-      instrument("enrollment.retrieve", :get, "/v1/enrollments/#{enrollment_id}") do
+      instrument("enrollment.retrieve", :get, EndpointCatalog.path(:enrollment, id: enrollment_id)) do
         client.enrollments.retrieve(enrollment_id)
       end
     end
@@ -183,7 +183,7 @@ module Vitable
     def list_employers(limit: 100)
       query = { limit: }
 
-      instrument("employer.list", :get, "/v1/employers", request_body: query) do
+      instrument("employer.list", :get, EndpointCatalog::EMPLOYERS, request_body: query) do
         client.employers.list(query)
       end
     end
@@ -191,7 +191,7 @@ module Vitable
     def list_all_employers(limit: 100)
       query = { limit: }
 
-      instrument("employer.list", :get, "/v1/employers", request_body: query) do
+      instrument("employer.list", :get, EndpointCatalog::EMPLOYERS, request_body: query) do
         page_response(client.employers.list(query))
       end
     end
@@ -202,7 +202,7 @@ module Vitable
         employees: employees.map { |employee| census_employee_payload(employee) }
       }
 
-      instrument("employer.census_sync", :post, "/v1/employers/#{employer_id}/census-sync", request_body: body) do
+      instrument("employer.census_sync", :post, EndpointCatalog.path(:employer_census_sync, id: employer_id), request_body: body) do
         client.employers.submit_census_sync(employer_id, employees: body.fetch(:employees))
       end
     end
@@ -210,7 +210,7 @@ module Vitable
     def list_employer_employees(employer_id, limit: 100)
       query = { limit: }
 
-      instrument("employer.list_employees", :get, "/v1/employers/#{employer_id}/employees", request_body: query) do
+      instrument("employer.list_employees", :get, EndpointCatalog.path(:employer_employees, id: employer_id), request_body: query) do
         client.employers.list_employees(employer_id, query)
       end
     end
@@ -218,7 +218,7 @@ module Vitable
     def list_all_employer_employees(employer_id, limit: 100)
       query = { limit: }
 
-      instrument("employer.list_employees", :get, "/v1/employers/#{employer_id}/employees", request_body: query) do
+      instrument("employer.list_employees", :get, EndpointCatalog.path(:employer_employees, id: employer_id), request_body: query) do
         page_response(client.employers.list_employees(employer_id, query))
       end
     end
@@ -226,7 +226,7 @@ module Vitable
     def list_employee_enrollments(employee_id, limit: 100)
       query = { limit: }
 
-      instrument("employee.list_enrollments", :get, "/v1/employees/#{employee_id}/enrollments", request_body: query) do
+      instrument("employee.list_enrollments", :get, EndpointCatalog.path(:employee_enrollments, id: employee_id), request_body: query) do
         client.employees.list_enrollments(employee_id, query)
       end
     end
@@ -234,7 +234,7 @@ module Vitable
     def list_all_employee_enrollments(employee_id, limit: 100)
       query = { limit: }
 
-      instrument("employee.list_enrollments", :get, "/v1/employees/#{employee_id}/enrollments", request_body: query) do
+      instrument("employee.list_enrollments", :get, EndpointCatalog.path(:employee_enrollments, id: employee_id), request_body: query) do
         page_response(client.employees.list_enrollments(employee_id, query))
       end
     end
@@ -242,7 +242,7 @@ module Vitable
     def list_plans(limit: 100)
       query = { limit: }
 
-      instrument("plan.list", :get, "/v1/plans", request_body: query) do
+      instrument("plan.list", :get, EndpointCatalog::PLANS, request_body: query) do
         client.plans.list(query)
       end
     end
@@ -250,7 +250,7 @@ module Vitable
     def list_all_plans(limit: 100)
       query = { limit: }
 
-      instrument("plan.list", :get, "/v1/plans", request_body: query) do
+      instrument("plan.list", :get, EndpointCatalog::PLANS, request_body: query) do
         page_response(client.plans.list(query))
       end
     end
@@ -258,7 +258,7 @@ module Vitable
     def list_webhook_events(limit: 20, created_after: nil, created_before: nil, event_name: nil, resource_id: nil, resource_type: nil)
       query = webhook_events_query(limit:, created_after:, created_before:, event_name:, resource_id:, resource_type:)
 
-      instrument("webhook_event.list", :get, "/v1/webhook-events", request_body: query) do
+      instrument("webhook_event.list", :get, EndpointCatalog::WEBHOOK_EVENTS, request_body: query) do
         client.webhook_events.list(query)
       end
     end
@@ -266,19 +266,19 @@ module Vitable
     def list_all_webhook_events(limit: 100, created_after: nil, created_before: nil, event_name: nil, resource_id: nil, resource_type: nil)
       query = webhook_events_query(limit:, created_after:, created_before:, event_name:, resource_id:, resource_type:)
 
-      instrument("webhook_event.list", :get, "/v1/webhook-events", request_body: query) do
+      instrument("webhook_event.list", :get, EndpointCatalog::WEBHOOK_EVENTS, request_body: query) do
         page_response(client.webhook_events.list(query))
       end
     end
 
     def retrieve_webhook_event(event_id)
-      instrument("webhook_event.retrieve", :get, "/v1/webhook-events/#{event_id}") do
+      instrument("webhook_event.retrieve", :get, EndpointCatalog.path(:webhook_event, id: event_id)) do
         client.webhook_events.retrieve(event_id)
       end
     end
 
     def list_webhook_event_deliveries(event_id)
-      instrument("webhook_event.list_deliveries", :get, "/v1/webhook-events/#{event_id}/deliveries") do
+      instrument("webhook_event.list_deliveries", :get, EndpointCatalog.path(:webhook_event_deliveries, id: event_id)) do
         client.webhook_events.list_deliveries(event_id)
       end
     end
@@ -286,7 +286,7 @@ module Vitable
     def list_groups(limit: 100)
       query = { limit: }
 
-      instrument("group.list", :get, "/v1/groups", request_body: query) do
+      instrument("group.list", :get, EndpointCatalog::GROUPS, request_body: query) do
         client.groups.list(query)
       end
     end
@@ -294,7 +294,7 @@ module Vitable
     def list_all_groups(limit: 100)
       query = { limit: }
 
-      instrument("group.list", :get, "/v1/groups", request_body: query) do
+      instrument("group.list", :get, EndpointCatalog::GROUPS, request_body: query) do
         page_response(client.groups.list(query))
       end
     end
@@ -302,7 +302,7 @@ module Vitable
     def create_employer(payload)
       body = employer_create_payload(payload)
 
-      instrument("employer.create", :post, "/v1/employers", request_body: body) do
+      instrument("employer.create", :post, EndpointCatalog::EMPLOYERS, request_body: body) do
         client.employers.create(body)
       end
     end
@@ -310,14 +310,14 @@ module Vitable
     def update_employer_settings(employer_id, pay_frequency)
       body = { pay_frequency: pay_frequency_value(pay_frequency) }
 
-      instrument("employer.update_settings", :put, "/v1/employers/#{employer_id}/settings", request_body: body) do
+      instrument("employer.update_settings", :put, EndpointCatalog.path(:employer_settings, id: employer_id), request_body: body) do
         client.employers.update_settings(employer_id, body)
       end
     end
 
     def create_eligibility_policy(employer_id, payload)
       body = eligibility_policy_payload(payload)
-      path = "/v1/employers/#{employer_id}/benefit-eligibility-policies"
+      path = EndpointCatalog.path(:employer_eligibility_policies, id: employer_id)
 
       instrument("employer.eligibility_policy.create", :post, path, request_body: body) do
         policies = client.respond_to?(:benefit_eligibility_policies) ? client.benefit_eligibility_policies : nil
@@ -335,7 +335,7 @@ module Vitable
     end
 
     def retrieve_eligibility_policy(policy_id)
-      path = "/v1/benefit-eligibility-policies/#{policy_id}"
+      path = EndpointCatalog.path(:benefit_eligibility_policy, id: policy_id)
 
       instrument("eligibility_policy.retrieve", :get, path) do
         policies = client.respond_to?(:benefit_eligibility_policies) ? client.benefit_eligibility_policies : nil
@@ -354,7 +354,7 @@ module Vitable
     def create_group(payload)
       body = group_payload(payload)
 
-      instrument("group.create", :post, "/v1/groups", request_body: body) do
+      instrument("group.create", :post, EndpointCatalog::GROUPS, request_body: body) do
         client.groups.create(body)
       end
     end
@@ -362,13 +362,13 @@ module Vitable
     def update_group(group_id, payload)
       body = group_payload(payload)
 
-      instrument("group.update", :patch, "/v1/groups/#{group_id}", request_body: body) do
+      instrument("group.update", :patch, EndpointCatalog.path(:group, id: group_id), request_body: body) do
         client.groups.update(group_id, body)
       end
     end
 
     def retrieve_group(group_id)
-      instrument("group.retrieve", :get, "/v1/groups/#{group_id}") do
+      instrument("group.retrieve", :get, EndpointCatalog.path(:group, id: group_id)) do
         client.groups.retrieve(group_id)
       end
     end
@@ -379,13 +379,13 @@ module Vitable
         members: members.map { |member| group_member_payload(member) }
       }
 
-      instrument("group.member_sync.submit", :post, "/v1/groups/#{group_id}/members/sync", request_body: body) do
+      instrument("group.member_sync.submit", :post, EndpointCatalog.path(:group_members_sync, id: group_id), request_body: body) do
         client.groups.members.sync.submit(group_id, members: body.fetch(:members))
       end
     end
 
     def retrieve_group_member_sync(group_id, request_id)
-      instrument("group.member_sync.retrieve", :get, "/v1/groups/#{group_id}/members/sync/#{request_id}") do
+      instrument("group.member_sync.retrieve", :get, EndpointCatalog.path(:group_member_sync_request, id: group_id, request_id: request_id)) do
         client.groups.members.sync.retrieve(request_id, group_id:)
       end
     end
@@ -396,7 +396,7 @@ module Vitable
       @client ||= VitableConnect::Client.new(
         api_key: @connection.api_key,
         environment: @connection.sdk_environment,
-        base_url: @connection.effective_api_base_url,
+        base_url: @connection.sdk_base_url,
         max_retries: 2,
         timeout: 15
       )

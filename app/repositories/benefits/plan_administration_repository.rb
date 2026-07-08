@@ -105,7 +105,7 @@ module Benefits
         stats: {
           "requested_by" => requested_by,
           "resource_id" => "employer_#{@employer.id}",
-          "endpoint" => "/v1/plans"
+          "endpoint" => Vitable::EndpointCatalog::PLANS
         }
       )
     end

@@ -1,6 +1,4 @@
 class IntegrationConnection < ApplicationRecord
-  DEMO_BASE_URL = "https://api.demo.vitablehealth.com"
-
   belongs_to :organization
 
   has_many :webhook_events, dependent: :nullify
@@ -29,19 +27,18 @@ class IntegrationConnection < ApplicationRecord
   end
 
   def effective_api_base_url
-    configured_api_base_url.presence || (environment == "demo" ? DEMO_BASE_URL : nil)
+    sdk_base_url
   end
 
   def sdk_environment
-    return nil if effective_api_base_url.present?
-
-    environment
+    Vitable::Configuration.sdk_environment_for(environment)
   end
 
-  private
+  def sdk_base_url
+    Vitable::Configuration.sdk_base_url_for(environment: sdk_environment, metadata:)
+  end
 
   def configured_api_base_url
-    metadata.to_h.stringify_keys.fetch("api_base_url", nil).presence ||
-      ENV.fetch("VITABLE_CONNECT_BASE_URL", nil).presence
+    Vitable::Configuration.configured_api_base_url(metadata)
   end
 end

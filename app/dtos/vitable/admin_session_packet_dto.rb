@@ -29,7 +29,7 @@ module Vitable
         status: attributes.fetch("status"),
         widget_count: totals.fetch("widget_count", 0),
         holdback_count: totals.fetch("holdback_count", 0),
-        endpoint: token_request.fetch("endpoint", "/v1/auth/access-tokens"),
+        endpoint: token_request.fetch("endpoint", EndpointCatalog::AUTH_ACCESS_TOKENS),
         authorization_header: token_request.fetch("authorization_header", "X-Musto-Widget-Launch"),
         launch_token: launch_authorization.fetch("token", nil),
         launch_token_present: launch_authorization.fetch("token", nil).present?,

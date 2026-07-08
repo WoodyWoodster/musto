@@ -16,7 +16,7 @@ module Benefits
         connection_id: connection&.id,
         connection_status: connection&.status || "missing",
         credentials_present: connection&.credentials_present? || false,
-        api_key_reference: connection&.api_key_reference || "VITABLE_CONNECT_API_KEY",
+        api_key_reference: connection&.api_key_reference || Vitable::Configuration::DEFAULT_API_KEY_REFERENCE,
         metrics: metrics(plans, packet_payload),
         plans:,
         issues: plans.flat_map(&:readiness_issues),

@@ -54,7 +54,7 @@ module Vitable
 
       DemoSmokeCheckResultDto.new(
         environment: connection.environment,
-        base_url: connection.effective_api_base_url || "https://api.vitablehealth.com",
+        base_url: connection.sdk_base_url || Configuration::PRODUCTION_API_BASE_URL,
         checked_at:,
         sdk_version: VitableConnect::VERSION,
         checks: checks_for(auth_response:, employer_token_response:, employee_token_response:, employers:, groups:, plans:, webhook_events:, employees:, enrollments:, retrieved_employer:, retrieved_group:),

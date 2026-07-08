@@ -10,13 +10,12 @@ connection = organization.integration_connections.find_by(provider: "vitable", e
   organization.integration_connections.find_by(provider: "vitable", environment: "production") ||
   organization.integration_connections.build(provider: "vitable")
 connection.assign_attributes(
-  environment: "demo",
-  api_key_reference: "VITABLE_CONNECT_API_KEY",
-  webhook_secret_reference: ENV["VITABLE_WEBHOOK_SECRET"].present? ? "VITABLE_WEBHOOK_SECRET" : nil,
-  status: ENV["VITABLE_CONNECT_API_KEY"].present? ? "active" : "needs_credentials",
+  environment: Vitable::Configuration::DEFAULT_ENVIRONMENT,
+  api_key_reference: Vitable::Configuration::DEFAULT_API_KEY_REFERENCE,
+  webhook_secret_reference: ENV[Vitable::Configuration::DEFAULT_WEBHOOK_SECRET_REFERENCE].present? ? Vitable::Configuration::DEFAULT_WEBHOOK_SECRET_REFERENCE : nil,
+  status: ENV[Vitable::Configuration::DEFAULT_API_KEY_REFERENCE].present? ? "active" : "needs_credentials",
   metadata: {
-    docs: "https://developer.vitablehealth.com/",
-    api_base_url: "https://api.demo.vitablehealth.com"
+    docs: Vitable::Configuration::DOCS_URL
   }
 )
 connection.save!
