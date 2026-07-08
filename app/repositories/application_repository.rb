@@ -6,9 +6,7 @@ class ApplicationRepository
     return unless connections
 
     connections.find_by(environment: preferred_vitable_environment) ||
-      connections.find_by(environment: "demo") ||
-      connections.find_by(environment: "production") ||
-      connections.first
+      connections.find_by(environment: "demo")
   end
 
   def preferred_vitable_environment
