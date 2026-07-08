@@ -16,9 +16,8 @@ module Vitable
     :raw_payload
   ) do
     def self.from_hash(payload)
-      attributes = payload.respond_to?(:to_h) ? payload.to_h.stringify_keys : {}
-      member = attributes.fetch("member", {})
-      member = member.respond_to?(:to_h) ? member.to_h.stringify_keys : {}
+      attributes = resource_payload(payload.respond_to?(:to_h) ? payload.to_h.stringify_keys : {})
+      member = nested_payload(attributes, "member")
 
       new(
         remote_employee_id: first_present(attributes["id"], attributes["employee_id"]),
@@ -92,7 +91,7 @@ module Vitable
     end
 
     def self.address_from(value)
-      return unless value.respond_to?(:to_h)
+      return if value.blank? || !value.respond_to?(:to_h)
 
       attributes = value.to_h.stringify_keys
       {
@@ -102,6 +101,20 @@ module Vitable
         "state" => attributes["state"],
         "zipcode" => first_present(attributes["zipcode"], attributes["zip_code"], attributes["postal_code"])
       }.compact
+    end
+
+    def self.resource_payload(attributes)
+      %w[data employee resource object].reduce(attributes) do |payload, key|
+        value = payload.fetch(key, nil)
+        value.present? && value.respond_to?(:to_h) ? value.to_h.stringify_keys : payload
+      end
+    end
+
+    def self.nested_payload(attributes, key)
+      value = attributes[key]
+      return {} if value.blank? || !value.respond_to?(:to_h)
+
+      value.to_h.stringify_keys
     end
 
     def self.date_from(value)
@@ -118,6 +131,6 @@ module Vitable
       values.compact_blank.first
     end
 
-    private_class_method :address_from, :date_from, :first_present
+    private_class_method :address_from, :date_from, :first_present, :nested_payload, :resource_payload
   end
 end

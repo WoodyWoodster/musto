@@ -51,6 +51,38 @@ module Vitable
       assert_equal "Full Time", metadata.dig("vitable_last_resource_snapshot", "employee_class")
     end
 
+    test "normalizes nested remote employee envelopes" do
+      dto = RemoteEmployeeDto.from_hash(
+        "data" => {
+          "employee" => {
+            "employee_id" => "empl_nested_123",
+            "external_reference_id" => "musto_employee_84",
+            "email" => "avery@example.com",
+            "status" => "deactivated",
+            "member" => {
+              "id" => "mem_nested_123",
+              "dependents" => [
+                {
+                  "id" => "dep_nested_123",
+                  "first_name" => "Riley"
+                }
+              ]
+            }
+          }
+        }
+      ).validate_identity!(response_label: "Vitable employee retrieve response")
+
+      metadata = dto.metadata(source: "vitable_api_snapshot", refreshed_at: "2026-07-08T12:00:00Z")
+
+      assert_equal "empl_nested_123", dto.remote_employee_id
+      assert_equal "mem_nested_123", dto.member_id
+      assert_equal "musto_employee_84", dto.reference_id
+      assert_equal "terminated", dto.local_employment_status
+      assert_equal [ { "id" => "dep_nested_123", "first_name" => "Riley" } ], dto.dependents
+      assert_not metadata.key?("vitable_remote_address")
+      assert_equal "empl_nested_123", metadata.dig("vitable_last_resource_snapshot", "id")
+    end
+
     test "raises with the caller supplied response label for missing identity" do
       error = assert_raises(ArgumentError) do
         RemoteEmployeeDto
