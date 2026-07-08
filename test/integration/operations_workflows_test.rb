@@ -3712,6 +3712,8 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_equal "bi_weekly", detail.payload.pay_frequency
     assert_equal "All", detail.payload.eligibility_classification
     assert_equal "1st of the following month", detail.payload.eligibility_waiting_period
+    assert_not detail.submittable?
+    assert_equal "needs_credentials", detail.preflight_checks.find { |check| check.label == "Submit readiness" }.status
 
     get vitable_employer_provisioning_path
 
@@ -3722,6 +3724,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_select "h2", "Provisioning holdbacks"
     assert_select "h2", "Provisioning attempts"
     assert_select "h2", "Employer submission activity"
+    assert_select "button[disabled]", "Submit provisioning"
   end
 
   test "generates a Vitable employer provisioning packet" do
@@ -3808,14 +3811,17 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_includes reason_codes, "unsupported_pay_frequency"
 
     detail = Vitable::EmployerProvisioningQuery.new.call
+    assert_not detail.submittable?
     assert_equal "blocked", detail.preflight_checks.find { |check| check.label == "Legal entity" }.status
     assert_equal "blocked", detail.preflight_checks.find { |check| check.label == "Physical address" }.status
+    assert_equal "blocked", detail.preflight_checks.find { |check| check.label == "Submit readiness" }.status
     assert_equal "blocked", detail.metrics.find { |metric| metric.label == "Pay frequency" }.status
   end
 
   test "submits Vitable employer provisioning as missing credentials sync run without API key" do
     prepare_provisioning_profile
     Vitable::GenerateEmployerProvisioningCommand.new(dto: Vitable::GenerateEmployerProvisioningDto.new(requested_by: "ops_test")).call
+    assert_not Vitable::EmployerProvisioningQuery.new.call.submittable?
 
     assert_difference -> { @connection.sync_runs.where(operation: "employer_create").count }, 1 do
       post submit_vitable_employer_provisioning_path, params: { requested_by: "integration_admin" }
@@ -3832,6 +3838,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
 
   test "successful employer provisioning command stores remote id and remote eligibility policy" do
     prepare_provisioning_profile
+    Vitable::GenerateEmployerProvisioningCommand.new(dto: Vitable::GenerateEmployerProvisioningDto.new(requested_by: "ops_test")).call
     response_class = Data.define(:data)
     gateway_class = Class.new do
       define_method(:initialize) { |_connection| }
@@ -3862,6 +3869,7 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     end
     previous_key = ENV[@connection.api_key_reference]
     ENV[@connection.api_key_reference] = "vit_apk_test_value"
+    assert Vitable::EmployerProvisioningQuery.new.call.submittable?
 
     result = Vitable::SubmitEmployerProvisioningCommand.new(
       dto: Vitable::SubmitEmployerProvisioningDto.new(requested_by: "integration_admin"),
@@ -3887,6 +3895,36 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_not_includes sync.stats.to_json, "vit_at_employer_snapshot_secret"
     assert_not_includes sync.stats.to_json, "vit_client_secret_snapshot"
     assert_not_includes @employer.settings.to_json, "vit_rt_policy_snapshot_secret"
+    detail = Vitable::EmployerProvisioningQuery.new.call
+    assert_not detail.submittable?
+    assert_equal "blocked", detail.preflight_checks.find { |check| check.label == "Submit readiness" }.status
+  ensure
+    ENV[@connection.api_key_reference] = previous_key
+  end
+
+  test "blocks stale employer provisioning packet after remote employer state changes" do
+    prepare_provisioning_profile
+    Vitable::GenerateEmployerProvisioningCommand.new(dto: Vitable::GenerateEmployerProvisioningDto.new(requested_by: "ops_test")).call
+    @employer.update!(vitable_id: "empr_existing_123")
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| raise "gateway should not be called with stale provisioning packet" }
+    end
+    previous_key = ENV[@connection.api_key_reference]
+    ENV[@connection.api_key_reference] = "vit_apk_test_value"
+
+    result = Vitable::SubmitEmployerProvisioningCommand.new(
+      dto: Vitable::SubmitEmployerProvisioningDto.new(requested_by: "integration_admin"),
+      gateway_class:
+    ).call
+
+    assert result.failure?
+    detail = Vitable::EmployerProvisioningQuery.new.call
+    assert_not detail.submittable?
+    assert_equal "blocked", detail.preflight_checks.find { |check| check.label == "Submit readiness" }.status
+    sync = @connection.sync_runs.where(operation: "employer_create").recent_first.first
+    assert_equal "blocked", sync.status
+    assert_match "Vitable state changed", sync.error_message
+    assert_match "Vitable state changed", result.errors.to_sentence
   ensure
     ENV[@connection.api_key_reference] = previous_key
   end

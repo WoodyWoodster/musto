@@ -83,10 +83,32 @@ module Vitable
         ),
         EmployerProvisioningPreflightCheckDto.new(
           label: "Submit readiness",
-          status: holdbacks.any? ? "blocked" : "ready",
-          detail: holdbacks.any? ? "#{holdbacks.count} blocking fields need attention before submit." : "Packet can be submitted once credentials are configured."
+          status: submit_readiness_status(latest_packet, holdbacks, connection),
+          detail: submit_readiness_detail(latest_packet, holdbacks, connection)
         )
       ]
+    end
+
+    def submit_readiness_status(latest_packet, holdbacks, connection)
+      return "pending" unless latest_packet
+      return "blocked" if holdbacks.any?
+      return "blocked" unless packet_current?(latest_packet)
+      return "needs_credentials" unless connection&.credentials_present?
+
+      "ready"
+    end
+
+    def submit_readiness_detail(latest_packet, holdbacks, connection)
+      return "Generate a packet before submitting to Vitable." unless latest_packet
+      return "#{holdbacks.count} blocking fields need attention before submit." if holdbacks.any?
+      return "Regenerate the provisioning packet before submitting because the employer's Vitable state changed." unless packet_current?(latest_packet)
+      return "Set #{connection&.api_key_reference || "VITABLE_CONNECT_API_KEY"} before live employer provisioning." unless connection&.credentials_present?
+
+      "Packet is ready for Vitable employer provisioning."
+    end
+
+    def packet_current?(latest_packet)
+      latest_packet.mode == (@employer.vitable_id.present? ? "update_settings" : "create")
     end
 
     def blocked_fields?(holdback_fields, fields)

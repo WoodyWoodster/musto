@@ -22,7 +22,17 @@ module Vitable
     end
 
     def submittable?
-      generated? && latest_packet.status == "ready"
+      generated? &&
+        latest_packet.status == "ready" &&
+        latest_packet.holdback_count.zero? &&
+        credentials_present &&
+        packet_current?
+    end
+
+    def packet_current?
+      return false unless generated?
+
+      latest_packet.mode == (remote_employer_id.present? ? "update_settings" : "create")
     end
   end
 end

@@ -16,7 +16,7 @@
 
         <div class="mt-6 flex flex-wrap gap-3">
           <%= button_to "Generate packet", generate_vitable_employer_provisioning_path, method: :post, params: { requested_by: "Musto Operations" }, class: "rounded-md bg-slate-950 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-slate-800" %>
-          <%= button_to "Submit provisioning", submit_vitable_employer_provisioning_path, method: :post, params: { requested_by: "Musto Operations" }, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
+          <%= button_to "Submit provisioning", submit_vitable_employer_provisioning_path, method: :post, params: { requested_by: "Musto Operations" }, disabled: !@provisioning.submittable?, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 disabled:shadow-none" %>
           <%= link_to "Vitable connection", @provisioning.connection_id ? integration_connection_path(@provisioning.connection_id) : integrations_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
           <%= link_to "Census sync", vitable_census_sync_path, class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>
           <%= link_to "Partner docs", @provisioning.ruby_docs_url, target: "_blank", rel: "noopener", class: "rounded-md border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:border-slate-300" %>

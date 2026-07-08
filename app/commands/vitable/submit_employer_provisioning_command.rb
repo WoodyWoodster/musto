@@ -17,6 +17,7 @@ module Vitable
       sync_run = @repository.create_sync_run(packet:, operation:, requested_by: @dto.requested_by)
 
       return blocked(sync_run, "Resolve provisioning packet holdbacks before submitting") if packet.fetch("status") == "blocked"
+      return blocked(sync_run, "Regenerate the provisioning packet before submitting because the employer's Vitable state changed") unless packet_current?(packet)
 
       unless @repository.connection.credentials_present?
         sync_run = @repository.mark_needs_credentials(sync_run)
@@ -94,6 +95,10 @@ module Vitable
       return response.to_h.deep_stringify_keys if response.respond_to?(:to_h)
 
       { "value" => response.to_s }
+    end
+
+    def packet_current?(packet)
+      packet.fetch("mode") == (@employer.vitable_id.present? ? "update_settings" : "create")
     end
 
     def blocked(sync_run, message)
