@@ -112,6 +112,7 @@ module Vitable
 
     def payload_only_webhook_reconciliation(event, known_payload_only_resource_type: false, known_webhook_resource_type: false)
       return reconcile_payload_only_payroll_deduction(event) if event.resource_type == "payroll_deduction"
+      return reconcile_payload_only_dependent(event) if event.resource_type == "dependent"
 
       snapshot_only_webhook_reconciliation(
         event,
@@ -732,6 +733,222 @@ module Vitable
       attributes
     end
 
+    def reconcile_payload_only_dependent(event)
+      payload = dependent_payload(event)
+      employee, employee_matched_by = dependent_employee_match(event, payload)
+      unless employee
+        return WebhookResourceReconciliationDto.new(
+          status: "unmatched",
+          resource_type: event.resource_type,
+          resource_id: event.resource_id,
+          local_record_type: nil,
+          local_record_id: nil,
+          matched_by: nil,
+          applied_changes: [],
+          warnings: [ "No local employee matched this Vitable dependent payload." ]
+        )
+      end
+
+      dependent, dependent_matched_by = dependent_match(employee, payload)
+      missing_fields = missing_dependent_fields(dependent, payload)
+      if missing_fields.any?
+        return WebhookResourceReconciliationDto.new(
+          status: "skipped",
+          resource_type: event.resource_type,
+          resource_id: event.resource_id,
+          local_record_type: "Employee",
+          local_record_id: employee.id,
+          matched_by: employee_matched_by,
+          applied_changes: [],
+          warnings: [ "Vitable dependent payload did not include #{missing_fields.to_sentence}." ]
+        )
+      end
+
+      attributes = dependent_attributes(dependent, payload, event)
+      if dependent
+        dependent.update!(attributes)
+        matched_by = dependent_matched_by
+        applied_changes = dependent_applied_changes(attributes)
+      else
+        dependent = employee.dependents.create!(attributes)
+        matched_by = "created_from_payload"
+        applied_changes = [ "dependents.created" ] + dependent_applied_changes(attributes)
+      end
+
+      WebhookResourceReconciliationDto.new(
+        status: "matched",
+        resource_type: event.resource_type,
+        resource_id: event.resource_id,
+        local_record_type: "Dependent",
+        local_record_id: dependent.id,
+        matched_by:,
+        applied_changes:,
+        warnings: []
+      )
+    end
+
+    def dependent_payload(event)
+      payload = event.payload.to_h.stringify_keys
+      resource_payload = %w[data resource object].lazy.filter_map do |key|
+        value = payload.fetch(key, nil)
+        value.to_h.stringify_keys if value.respond_to?(:to_h)
+      end.first || payload
+
+      resource_payload.merge(
+        "id" => resource_payload.fetch("id", nil).presence || event.resource_id
+      )
+    end
+
+    def dependent_employee_match(event, payload)
+      scope = payload_employee_scope(event)
+      employee_payload = nested_employee_payload(payload)
+      reference_id = payload.fetch("employee_reference_id", nil).presence ||
+        employee_payload.fetch("reference_id", nil).presence
+      employee = employee_from_local_reference_id(scope, reference_id)
+      return [ employee, "employee_reference_id" ] if employee
+
+      remote_employee_id = payload.fetch("employee_id", nil).presence ||
+        payload.fetch("subscriber_id", nil).presence ||
+        employee_payload.fetch("id", nil).presence
+      if remote_employee_id.present?
+        employee = scope.find_by(vitable_id: remote_employee_id) ||
+          scope.detect { |candidate| candidate.metadata.to_h.stringify_keys.fetch("vitable_member_id", nil) == remote_employee_id }
+        return [ employee, "remote_employee_id" ] if employee
+      end
+
+      email = payload.fetch("employee_email", nil).presence || employee_payload.fetch("email", nil).presence
+      if email.present?
+        matches = scope.where(email: email.to_s.downcase).to_a
+        return [ matches.first, "employee_email" ] if matches.one?
+      end
+
+      [ nil, nil ]
+    end
+
+    def dependent_match(employee, payload)
+      remote_id = dependent_remote_id(payload)
+      if remote_id.present?
+        dependent = employee.dependents.find_by(vitable_id: remote_id)
+        return [ dependent, "vitable_id" ] if dependent
+      end
+
+      reference_id = payload.fetch("reference_id", nil).presence
+      dependent = dependent_from_reference_id(employee, reference_id)
+      return [ dependent, "reference_id" ] if dependent
+
+      dependent = dependent_from_identity(employee, payload)
+      return [ dependent, "identity" ] if dependent
+
+      [ nil, nil ]
+    end
+
+    def dependent_from_reference_id(employee, reference_id)
+      value = reference_id.to_s
+      return unless value.match?(/\Amusto_dependent_\d+\z/)
+
+      employee.dependents.find_by(id: value.delete_prefix("musto_dependent_").to_i)
+    end
+
+    def dependent_from_identity(employee, payload)
+      first_name = payload.fetch("first_name", nil).to_s.downcase.presence
+      last_name = payload.fetch("last_name", nil).to_s.downcase.presence
+      relationship = dependent_relationship(payload)
+      date_of_birth = dependent_date_of_birth(payload)
+      return if [ first_name, last_name, relationship, date_of_birth ].any?(&:blank?)
+
+      matches = employee.dependents.select do |dependent|
+        dependent.first_name.to_s.downcase == first_name &&
+          dependent.last_name.to_s.downcase == last_name &&
+          dependent.relationship == relationship &&
+          dependent.date_of_birth == date_of_birth
+      end
+      matches.one? ? matches.first : nil
+    end
+
+    def missing_dependent_fields(dependent, payload)
+      return [] if dependent
+
+      {
+        "first_name" => payload.fetch("first_name", nil),
+        "last_name" => payload.fetch("last_name", nil),
+        "relationship" => dependent_relationship(payload)
+      }.filter_map { |field, value| field if value.blank? }
+    end
+
+    def dependent_attributes(dependent, payload, event)
+      metadata = dependent&.metadata.to_h.stringify_keys.merge(
+        "vitable_last_webhook_event_id" => event.event_id,
+        "vitable_last_webhook_event_name" => event.event_name,
+        "vitable_last_refreshed_at" => Time.current.iso8601,
+        "vitable_last_resource_snapshot" => payload.slice("id", "employee_id", "first_name", "last_name", "relationship", "date_of_birth", "status")
+      ).compact
+
+      {
+        first_name: payload.fetch("first_name", nil).presence || dependent&.first_name,
+        last_name: payload.fetch("last_name", nil).presence || dependent&.last_name,
+        relationship: dependent_relationship(payload).presence || dependent&.relationship,
+        date_of_birth: dependent_date_of_birth(payload) || dependent&.date_of_birth,
+        enrollment_status: dependent_enrollment_status(payload, dependent),
+        eligibility_status: dependent_eligibility_status(payload, dependent),
+        vitable_id: dependent_remote_id(payload).presence || dependent&.vitable_id,
+        metadata:
+      }.compact
+    end
+
+    def dependent_applied_changes(attributes)
+      attributes.keys.map do |key|
+        key == :metadata ? "metadata.vitable_last_resource_snapshot" : key.to_s
+      end
+    end
+
+    def dependent_remote_id(payload)
+      payload.fetch("id", nil).presence || payload.fetch("dependent_id", nil).presence
+    end
+
+    def dependent_relationship(payload)
+      payload.fetch("relationship", nil).presence ||
+        payload.fetch("relationship_type", nil).presence ||
+        payload.fetch("dependent_type", nil).presence
+    end
+
+    def dependent_date_of_birth(payload)
+      value = payload.fetch("date_of_birth", nil).presence || payload.fetch("dob", nil).presence
+      return value if value.is_a?(Date)
+      return if value.blank?
+
+      Date.iso8601(value.to_s)
+    rescue ArgumentError
+      nil
+    end
+
+    def dependent_enrollment_status(payload, dependent)
+      status = payload.fetch("enrollment_status", nil).presence || payload.fetch("status", nil).presence
+      case status.to_s.downcase
+      when "active", "accepted", "eligible", "enrolled"
+        "enrolled"
+      when "canceled", "cancelled", "deleted", "declined", "inactive", "removed", "terminated", "waived"
+        "waived"
+      when "pending", "needs_review", "review_required"
+        "pending"
+      else
+        dependent&.enrollment_status || "pending"
+      end
+    end
+
+    def dependent_eligibility_status(payload, dependent)
+      status = payload.fetch("eligibility_status", nil).presence ||
+        payload.fetch("verification_status", nil).presence ||
+        payload.fetch("status", nil).presence
+      case status.to_s.downcase
+      when "active", "accepted", "approved", "eligible", "enrolled", "verified"
+        "eligible"
+      when "denied", "ineligible", "rejected"
+        "ineligible"
+      else
+        dependent&.eligibility_status || "needs_review"
+      end
+    end
+
     def reconcile_payload_only_payroll_deduction(event)
       payload = payroll_deduction_payload(event)
       employee, matched_by = payroll_deduction_employee_match(event, payload)
@@ -781,11 +998,11 @@ module Vitable
     end
 
     def payroll_deduction_employee_match(event, payload)
-      scope = payroll_deduction_employee_scope(event)
-      employee_payload = payroll_deduction_employee_payload(payload)
+      scope = payload_employee_scope(event)
+      employee_payload = nested_employee_payload(payload)
       reference_id = payload.fetch("reference_id", nil).presence ||
         employee_payload.fetch("reference_id", nil).presence
-      employee = payroll_deduction_employee_from_reference_id(scope, reference_id)
+      employee = employee_from_local_reference_id(scope, reference_id)
       return [ employee, "reference_id" ] if employee
 
       remote_employee_id = payload.fetch("employee_id", nil).presence ||
@@ -806,21 +1023,21 @@ module Vitable
       [ nil, nil ]
     end
 
-    def payroll_deduction_employee_payload(payload)
+    def nested_employee_payload(payload)
       employee = payload.fetch("employee", {})
       return employee.to_h.stringify_keys if employee.respond_to?(:to_h)
 
       {}
     end
 
-    def payroll_deduction_employee_from_reference_id(scope, reference_id)
+    def employee_from_local_reference_id(scope, reference_id)
       value = reference_id.to_s
       return unless value.match?(/\Amusto_employee_\d+\z/)
 
       scope.find_by(id: value.delete_prefix("musto_employee_").to_i)
     end
 
-    def payroll_deduction_employee_scope(event)
+    def payload_employee_scope(event)
       organization = event.integration_connection&.organization
       employers = Employer.where(organization_id: organization&.id)
       Employee.where(employer_id: employers.select(:id))

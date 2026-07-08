@@ -413,6 +413,76 @@ class VitableWebhooksTest < ActionDispatch::IntegrationTest
     ENV.delete("VITABLE_CONNECT_API_KEY")
   end
 
+  test "reconciles dependent payload-only webhooks without remote fetch" do
+    employer = @organization.employers.create!(name: "Dependent Payload Employer", status: "active")
+    employee = employer.employees.create!(
+      first_name: "Casey",
+      last_name: "Dependents",
+      email: "casey.dependents@example.com",
+      vitable_id: "empl_dependent_casey"
+    )
+    ENV["VITABLE_CONNECT_API_KEY"] = "vit_apk_test_value"
+    gateway_class = Class.new do
+      def self.retrievable_resource_type?(_resource_type)
+        false
+      end
+
+      def self.webhook_resource_type?(resource_type)
+        resource_type == "dependent"
+      end
+
+      def self.payload_only_webhook_resource_type?(resource_type)
+        resource_type == "dependent"
+      end
+
+      define_method(:initialize) { |_connection| }
+      define_method(:fetch_resource) { |_resource_type, _resource_id| raise "gateway should not fetch payload-only resources" }
+    end
+
+    assert_no_difference -> { @connection.sync_runs.count } do
+      result = Vitable::ProcessWebhookCommand.new(
+        payload: webhook_payload.merge(
+          event_id: "wevt_test_dependent_payload_only",
+          event_name: "dependent.updated",
+          resource_type: "dependent",
+          resource_id: "dep_remote_payload",
+          data: {
+            employee_id: "empl_dependent_casey",
+            first_name: "Harper",
+            last_name: "Dependents",
+            relationship: "child",
+            date_of_birth: "2018-03-04",
+            status: "active"
+          }
+        ),
+        gateway_class:
+      ).call
+
+      assert result.success?
+      assert_equal "payload_only", result.value
+    end
+
+    event = WebhookEvent.find_by!(event_id: "wevt_test_dependent_payload_only")
+    reconciliation = event.metadata.fetch("resource_reconciliation")
+    dependent = employee.dependents.sole
+
+    assert_equal "processed", event.status
+    assert_equal "matched", reconciliation.fetch("status")
+    assert_equal "dependent", reconciliation.fetch("resource_type")
+    assert_equal "created_from_payload", reconciliation.fetch("matched_by")
+    assert_equal dependent.id, reconciliation.fetch("local_record_id")
+    assert_equal "dep_remote_payload", dependent.vitable_id
+    assert_equal "Harper", dependent.first_name
+    assert_equal "child", dependent.relationship
+    assert_equal Date.new(2018, 3, 4), dependent.date_of_birth
+    assert_equal "enrolled", dependent.enrollment_status
+    assert_equal "eligible", dependent.eligibility_status
+    assert_equal "wevt_test_dependent_payload_only", dependent.metadata.fetch("vitable_last_webhook_event_id")
+    assert_includes reconciliation.fetch("applied_changes"), "dependents.created"
+  ensure
+    ENV.delete("VITABLE_CONNECT_API_KEY")
+  end
+
   test "stores unknown unsupported Vitable webhook resource types with explicit diagnostics" do
     ENV["VITABLE_CONNECT_API_KEY"] = "vit_apk_test_value"
     gateway_class = Class.new do
