@@ -5626,6 +5626,34 @@ class OperationsWorkflowsTest < ActionDispatch::IntegrationTest
     assert_empty manifest.fetch("api_payload").fetch("members")
   end
 
+  test "blocks Vitable care member sync while manifest holdbacks remain" do
+    prepare_care_group_profile(remote_group_id: "grp_ops_123")
+    holdback_employee = create_care_member_holdback_employee
+    Vitable::GenerateCareMemberSyncCommand.new(dto: Vitable::GenerateCareMemberSyncDto.new(requested_by: "ops_test")).call
+    gateway_class = Class.new do
+      define_method(:initialize) { |_connection| raise "gateway should not be called with care member holdbacks" }
+    end
+    previous_key = ENV[@connection.api_key_reference]
+    ENV[@connection.api_key_reference] = "vit_apk_test_value"
+
+    result = Vitable::SubmitCareMemberSyncCommand.new(
+      dto: Vitable::SubmitCareMemberSyncDto.new(requested_by: "integration_admin"),
+      gateway_class:
+    ).call
+
+    assert_not result.success?
+    assert_nil @employer.reload.settings.fetch("vitable_care_member_sync_last_request", nil)
+    sync = @connection.sync_runs.where(operation: "care_member_sync_submit").recent_first.first
+    assert_equal "blocked", sync.status
+    assert_equal "Resolve care member manifest holdbacks before submitting Vitable member sync", sync.error_message
+    assert_equal 1, sync.stats.fetch("ready_count")
+    assert_equal 1, sync.stats.fetch("holdback_count")
+    assert_equal holdback_employee.id, @employer.settings.fetch("vitable_care_member_sync_manifest").fetch("holdbacks").first.fetch("employee_id")
+    assert_nil @employee.reload.metadata.fetch("vitable_care_member_sync_status", nil)
+  ensure
+    ENV[@connection.api_key_reference] = previous_key
+  end
+
   test "submits care member sync as missing credentials sync run without API key" do
     prepare_care_group_profile(remote_group_id: "grp_ops_123")
     Vitable::GenerateCareMemberSyncCommand.new(dto: Vitable::GenerateCareMemberSyncDto.new(requested_by: "ops_test")).call

@@ -16,6 +16,7 @@ module Vitable
       sync_run = @repository.create_member_sync_run(manifest:, requested_by: @dto.requested_by)
 
       return blocked(sync_run, "Remote Vitable care group ID is missing") if @repository.remote_group_id.blank?
+      return blocked(sync_run, "Resolve care member manifest holdbacks before submitting Vitable member sync") if manifest_holdbacks(manifest).any?
       return blocked(sync_run, "Generate at least one ready care member before submitting member sync") if ready_members(manifest).empty?
 
       unless @repository.connection.credentials_present?
@@ -40,6 +41,10 @@ module Vitable
 
     def ready_members(manifest)
       manifest.fetch("api_payload", {}).fetch("members", [])
+    end
+
+    def manifest_holdbacks(manifest)
+      Array(manifest.fetch("holdbacks", []))
     end
 
     def blocked(sync_run, message)
