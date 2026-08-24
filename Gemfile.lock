@@ -334,7 +334,7 @@ GEM
     unicode-emoji (4.2.0)
     uri (1.1.1)
     useragent (0.16.11)
-    vitable-connect (0.5.0)
+    vitable-connect (0.6.0)
       cgi
       connection_pool
     web-console (4.3.0)
@@ -383,7 +383,7 @@ DEPENDENCIES
   tailwindcss-rails
   turbo-rails
   tzinfo-data
-  vitable-connect (~> 0.5.0)
+  vitable-connect (~> 0.6.0)
   web-console
 
 RUBY VERSION
