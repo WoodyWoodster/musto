@@ -20,7 +20,7 @@ gem "stimulus-rails"
 gem "tailwindcss-rails"
 
 # Vitable Connect REST API SDK.
-gem "vitable-connect", "~> 0.5.0"
+gem "vitable-connect", "~> 5.0.0"
 
 # Use Active Model has_secure_password [https://guides.rubyonrails.org/active_model_basics.html#securepassword]
 # gem "bcrypt", "~> 3.1.7"
